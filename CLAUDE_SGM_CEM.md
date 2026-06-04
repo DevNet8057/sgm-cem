@@ -20,6 +20,8 @@ Le noyau fonctionnel prioritaire couvre maintenant :
 - Litiges : liste des contributions contestees, resolution par confirmation ou annulation avec audit.
 - Statistiques : page dediee avec KPI et graphique mensuel.
 - Rapports : exports CSV pour membres, rubriques et contributions.
+- Rapports PDF/impression : rapport financier annuel avec KPI, moyens de paiement, top contributeurs et taux par rubrique.
+- Notifications : backend securise, liste frontend, compteur non-lu, marquer une notification lue, tout marquer lu et broadcast responsable/admin.
 - Dashboard interactif : filtre par annee, collectes mensuelles, taux de confirmation, moyens de paiement, top contributeurs et taux par rubrique.
 - Import membres : CSV Excel avec virgule ou point-virgule, en-tetes francais/anglais et modele telechargeable.
 - Backend : RBAC serveur sur les routes du noyau, audit log sur creation membre, creation contribution, confirmation et litige.
@@ -34,7 +36,6 @@ Modules encore hors noyau ou incomplets :
 - Prestations de genie avancees.
 - Notifications temps reel, WhatsApp, SMS, Web Push.
 - Mode offline collecteur avec IndexedDB et synchronisation.
-- Rapports PDF/export.
 - Tests automatises, CI/CD et deploiement production.
 
 Priorite de developpement restante :
@@ -43,8 +44,8 @@ Priorite de developpement restante :
 2. Ajouter de vraies donnees de demonstration ou un import Excel membres.
 3. Ajouter tests API sur membres, rubriques, contributions et validations.
 4. Ajouter tests automatises API sur le noyau.
-5. Completer export PDF.
-6. Ensuite seulement passer aux paiements et notifications.
+5. Ajouter des tests automatises API sur notifications, rapports et statistiques.
+6. Ensuite seulement passer aux paiements, GED avancee et notifications temps reel.
 
 ---
 

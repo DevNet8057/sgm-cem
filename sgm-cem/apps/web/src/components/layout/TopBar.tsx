@@ -1,8 +1,11 @@
 'use client'
 import { Menu, Bell, Search } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import api from '@/lib/api'
 import { useAppStore } from '@/store/appStore'
 import { useAuthStore } from '@/store/authStore'
 import { getInitials, ROLE_LABELS } from '@/lib/utils'
+import type { ApiResponse, Notification } from '@/types'
 
 const VIEW_TITLES: Record<string, string> = {
   dashboard: 'Tableau de Bord',
@@ -21,8 +24,20 @@ const VIEW_TITLES: Record<string, string> = {
 }
 
 export function TopBar() {
-  const { setSidebarOpen, activeView, unreadCount } = useAppStore()
+  const { setSidebarOpen, setActiveView, setNotifications, activeView, unreadCount } = useAppStore()
   const { user } = useAuthStore()
+
+  useQuery({
+    queryKey: ['notifications'],
+    enabled: Boolean(user),
+    queryFn: async () => {
+      const res = await api.get<ApiResponse<Notification[]>>('/notifications')
+      const notifications = res.data.data ?? []
+      setNotifications(notifications)
+      return notifications
+    },
+    refetchInterval: 60000,
+  })
 
   return (
     <header
@@ -48,7 +63,11 @@ export function TopBar() {
         <span className="ml-auto text-[10px] bg-gray-200 px-1.5 py-0.5 rounded text-gray-500">⌘K</span>
       </div>
 
-      <button className="relative w-9 h-9 flex items-center justify-center rounded-[10px] text-gray-600 hover:bg-gray-100 transition-colors">
+      <button
+        onClick={() => setActiveView('notifications')}
+        className="relative w-9 h-9 flex items-center justify-center rounded-[10px] text-gray-600 hover:bg-gray-100 transition-colors"
+        title="Notifications"
+      >
         <Bell size={18} />
         {unreadCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">

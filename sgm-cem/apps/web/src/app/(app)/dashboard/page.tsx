@@ -9,6 +9,7 @@ import { Validations } from '@/components/views/Validations'
 import { Litiges } from '@/components/views/Litiges'
 import { Statistiques } from '@/components/views/Statistiques'
 import { Rapports } from '@/components/views/Rapports'
+import { Notifications } from '@/components/views/Notifications'
 import { Placeholder } from '@/components/views/Placeholder'
 
 export default function AppPage() {
@@ -26,7 +27,7 @@ export default function AppPage() {
     case 'litiges':       return <Litiges />
     case 'statistiques':  return <Statistiques />
     case 'rapports':      return <Rapports />
-    case 'notifications': return <Placeholder title="Notifications" />
+    case 'notifications': return <Notifications />
     case 'parametres':    return <Placeholder title="Paramètres" />
     default:              return <Dashboard />
   }

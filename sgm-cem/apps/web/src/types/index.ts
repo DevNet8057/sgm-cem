@@ -162,7 +162,10 @@ export interface Notification {
   title: string
   body: string
   type: string
+  data?: Record<string, unknown>
   isRead: boolean
+  statut?: 'PENDING' | 'SENT' | 'FAILED'
+  sentAt?: string
   createdAt: string
 }
 

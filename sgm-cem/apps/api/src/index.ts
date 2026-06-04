@@ -13,6 +13,7 @@ import { commissionsRouter } from './routes/commissions'
 import { prestationsRouter } from './routes/prestations'
 import { statsRouter } from './routes/stats'
 import { settingsRouter } from './routes/settings'
+import { notificationsRouter } from './routes/notifications'
 import { errorHandler } from './middleware/errorHandler'
 
 const app = express()
@@ -38,6 +39,7 @@ app.use('/api/commissions', commissionsRouter)
 app.use('/api/prestations', prestationsRouter)
 app.use('/api/stats', statsRouter)
 app.use('/api/settings', settingsRouter)
+app.use('/api/notifications', notificationsRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }))
 
