@@ -68,6 +68,21 @@ router.get('/validations', authenticate, requireLevel(2), async (_req, res) => {
   res.json({ success: true, data: contributions })
 })
 
+router.get('/litiges', authenticate, requireLevel(3), async (_req, res) => {
+  const contributions = await prisma.contribution.findMany({
+    where: { statut: 'LITIGE' },
+    include: {
+      membre: { include: { user: { select: { fullName: true } } } },
+      rubrique: { select: { title: true, code: true } },
+      collecteur: { select: { fullName: true } },
+    },
+    orderBy: { updatedAt: 'desc' },
+    take: 100,
+  })
+
+  res.json({ success: true, data: contributions })
+})
+
 router.post('/', authenticate, requireLevel(2), async (req, res) => {
   const data = createSchema.parse(req.body)
 
@@ -159,6 +174,41 @@ router.patch('/:id/litige', authenticate, requireLevel(2), async (req, res) => {
       entityType: 'Contribution',
       entityId: updated.id,
       details: { motif },
+    }
+  })
+
+  res.json({ success: true, data: updated })
+})
+
+router.patch('/:id/resolve-litige', authenticate, requireLevel(3), async (req, res) => {
+  const { resolution, note } = z.object({
+    resolution: z.enum(['CONFIRME', 'ANNULE']),
+    note: z.string().max(500).optional(),
+  }).parse(req.body)
+
+  const id = String(req.params.id)
+  const contribution = await prisma.contribution.findUnique({ where: { id } })
+  if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
+  if (contribution.statut !== 'LITIGE') throw new AppError('BUSINESS_RULE', 'Cette contribution n est pas en litige')
+
+  const updated = await prisma.contribution.update({
+    where: { id },
+    data: {
+      statut: resolution,
+      confirmedAt: resolution === 'CONFIRME' ? new Date() : contribution.confirmedAt,
+      confirmedById: resolution === 'CONFIRME' ? req.user!.userId : contribution.confirmedById,
+      litigeMotif: note ? `${contribution.litigeMotif ?? ''}\nResolution: ${note}` : contribution.litigeMotif,
+    }
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: req.user!.userId,
+      userName: req.user!.email,
+      action: resolution === 'CONFIRME' ? 'APPROVE' : 'REJECT',
+      entityType: 'ContributionLitige',
+      entityId: updated.id,
+      details: { resolution, note },
     }
   })
 

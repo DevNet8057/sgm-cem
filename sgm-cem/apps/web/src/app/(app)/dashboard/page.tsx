@@ -6,6 +6,8 @@ import { Contributions } from '@/components/views/Contributions'
 import { Collecteurs } from '@/components/views/Collecteurs'
 import { Membres } from '@/components/views/Membres'
 import { Validations } from '@/components/views/Validations'
+import { Litiges } from '@/components/views/Litiges'
+import { Statistiques } from '@/components/views/Statistiques'
 import { Placeholder } from '@/components/views/Placeholder'
 
 export default function AppPage() {
@@ -20,8 +22,8 @@ export default function AppPage() {
     case 'validations':   return <Validations />
     case 'ged':           return <Placeholder title="GED Commissions" />
     case 'prestations':   return <Placeholder title="Prestations de Génie" />
-    case 'litiges':       return <Placeholder title="Litiges" />
-    case 'statistiques':  return <Placeholder title="Statistiques" />
+    case 'litiges':       return <Litiges />
+    case 'statistiques':  return <Statistiques />
     case 'rapports':      return <Placeholder title="Rapports" />
     case 'notifications': return <Placeholder title="Notifications" />
     case 'parametres':    return <Placeholder title="Paramètres" />
