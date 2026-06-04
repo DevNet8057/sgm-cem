@@ -1,0 +1,12 @@
+.claude/
+sgm-cem/node_modules/
+sgm-cem/apps/**/node_modules/
+sgm-cem/apps/**/.next/
+sgm-cem/apps/**/dist/
+sgm-cem/.env
+sgm-cem/apps/**/.env
+sgm-cem/apps/**/.env.local
+sgm-cem/*.log
+sgm-cem/api-direct-*.log
+*.log
+*.tsbuildinfo

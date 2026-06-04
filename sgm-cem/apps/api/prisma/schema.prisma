@@ -1,0 +1,427 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN
+  TRESORIER
+  RESPONSABLE
+  ADJOINT_RESPONSABLE
+  COLLECTEUR
+  MEMBRE
+}
+
+enum MembreCategorie {
+  MCE_EN_SERVICE
+  ENFANTS
+  DIASPORA
+}
+
+enum MembreGroupe {
+  TEMPLE
+  MVOG_BETSI
+  BISCUITERIE
+  OBILI
+  SCIENCES
+  POLYTECHNIQUE
+}
+
+enum MembreStatut {
+  EN_OBSERVATION
+  EN_SUIVI
+  FIN_DE_SUIVI
+  DIASPORA
+}
+
+enum ProfilFinancier {
+  TRAVAILLEUR
+  ETUDIANT
+  COUPLE
+}
+
+enum RubriqueType {
+  REGULIERE_MENSUELLE
+  PONCTUELLE
+  URGENTE
+}
+
+enum RubriquePriority {
+  NORMAL
+  PRIORITAIRE
+  URGENT
+}
+
+enum RubriqueStatut {
+  OUVERTE
+  FERMEE
+  ARCHIVEE
+}
+
+enum ContributionStatut {
+  EN_ATTENTE_CONFIRMATION
+  CONFIRME
+  LITIGE
+  ANNULE
+}
+
+enum ModePaiement {
+  ESPECES
+  MTN_MOMO
+  ORANGE_MONEY
+  CARTE_VISA
+  VIREMENT
+}
+
+enum LocalisationFonds {
+  CHEZ_COLLECTEUR
+  CAISSE_PRINCIPALE
+  BANQUE
+  EN_TRANSIT
+}
+
+enum DocumentStatut {
+  BROUILLON
+  EN_ATTENTE
+  APPROUVE
+  REJETE
+  ARCHIVE
+}
+
+enum PrestationStatut {
+  EN_PREPARATION
+  EN_COURS
+  ENTREES_COMPLETES
+  COMMISSION_VERSEE
+  CLOTURE
+}
+
+enum NotificationStatut {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  CONFIRM
+  REJECT
+  APPROVE
+  TRANSFER
+}
+
+// ─── MODELS ───────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  memberId     String   @unique
+  email        String   @unique
+  phone        String?  @unique
+  firstName    String
+  lastName     String
+  fullName     String
+  passwordHash String
+  role         UserRole @default(MEMBRE)
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  membre        Membre?
+  collecteurOf  Contribution[] @relation("CollecteurContributions")
+  createdRubriques Rubrique[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+  documents     Document[]
+  sessions      UserSession[]
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model UserSession {
+  id           String   @id @default(cuid())
+  userId       String
+  refreshToken String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_sessions")
+}
+
+model Membre {
+  id              String           @id @default(cuid())
+  userId          String           @unique
+  memberId        String           @unique
+  categorie       MembreCategorie
+  groupe          MembreGroupe
+  statut          MembreStatut     @default(EN_OBSERVATION)
+  profilFinancier ProfilFinancier  @default(TRAVAILLEUR)
+  phone           String?
+  phoneWhatsapp   String?
+  email           String?
+  adresse         String?
+  photoUrl        String?
+  profession      String?
+  dateAdhesion    DateTime         @default(now())
+  dateNaissance   DateTime?
+  isActive        Boolean          @default(true)
+  notes           String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  user          User             @relation(fields: [userId], references: [id])
+  contributions Contribution[]
+
+  @@index([groupe])
+  @@index([statut])
+  @@index([categorie])
+  @@map("membres")
+}
+
+model Rubrique {
+  id                String           @id @default(cuid())
+  code              String           @unique
+  title             String
+  description       String?
+  type              RubriqueType
+  priority          RubriquePriority @default(NORMAL)
+  status            RubriqueStatut   @default(OUVERTE)
+  fiscalYear        Int
+  openDate          DateTime
+  closeDate         DateTime?
+  amountTravailleur Int?
+  amountEtudiant    Int?
+  amountCouple      Int?
+  targetAmount      Int?
+  targetAll         Boolean          @default(false)
+  personnesConcernees String?
+  isAnnualReference Boolean          @default(false)
+  createdById       String
+  createdByName     String
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  creator       User?          @relation(fields: [createdById], references: [id])
+  contributions Contribution[]
+
+  @@index([status])
+  @@index([fiscalYear])
+  @@index([priority])
+  @@map("rubriques")
+}
+
+model Contribution {
+  id                    String             @id @default(cuid())
+  membreId              String
+  rubriqueId            String
+  collecteurId          String?
+  montant               Int
+  montantAttendu        Int?
+  modePaiement          ModePaiement
+  statut                ContributionStatut @default(EN_ATTENTE_CONFIRMATION)
+  localisationFonds     LocalisationFonds  @default(CHEZ_COLLECTEUR)
+  periodeLabel          String?
+  referencePaiement     String?
+  mobileMoneyPhone      String?
+  momoTransactionId     String?
+  litigeMotif           String?
+  confirmedAt           DateTime?
+  confirmedById         String?
+  receiptUrl            String?
+  receiptSentAt         DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  membre      Membre   @relation(fields: [membreId], references: [id])
+  rubrique    Rubrique @relation(fields: [rubriqueId], references: [id])
+  collecteur  User?    @relation("CollecteurContributions", fields: [collecteurId], references: [id])
+
+  @@index([statut])
+  @@index([membreId])
+  @@index([rubriqueId])
+  @@index([createdAt])
+  @@map("contributions")
+}
+
+model Commission {
+  id            String     @id @default(cuid())
+  nom           String     @unique
+  description   String?
+  responsableId String
+  isActive      Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  documents Document[]
+
+  @@map("commissions")
+}
+
+model TypeDocument {
+  code             String     @id
+  libelle          String
+  retentionAnnees  Int
+  documents        Document[]
+
+  @@map("type_documents")
+}
+
+model Document {
+  id              String         @id @default(cuid())
+  commissionId    String
+  typeCode        String
+  titre           String
+  description     String?
+  fileName        String
+  fileSize        Int
+  mimeType        String
+  s3Key           String         @unique
+  s3Bucket        String
+  statut          DocumentStatut @default(BROUILLON)
+  version         Int            @default(1)
+  uploadedById    String
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectedById    String?
+  rejectedAt      DateTime?
+  rejetMotif      String?
+  expiresAt       DateTime?
+  tags            String[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  commission   Commission   @relation(fields: [commissionId], references: [id])
+  typeDocument TypeDocument @relation(fields: [typeCode], references: [code])
+  uploadedBy   User         @relation(fields: [uploadedById], references: [id])
+
+  @@index([commissionId])
+  @@index([statut])
+  @@map("documents")
+}
+
+model Prestation {
+  id                String           @id @default(cuid())
+  reference         String           @unique
+  titre             String
+  description       String?
+  commanditaire     String
+  commanditairePhone String?
+  statut            PrestationStatut @default(EN_PREPARATION)
+  tarifBase         Int
+  rabaisCommanditaire Int            @default(0)
+  rabaisPercent     Float            @default(0)
+  tarifFinal        Int
+  acompte           Int              @default(0)
+  solde             Int              @default(0)
+  totalEntrees      Int              @default(0)
+  totalCours        Int              @default(0)
+  commission        Int?
+  commissionPercent Float            @default(35)
+  commissionVerseeAt DateTime?
+  dateEvenement     DateTime?
+  lieu              String?
+  notes             String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  cours    CoursPrestation[]
+  entrees  EntreePrestation[]
+
+  @@index([statut])
+  @@map("prestations")
+}
+
+model CoursPrestation {
+  id           String     @id @default(cuid())
+  prestationId String
+  libelle      String
+  montant      Int
+  justificatif String?
+  s3Key        String?
+  createdAt    DateTime   @default(now())
+
+  prestation Prestation @relation(fields: [prestationId], references: [id], onDelete: Cascade)
+
+  @@map("cours_prestations")
+}
+
+model EntreePrestation {
+  id           String     @id @default(cuid())
+  prestationId String
+  libelle      String
+  montant      Int
+  modePaiement ModePaiement
+  reference    String?
+  createdAt    DateTime   @default(now())
+
+  prestation Prestation @relation(fields: [prestationId], references: [id], onDelete: Cascade)
+
+  @@map("entrees_prestations")
+}
+
+model SystemSettings {
+  id                        String   @id @default("singleton")
+  defaultIncreaseRate       Float    @default(5.0)
+  etudiantRatio             Float    @default(0.5)
+  coupleRatio               Float    @default(1.5)
+  inactivityMonthsThreshold Int      @default(6)
+  reminderDelayDays         Int      @default(7)
+  maxFundsRetentionDays     Int      @default(7)
+  communityName             String   @default("Culte d'Enfants de Melen")
+  communityVerse            String   @default("Or, à celui qui peut faire...")
+  updatedAt                 DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  userId     String
+  userName   String
+  action     AuditAction
+  entityType String
+  entityId   String?
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime    @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String             @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  type      String
+  data      Json?
+  isRead    Boolean            @default(false)
+  statut    NotificationStatut @default(PENDING)
+  sentAt    DateTime?
+  createdAt DateTime           @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
