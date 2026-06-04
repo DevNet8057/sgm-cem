@@ -20,6 +20,8 @@ Le noyau fonctionnel prioritaire couvre maintenant :
 - Litiges : liste des contributions contestees, resolution par confirmation ou annulation avec audit.
 - Statistiques : page dediee avec KPI et graphique mensuel.
 - Rapports : exports CSV pour membres, rubriques et contributions.
+- Dashboard interactif : filtre par annee, collectes mensuelles, taux de confirmation, moyens de paiement, top contributeurs et taux par rubrique.
+- Import membres : CSV Excel avec virgule ou point-virgule, en-tetes francais/anglais et modele telechargeable.
 - Backend : RBAC serveur sur les routes du noyau, audit log sur creation membre, creation contribution, confirmation et litige.
 - Securite : secrets JWT centralises, refus des secrets faibles en production, RBAC serveur sur les routes sensibles du noyau.
 - Base PostgreSQL : schema synchronise avec Prisma et seed fonctionnel.

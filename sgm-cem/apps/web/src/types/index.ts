@@ -174,11 +174,54 @@ export interface ApiResponse<T> {
 }
 
 export interface DashboardStats {
+  year: number
   totalMembres: number
   membresEnRetard: number
   pendingConfirmations: number
+  litiges: number
   totalCollectedMonth: number
   totalCollectedYear: number
+  totalConfirmedContributions: number
+  globalConfirmationRate: number
+  contributionStatus: {
+    confirmed: number
+    pending: number
+    litiges: number
+    total: number
+  }
+  mostUsedPaymentMode: null | {
+    modePaiement: ModePaiement
+    total: number
+    count: number
+    share: number
+  }
+  topContributor: null | {
+    membreId: string
+    fullName: string
+    total: number
+    count: number
+  }
+  topContributors: Array<{
+    membreId: string
+    fullName: string
+    total: number
+    count: number
+  }>
+  modePaiementStats: Array<{
+    modePaiement: ModePaiement
+    total: number
+    count: number
+    share: number
+  }>
+  contributionRates: Array<{
+    rubriqueId: string
+    code: string
+    title: string
+    targetAmount?: number
+    total: number
+    count: number
+    rate: number | null
+  }>
   recentContributions: Contribution[]
   rubriquesActives: Rubrique[]
 }

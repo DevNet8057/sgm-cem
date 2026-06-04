@@ -1,7 +1,7 @@
 'use client'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit3, FileUp, Plus, Search, Users, X } from 'lucide-react'
+import { Download, Edit3, FileUp, Plus, Search, Users, X } from 'lucide-react'
 import api from '@/lib/api'
 import { formatDate, getInitials } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
@@ -302,14 +302,21 @@ function ImportPanel({ csv, setCsv, parsedCount, parseError, apiError, loading, 
         <div>
           <h3 className="font-display font-semibold text-[#0F4A0F]">Importer des membres</h3>
           <p className="text-xs text-gray-500">CSV avec en-tete: firstName,lastName,email,phone,categorie,groupe,profilFinancier,statut,profession</p>
+          <p className="text-xs text-gray-400">Accepte aussi les en-tetes francais: prenom, nom, email, telephone, categorie, groupe, profil, statut, profession</p>
         </div>
         <button type="button" onClick={onCancel} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+      </div>
+      <div className="flex justify-end">
+        <Button type="button" size="sm" variant="outline" onClick={downloadTemplate}>
+          <Download size={13} />
+          Modele CSV
+        </Button>
       </div>
       <textarea
         value={csv}
         onChange={e => setCsv(e.target.value)}
         rows={7}
-        placeholder={'firstName,lastName,email,phone,categorie,groupe,profilFinancier,statut,profession\nJean,Atangana,jean@example.com,690000000,MCE_EN_SERVICE,TEMPLE,TRAVAILLEUR,EN_OBSERVATION,Commercant'}
+        placeholder={'prenom;nom;email;telephone;categorie;groupe;profil;statut;profession\nJean;Atangana;jean@example.com;690000000;MCE_EN_SERVICE;TEMPLE;TRAVAILLEUR;EN_OBSERVATION;Commercant'}
         className="w-full px-3 py-2 border border-gray-200 rounded-[10px] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30"
       />
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -342,20 +349,92 @@ function serializeForm(form: MemberForm) {
 function parseCsv(csv: string): { rows: Array<Record<string, string>>; error: string } {
   const lines = csv.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
   if (!lines.length) return { rows: [], error: '' }
-  const headers = splitCsvLine(lines[0])
+  const delimiter = detectDelimiter(lines[0])
+  const headers = splitCsvLine(lines[0], delimiter).map(normalizeHeader)
   const required = ['firstName', 'lastName', 'email', 'categorie', 'groupe', 'profilFinancier', 'statut']
   const missing = required.find(key => !headers.includes(key))
   if (missing) return { rows: [], error: `Colonne obligatoire manquante: ${missing}` }
 
-  const rows = lines.slice(1).map(line => {
-    const values = splitCsvLine(line)
-    return Object.fromEntries(headers.map((header, index) => [header, values[index] ?? '']))
+  const rows: Array<Record<string, string>> = lines.slice(1).map(line => {
+    const values = splitCsvLine(line, delimiter)
+    const row: Record<string, string> = Object.fromEntries(headers.map((header, index) => [header, normalizeValue(header, values[index] ?? '')]))
+    return {
+      ...row,
+      statut: row.statut || 'EN_OBSERVATION',
+      profilFinancier: row.profilFinancier || 'TRAVAILLEUR',
+      categorie: row.categorie || 'MCE_EN_SERVICE',
+      groupe: row.groupe || 'TEMPLE',
+    } as Record<string, string>
   })
+  const invalidLine = rows.findIndex(row => !row.firstName || !row.lastName || !row.email)
+  if (invalidLine >= 0) return { rows: [], error: `Ligne ${invalidLine + 2}: prenom, nom et email sont obligatoires` }
   return { rows, error: rows.length ? '' : 'Aucune ligne a importer' }
 }
 
-function splitCsvLine(line: string): string[] {
-  return line.split(',').map(value => value.trim())
+function detectDelimiter(header: string): ',' | ';' {
+  return header.includes(';') ? ';' : ','
+}
+
+function splitCsvLine(line: string, delimiter: ',' | ';'): string[] {
+  const values: string[] = []
+  let current = ''
+  let quoted = false
+
+  for (const char of line) {
+    if (char === '"') {
+      quoted = !quoted
+    } else if (char === delimiter && !quoted) {
+      values.push(current.trim())
+      current = ''
+    } else {
+      current += char
+    }
+  }
+  values.push(current.trim())
+  return values.map(value => value.replace(/^"|"$/g, '').replace(/""/g, '"'))
+}
+
+function normalizeHeader(header: string): string {
+  const key = header.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s_-]/g, '')
+  const aliases: Record<string, string> = {
+    prenom: 'firstName',
+    firstname: 'firstName',
+    nom: 'lastName',
+    lastname: 'lastName',
+    email: 'email',
+    mail: 'email',
+    telephone: 'phone',
+    phone: 'phone',
+    categorie: 'categorie',
+    category: 'categorie',
+    groupe: 'groupe',
+    group: 'groupe',
+    profil: 'profilFinancier',
+    profilfinancier: 'profilFinancier',
+    statut: 'statut',
+    status: 'statut',
+    profession: 'profession',
+  }
+  return aliases[key] ?? header
+}
+
+function normalizeValue(header: string, value: string): string {
+  const cleaned = value.trim()
+  if (['categorie', 'groupe', 'profilFinancier', 'statut'].includes(header)) {
+    return cleaned.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, '_')
+  }
+  return cleaned
+}
+
+function downloadTemplate() {
+  const content = 'prenom;nom;email;telephone;categorie;groupe;profil;statut;profession\r\nJean;Atangana;jean@example.com;690000000;MCE_EN_SERVICE;TEMPLE;TRAVAILLEUR;EN_OBSERVATION;Commercant'
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'modele-import-membres.csv'
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 function toDateInput(date: string): string {
