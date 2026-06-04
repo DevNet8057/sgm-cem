@@ -8,6 +8,7 @@ import { Membres } from '@/components/views/Membres'
 import { Validations } from '@/components/views/Validations'
 import { Litiges } from '@/components/views/Litiges'
 import { Statistiques } from '@/components/views/Statistiques'
+import { Rapports } from '@/components/views/Rapports'
 import { Placeholder } from '@/components/views/Placeholder'
 
 export default function AppPage() {
@@ -24,7 +25,7 @@ export default function AppPage() {
     case 'prestations':   return <Placeholder title="Prestations de Génie" />
     case 'litiges':       return <Litiges />
     case 'statistiques':  return <Statistiques />
-    case 'rapports':      return <Placeholder title="Rapports" />
+    case 'rapports':      return <Rapports />
     case 'notifications': return <Placeholder title="Notifications" />
     case 'parametres':    return <Placeholder title="Paramètres" />
     default:              return <Dashboard />

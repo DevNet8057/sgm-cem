@@ -19,6 +19,7 @@ Le noyau fonctionnel prioritaire couvre maintenant :
 - Fonds Collecteurs : synthese des fonds confirmes non reverses, alertes de retention, selection et transfert vers caisse ou banque.
 - Litiges : liste des contributions contestees, resolution par confirmation ou annulation avec audit.
 - Statistiques : page dediee avec KPI et graphique mensuel.
+- Rapports : exports CSV pour membres, rubriques et contributions.
 - Backend : RBAC serveur sur les routes du noyau, audit log sur creation membre, creation contribution, confirmation et litige.
 - Securite : secrets JWT centralises, refus des secrets faibles en production, RBAC serveur sur les routes sensibles du noyau.
 - Base PostgreSQL : schema synchronise avec Prisma et seed fonctionnel.
@@ -40,7 +41,7 @@ Priorite de developpement restante :
 2. Ajouter de vraies donnees de demonstration ou un import Excel membres.
 3. Ajouter tests API sur membres, rubriques, contributions et validations.
 4. Ajouter tests automatises API sur le noyau.
-5. Completer rapports/export PDF.
+5. Completer export PDF.
 6. Ensuite seulement passer aux paiements et notifications.
 
 ---
