@@ -6,7 +6,7 @@
 
 ## SUIVI D'IMPLEMENTATION LOCAL
 
-Etat au 2026-06-04 :
+Etat au 2026-06-05 :
 
 Le noyau fonctionnel prioritaire couvre maintenant :
 
@@ -22,6 +22,8 @@ Le noyau fonctionnel prioritaire couvre maintenant :
 - Rapports : exports CSV pour membres, rubriques et contributions.
 - Rapports PDF/impression : rapport financier annuel avec KPI, moyens de paiement, top contributeurs et taux par rubrique.
 - Notifications : backend securise, liste frontend, compteur non-lu, marquer une notification lue, tout marquer lu et broadcast responsable/admin.
+- Parametres systeme : ecran frontend, lecture/mise a jour securisee, audit des modifications, ratios financiers, delais de rappel et retention.
+- Prestations de genie : creation, suivi des cours/depenses, enregistrement des entrees, cloture des entrees et calcul/versement de commission.
 - Dashboard interactif : filtre par annee, collectes mensuelles, taux de confirmation, moyens de paiement, top contributeurs et taux par rubrique.
 - Import membres : CSV Excel avec virgule ou point-virgule, en-tetes francais/anglais et modele telechargeable.
 - Backend : RBAC serveur sur les routes du noyau, audit log sur creation membre, creation contribution, confirmation et litige.
@@ -33,7 +35,6 @@ Modules encore hors noyau ou incomplets :
 - OTP telephone / SMS.
 - Paiements MTN MoMo, Orange Money, CinetPay et webhooks.
 - GED complete, upload S3 et approbation documentaire.
-- Prestations de genie avancees.
 - Notifications temps reel, WhatsApp, SMS, Web Push.
 - Mode offline collecteur avec IndexedDB et synchronisation.
 - Tests automatises, CI/CD et deploiement production.
@@ -44,7 +45,7 @@ Priorite de developpement restante :
 2. Ajouter de vraies donnees de demonstration ou un import Excel membres.
 3. Ajouter tests API sur membres, rubriques, contributions et validations.
 4. Ajouter tests automatises API sur le noyau.
-5. Ajouter des tests automatises API sur notifications, rapports et statistiques.
+5. Ajouter des tests automatises API sur notifications, rapports, statistiques, parametres et prestations.
 6. Ensuite seulement passer aux paiements, GED avancee et notifications temps reel.
 
 ---

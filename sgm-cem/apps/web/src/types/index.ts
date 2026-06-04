@@ -141,7 +141,9 @@ export interface Prestation {
   id: string
   reference: string
   titre: string
+  description?: string
   commanditaire: string
+  commanditairePhone?: string
   statut: PrestationStatut
   tarifBase: number
   rabaisCommanditaire: number
@@ -154,6 +156,29 @@ export interface Prestation {
   commission?: number
   commissionPercent: number
   dateEvenement?: string
+  lieu?: string
+  notes?: string
+  createdAt: string
+  cours?: CoursPrestation[]
+  entrees?: EntreePrestation[]
+}
+
+export interface CoursPrestation {
+  id: string
+  prestationId: string
+  libelle: string
+  montant: number
+  justificatif?: string
+  createdAt: string
+}
+
+export interface EntreePrestation {
+  id: string
+  prestationId: string
+  libelle: string
+  montant: number
+  modePaiement: ModePaiement
+  reference?: string
   createdAt: string
 }
 
@@ -227,6 +252,19 @@ export interface DashboardStats {
   }>
   recentContributions: Contribution[]
   rubriquesActives: Rubrique[]
+}
+
+export interface SystemSettings {
+  id: string
+  defaultIncreaseRate: number
+  etudiantRatio: number
+  coupleRatio: number
+  inactivityMonthsThreshold: number
+  reminderDelayDays: number
+  maxFundsRetentionDays: number
+  communityName: string
+  communityVerse: string
+  updatedAt: string
 }
 
 export type ToastVariant = 'success' | 'error' | 'warning' | 'info'
