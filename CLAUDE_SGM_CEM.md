@@ -24,6 +24,7 @@ Le noyau fonctionnel prioritaire couvre maintenant :
 - Notifications : backend securise, liste frontend, compteur non-lu, marquer une notification lue, tout marquer lu et broadcast responsable/admin.
 - Parametres systeme : ecran frontend, lecture/mise a jour securisee, audit des modifications, ratios financiers, delais de rappel et retention.
 - Prestations de genie : creation, suivi des cours/depenses, enregistrement des entrees, cloture des entrees et calcul/versement de commission.
+- GED Commissions : liste commissions/documents, creation de fiche document, soumission, approbation, rejet motive et archivage avec audit.
 - Dashboard interactif : filtre par annee, collectes mensuelles, taux de confirmation, moyens de paiement, top contributeurs et taux par rubrique.
 - Import membres : CSV Excel avec virgule ou point-virgule, en-tetes francais/anglais et modele telechargeable.
 - Backend : RBAC serveur sur les routes du noyau, audit log sur creation membre, creation contribution, confirmation et litige.
@@ -34,7 +35,7 @@ Modules encore hors noyau ou incomplets :
 
 - OTP telephone / SMS.
 - Paiements MTN MoMo, Orange Money, CinetPay et webhooks.
-- GED complete, upload S3 et approbation documentaire.
+- Upload fichier reel S3 pour GED, previsualisation et telechargement securise.
 - Notifications temps reel, WhatsApp, SMS, Web Push.
 - Mode offline collecteur avec IndexedDB et synchronisation.
 - Tests automatises, CI/CD et deploiement production.

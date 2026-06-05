@@ -12,7 +12,7 @@ import { Rapports } from '@/components/views/Rapports'
 import { Notifications } from '@/components/views/Notifications'
 import { Parametres } from '@/components/views/Parametres'
 import { Prestations } from '@/components/views/Prestations'
-import { Placeholder } from '@/components/views/Placeholder'
+import { Ged } from '@/components/views/Ged'
 
 export default function AppPage() {
   const { activeView } = useAppStore()
@@ -24,7 +24,7 @@ export default function AppPage() {
     case 'membres': return <Membres />
     case 'collecteurs': return <Collecteurs />
     case 'validations': return <Validations />
-    case 'ged': return <Placeholder title="GED Commissions" />
+    case 'ged': return <Ged />
     case 'prestations': return <Prestations />
     case 'litiges': return <Litiges />
     case 'statistiques': return <Statistiques />

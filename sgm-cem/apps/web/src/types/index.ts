@@ -124,15 +124,32 @@ export interface Document {
   commissionId: string
   typeCode: string
   titre: string
+  description?: string
   fileName: string
   fileSize: number
   mimeType: string
+  s3Key?: string
+  s3Bucket?: string
   statut: DocumentStatut
   version: number
   uploadedById: string
+  approvedById?: string
+  approvedAt?: string
+  rejectedById?: string
+  rejectedAt?: string
+  rejetMotif?: string
+  expiresAt?: string
+  tags: string[]
   createdAt: string
+  commission?: { nom: string }
   typeDocument?: { libelle: string }
   uploadedBy?: { fullName: string }
+}
+
+export interface TypeDocument {
+  code: string
+  libelle: string
+  retentionAnnees: number
 }
 
 export type PrestationStatut = 'EN_PREPARATION' | 'EN_COURS' | 'ENTREES_COMPLETES' | 'COMMISSION_VERSEE' | 'CLOTURE'
