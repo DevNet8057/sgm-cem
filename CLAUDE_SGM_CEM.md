@@ -1250,3 +1250,8 @@ PORT="3001"
 *Prompt Claude Code — SGM-CEM v4.1*
 *Culte d'Enfants de Melen · EEC Melen · Yaoundé, Cameroun*
 *"La Marche Ensemble dans l'Unité"*
+
+
+## MODULE FONDS COLLECTEURS - MISE A JOUR v4.2
+
+Nouveau modele FundsTransfer, enums TransferType et FundsTransferStatus, API endpoints /api/funds/transfer avec validation recepteur obligatoire.
