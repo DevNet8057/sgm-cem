@@ -1,10 +1,11 @@
 import 'dotenv/config'
 import 'express-async-errors'
-import express from 'express'
+import express, { type Request, type Response, type NextFunction } from 'express'
 import helmet from 'helmet'
 import cors from 'cors'
+import cookieParser from 'cookie-parser'
 import rateLimit from 'express-rate-limit'
-import { doubleCsrfProtection, generateCsrfToken } from 'csrf-csrf'
+import { doubleCsrf } from 'csrf-csrf'
 import { authRouter } from './routes/auth'
 import { membresRouter } from './routes/membres'
 import { rubriquesRouter } from './routes/rubriques'
@@ -37,6 +38,7 @@ app.use(cors({
   },
   credentials: true,
 }))
+app.use(cookieParser())
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 
@@ -47,7 +49,7 @@ app.use('/api/', limiter)
 const csrfSecret = process.env.CSRF_SECRET ?? 'csrf-dev-secret-change-in-prod'
 const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
   getSecret: () => csrfSecret,
-  getSessionIdentifier: (req) => (req.cookies?.access_token ?? '') as string,
+  getSessionIdentifier: (req: Request) => (req.cookies?.access_token ?? '') as string,
   cookieName: 'csrf_token',
   cookieOptions: {
     httpOnly: false,
@@ -55,7 +57,7 @@ const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
     sameSite: 'strict',
     path: '/',
   },
-  getCsrfTokenFromRequest: (req) => req.headers['x-csrf-token'] as string | undefined,
+  getCsrfTokenFromRequest: (req: Request) => req.headers['x-csrf-token'] as string | undefined,
 })
 
 app.get('/api/csrf-token', (req, res) => {
@@ -63,7 +65,7 @@ app.get('/api/csrf-token', (req, res) => {
   res.json({ token })
 })
 
-app.use('/api', (req, res, next) => {
+app.use('/api', (req: Request, res: Response, next: NextFunction) => {
   if (req.path.startsWith('/webhooks')) return next()
   if (req.path === '/csrf-token') return next()
   if (req.path === '/auth/google') return next()

@@ -21,7 +21,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr" suppressHydrationWarning>
       <body suppressHydrationWarning>
-        <Script src="https://accounts.google.com/gsi/client" strategy="lazyOnload" />
+        <Script
+          src="https://accounts.google.com/gsi/client"
+          strategy="lazyOnload"
+          crossOrigin="anonymous"
+        />
         <Providers>{children}</Providers>
       </body>
     </html>

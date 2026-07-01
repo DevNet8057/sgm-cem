@@ -147,27 +147,31 @@ export default function LoginPage() {
     const tryInit = () => {
       attempts++
       if (disposed) return
-      if (window.google?.accounts?.id) {
-        window.google.accounts.id.initialize({
-          client_id: clientId,
-          callback: handleGoogleCredential,
-          auto_select: false,
-          cancel_on_tap_outside: true,
-        })
-        if (googleBtnRef.current) {
-          window.google.accounts.id.renderButton(googleBtnRef.current, {
-            type: 'standard',
-            theme: 'outline',
-            size: 'large',
-            shape: 'pill',
-            text: 'continue_with',
-            locale: 'fr',
-            width: googleBtnRef.current.offsetWidth || 300,
+      try {
+        if (window.google?.accounts?.id) {
+          window.google.accounts.id.initialize({
+            client_id: clientId,
+            callback: handleGoogleCredential,
+            auto_select: false,
+            cancel_on_tap_outside: true,
           })
+          if (googleBtnRef.current) {
+            window.google.accounts.id.renderButton(googleBtnRef.current, {
+              type: 'standard',
+              theme: 'outline',
+              size: 'large',
+              shape: 'pill',
+              text: 'continue_with',
+              locale: 'fr',
+              width: googleBtnRef.current.offsetWidth || 300,
+            })
+          }
+          setGoogleBtnReady(true)
+        } else if (attempts < 20) {
+          setTimeout(tryInit, 250)
         }
-        setGoogleBtnReady(true)
-      } else if (attempts < 20) {
-        setTimeout(tryInit, 250)
+      } catch (e) {
+        console.warn('[Google] initialization failed:', e)
       }
     }
     tryInit()
@@ -420,8 +424,10 @@ export default function LoginPage() {
               </div>
               {apiError && apiError.includes('Google') && (
                 <div className="mt-2 rounded-[10px] bg-amber-50 border border-amber-200 px-3 py-2.5 text-xs text-amber-800">
-                  <p className="font-semibold mb-1 flex items-center gap-1.5"><AlertCircle size={12} /> Email Google non reconnu</p>
-                  <p>Votre compte Google doit utiliser <strong>la même adresse email</strong> que votre compte SGM-CEM. Contactez l'administrateur pour associer votre email Google à votre compte.</p>
+                  <p className="font-semibold mb-1 flex items-center gap-1.5">
+                    <AlertCircle size={12} /> {apiError.includes('Aucun compte') ? 'Email Google non reconnu' : 'Connexion Google impossible'}
+                  </p>
+                  <p>{apiError}</p>
                 </div>
               )}
             </div>

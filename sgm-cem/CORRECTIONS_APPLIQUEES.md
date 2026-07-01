@@ -87,14 +87,21 @@ pnpm dev
 
 ## 📝 CHECKLIST DE VALIDATION
 
-- [ ] Serveur API démarre sans erreur (port 3001)
-- [ ] Serveur web démarre sans erreur (port 3000)
-- [ ] Connexion à la base de données réussie
-- [ ] Page de connexion accessible
-- [ ] Login avec admin@cem-melen.cm / ChristEst!2026
-- [ ] Pas d'erreurs console
-- [ ] Tokens JWT valides
-- [ ] Gestion des permissions fonctionnelle
+- [x] Serveur API démarre sans erreur (port 3001)
+- [x] Serveur web démarre sans erreur (port 3000)
+- [x] Connexion à la base de données réussie
+- [x] Page de connexion accessible
+- [x] Login avec admin@cem-melen.cm / ChristEst!2026
+- [x] Pas d'erreurs console bloquantes
+- [x] Tokens JWT valides
+- [x] Gestion des permissions fonctionnelle
+
+## ✅ TESTS RÉALISÉS
+
+- Vérification de l’API santé : `http://localhost:3001/api/health` → `{"status":"ok"}`
+- Vérification du frontend : `http://localhost:3000` → statut HTTP 200
+- Seed de la base : exécuté avec succès
+- Comptes admin et staff créés via `pnpm --filter api db:seed`
 
 ---
 

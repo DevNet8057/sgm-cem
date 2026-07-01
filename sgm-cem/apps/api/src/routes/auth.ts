@@ -84,8 +84,9 @@ async function createSessionTokens(user: { id: string; role: string; email: stri
 // ── Email / password login ────────────────────────────────────────────
 router.post('/login', authLimiter, async (req, res) => {
   const { email, password } = loginSchema.parse(req.body)
+  const normalizedEmail = email.toLowerCase().trim()
 
-  const user = await prisma.user.findUnique({ where: { email } })
+  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } })
   if (!user || !user.isActive) throw new AppError('ACCESS_DENIED', 'Identifiants incorrects', 401)
 
   const valid = await bcrypt.compare(password, user.passwordHash)
@@ -102,8 +103,9 @@ router.post('/login', authLimiter, async (req, res) => {
 // même structure de réponse que le compte existe ou non).
 router.post('/forgot-password', authLimiter, async (req, res) => {
   const { email } = z.object({ email: z.string().email() }).parse(req.body)
+  const normalizedEmail = email.toLowerCase().trim()
 
-  const user = await prisma.user.findUnique({ where: { email } })
+  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } })
 
   // Compte ADMIN actif → récupération via connexion Google (pas de mot de passe à réinitialiser)
   if (user?.role === 'ADMIN' && user.isActive) {
@@ -259,11 +261,11 @@ router.post('/google', authLimiter, async (req, res) => {
   if (!payload?.email) throw new AppError('ACCESS_DENIED', "Impossible de récupérer l'email Google", 401)
 
   // RESTRICTION : l'email doit déjà exister (créé par un admin)
-  const user = await prisma.user.findUnique({ where: { email: payload.email } })
+  const user = await prisma.user.findUnique({ where: { email: payload.email.toLowerCase() } })
   if (!user) {
     throw new AppError(
       'ACCESS_DENIED',
-      "Aucun compte associé à cette adresse Google. Contactez l'administrateur pour créer votre compte.",
+      `Aucun compte associé à l'adresse Google ${payload.email}. Vérifiez que vous utilisez le même email que votre compte SGM-CEM, ou demandez à l'administrateur de créer votre compte.`,
       403
     )
   }

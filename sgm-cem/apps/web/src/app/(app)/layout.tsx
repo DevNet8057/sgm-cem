@@ -42,12 +42,27 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, mustChangePassword } = useAuthStore()
+  const { isAuthenticated, mustChangePassword, fetchMe, logout } = useAuthStore()
   const router = useRouter()
 
   useEffect(() => {
-    if (!isAuthenticated) router.replace('/')
-  }, [isAuthenticated, router])
+    if (!isAuthenticated) {
+      router.replace('/')
+      return
+    }
+
+    let cancelled = false
+    fetchMe().catch(() => {
+      if (!cancelled) {
+        logout()
+        router.replace('/')
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isAuthenticated, fetchMe, logout, router])
 
   if (!isAuthenticated) return null
 

@@ -70,6 +70,10 @@ api.interceptors.response.use(
 
         return api.request(originalRequest)
       } catch {
+        // Clear persisted auth state so the user is sent to the login page cleanly
+        if (typeof window !== 'undefined') {
+          window.localStorage.removeItem('sgm-cem-auth')
+        }
         refreshQueue = []
         window.location.href = '/'
       } finally {
