@@ -2,12 +2,20 @@ export type UserRole = 'ADMIN' | 'TRESORIER' | 'RESPONSABLE' | 'ADJOINT_RESPONSA
 
 export interface User {
   id: string
+  memberId?: string
   firstName: string
   lastName: string
   fullName: string
   email: string
+  phone?: string
+  whatsappPhone?: string
+  photoUrl?: string
   role: UserRole
+  isActive?: boolean
+  mustChangePassword?: boolean
+  notificationToken?: string
   lastLoginAt?: string
+  createdAt?: string
 }
 
 export type MembreCategorie = 'MCE_EN_SERVICE' | 'ENFANTS' | 'DIASPORA'
@@ -61,8 +69,10 @@ export interface Rubrique {
 }
 
 export type ContributionStatut = 'EN_ATTENTE_CONFIRMATION' | 'CONFIRME' | 'LITIGE' | 'ANNULE'
-export type ModePaiement = 'ESPECES' | 'MTN_MOMO' | 'ORANGE_MONEY' | 'CARTE_VISA' | 'VIREMENT'
-export type LocalisationFonds = 'CHEZ_COLLECTEUR' | 'CAISSE_PRINCIPALE' | 'BANQUE' | 'EN_TRANSIT'
+export type ModePaiement = 'ESPECES' | 'MTN_MOMO' | 'ORANGE_MONEY' | 'YELII' | 'CARTE_VISA' | 'VIREMENT'
+export type LocalisationFonds = 'CHEZ_COLLECTEUR' | 'EN_TRANSIT' | 'CHEZ_RESPONSABLE' | 'REMIS_TRESORIER' | 'EN_CAISSE' | 'EN_BANQUE'
+export type TransferType = 'ESPECES_EN_MAIN' | 'DEPOT_MTN' | 'DEPOT_ORANGE' | 'AUTRE'
+export type FundsTransferStatus = 'PENDING_APPROVAL' | 'CONFIRMED' | 'REFUSED' | 'CANCELLED'
 
 export interface Contribution {
   id: string
@@ -79,10 +89,37 @@ export interface Contribution {
   litigeMotif?: string
   confirmedAt?: string
   receiptUrl?: string
+  proofUrl?: string
+  proofUploadedAt?: string
+  transferId?: string
   createdAt: string
   membre?: { user: { fullName: string } }
   rubrique?: { title: string; code: string }
   collecteur?: { fullName: string }
+  fundsTransfer?: FundsTransfer
+}
+
+export interface FundsTransfer {
+  id: string
+  createdAt: string
+  confirmedAt?: string
+  refusedAt?: string
+  cancelledAt?: string
+  senderId: string
+  senderName: string
+  receiverId: string
+  receiverName: string
+  totalAmount: number
+  transferType: TransferType
+  status: FundsTransferStatus
+  senderNote?: string
+  refusalReason?: string
+  borderauUrl?: string
+  remindersSentCount: number
+  lastReminderSentAt?: string
+  contributions: Contribution[]
+  sender?: { role: UserRole }
+  receiver?: { role: UserRole }
 }
 
 export interface CollecteurSummary {
@@ -106,6 +143,18 @@ export interface CollecteursResponse {
     totalEnRetard: number
     maxRetentionDays: number
   }
+  flow: {
+    chezCollecteur: number
+    enTransit: number
+    chezResponsable: number
+    remisTresorier: number
+    enCaisse: number
+    enBanque: number
+    totalConfirme: number
+  }
+  eligibleRecipients: Array<{ id: string; fullName: string; email: string; role: string }>
+  myRole?: UserRole
+  pendingValidations?: number
 }
 
 export interface Commission {
@@ -279,6 +328,8 @@ export interface SystemSettings {
   inactivityMonthsThreshold: number
   reminderDelayDays: number
   maxFundsRetentionDays: number
+  transferPendingReminderHours: number
+  transferAlertTresorierHours: number
   communityName: string
   communityVerse: string
   updatedAt: string

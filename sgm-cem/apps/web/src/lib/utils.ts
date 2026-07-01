@@ -63,6 +63,37 @@ export const MODE_PAIEMENT_LABELS: Record<string, string> = {
   ESPECES: 'Espèces',
   MTN_MOMO: 'MTN MoMo',
   ORANGE_MONEY: 'Orange Money',
+  YELII: 'Yelii',
   CARTE_VISA: 'Carte Visa',
   VIREMENT: 'Virement',
+}
+
+export const LOCALISATION_FONDS_LABELS: Record<string, string> = {
+  CHEZ_COLLECTEUR: 'Chez collecteur',
+  EN_TRANSIT: 'En transit',
+  CHEZ_RESPONSABLE: 'Chez Responsable',
+  REMIS_TRESORIER: 'Remis trésorier',
+  EN_CAISSE: 'En caisse',
+  EN_BANQUE: 'En banque',
+}
+
+export const TRANSFER_TYPE_LABELS: Record<string, string> = {
+  ESPECES_EN_MAIN: 'En main propre',
+  DEPOT_MTN: 'Dépôt MTN MoMo',
+  DEPOT_ORANGE: 'Dépôt Orange Money',
+  AUTRE: 'Autre mode',
+}
+
+export const TRANSFER_TYPE_EMOJI: Record<string, string> = {
+  ESPECES_EN_MAIN: '🤝',
+  DEPOT_MTN: '🟡',
+  DEPOT_ORANGE: '🟠',
+  AUTRE: '📦',
+}
+
+export const FUND_TRANSFER_STATUS_LABELS: Record<string, string> = {
+  PENDING_APPROVAL: 'En attente',
+  CONFIRMED: 'Confirmé',
+  REFUSED: 'Refusé',
+  CANCELLED: 'Annulé',
 }

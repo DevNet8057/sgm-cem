@@ -65,13 +65,16 @@ export function Rapports() {
       const stats = (await api.get('/stats/dashboard')).data.data as DashboardStats
       const html = buildFinancialReport(stats)
       const popup = window.open('', '_blank', 'width=1100,height=800')
-      if (!popup) throw new Error('Popup blocked')
+      if (!popup) throw new Error('Popup bloquee par le navigateur. Autorisez les popups pour localhost.')
+      popup.document.open()
       popup.document.write(html)
       popup.document.close()
       popup.focus()
-      setTimeout(() => popup.print(), 400)
-    } catch {
-      setError("Impossible d'ouvrir le rapport PDF. Autorise les popups du navigateur.")
+      // L'impression est déclenchée depuis le popup lui-même via onload pour éviter le blocage cross-origin
+      setTimeout(() => popup.postMessage({ type: 'sgm-cem-print' }, '*'), 50)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Impossible d'ouvrir le rapport PDF."
+      setError(message)
     } finally {
       setLoading(null)
     }
@@ -79,9 +82,13 @@ export function Rapports() {
 
   return (
     <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter">
-      <div className="mb-6">
-        <h2 className="font-display font-semibold text-[#0F4A0F] text-xl">Rapports</h2>
-        <p className="text-gray-500 text-sm">Exports CSV et rapport financier imprimable en PDF.</p>
+      <div className="relative overflow-hidden rounded-[18px] border border-[#0F4A0F]/10 bg-white mb-6">
+        <div className="absolute inset-y-0 left-0 w-1.5 bg-[#7C3AED]" />
+        <div className="p-5">
+          <p className="text-xs font-bold uppercase tracking-widest text-purple-600">Exports</p>
+          <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Rapports</h2>
+          <p className="text-gray-500 text-sm mt-0.5">Exports CSV et rapport financier imprimable en PDF.</p>
+        </div>
       </div>
 
       {error && <div className="mb-4 px-3 py-2 bg-red-50 border border-red-100 rounded-[10px] text-sm text-red-600">{error}</div>}
@@ -136,7 +143,7 @@ function ReportCard({ title, description, loading, icon = 'file', actionLabel, o
         <Icon size={18} />
       </div>
       <h3 className="font-display font-semibold text-[#0F4A0F] text-lg mb-1">{title}</h3>
-      <p className="text-sm text-gray-500 mb-5 min-h-[60px]">{description}</p>
+      <p className="text-sm text-gray-500 mb-5 min-h-15">{description}</p>
       <Button loading={loading} onClick={onExport}>
         <Download size={14} />
         {actionLabel}
@@ -213,6 +220,14 @@ function buildFinancialReport(stats: DashboardStats): string {
   <table><thead><tr><th>Code</th><th>Rubrique</th><th>Collecte</th><th>Taux</th></tr></thead><tbody>${rates || '<tr><td colspan="4">Aucune donnee</td></tr>'}</tbody></table>
 
   <footer>Genere le ${new Date().toLocaleString('fr-FR')} depuis SGM-CEM.</footer>
+
+  <script>
+    window.addEventListener('message', function (event) {
+      if (event.data && event.data.type === 'sgm-cem-print') {
+        event.target.print()
+      }
+    })
+  </script>
 </body>
 </html>`
 }

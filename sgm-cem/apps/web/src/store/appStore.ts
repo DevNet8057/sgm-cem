@@ -18,6 +18,8 @@ interface AppState {
   toasts: Toast[]
   addToast: (options: ToastOptions) => void
   removeToast: (id: string) => void
+  pendingTransfersCount: number
+  setPendingTransfersCount: (count: number) => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -49,4 +51,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     setTimeout(() => get().removeToast(id), toast.duration)
   },
   removeToast: (id) => set(state => ({ toasts: state.toasts.filter(t => t.id !== id) })),
+
+  pendingTransfersCount: 0,
+  setPendingTransfersCount: (count) => set({ pendingTransfersCount: count }),
 }))

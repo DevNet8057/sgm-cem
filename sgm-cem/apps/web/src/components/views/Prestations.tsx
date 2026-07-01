@@ -124,15 +124,19 @@ export function Prestations() {
 
   return (
     <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter">
-      <div className="flex items-center justify-between gap-3 mb-6">
-        <div>
-          <h2 className="font-display font-semibold text-[#0F4A0F] text-xl">Prestations de Genie</h2>
-          <p className="text-gray-500 text-sm">Tarification, depenses, entrees et commissions</p>
+      <div className="relative overflow-hidden rounded-[18px] border border-[#0F4A0F]/10 bg-white mb-6">
+        <div className="absolute inset-y-0 left-0 w-1.5 bg-[#F97316]" />
+        <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-orange-600">Événements</p>
+            <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Prestations de Génie</h2>
+            <p className="text-gray-500 text-sm mt-0.5">Tarification, dépenses, entrées et commissions</p>
+          </div>
+          <Button size="sm" onClick={() => setShowCreate(!showCreate)}>
+            {showCreate ? <X size={14} /> : <Plus size={14} />}
+            {showCreate ? 'Fermer' : 'Nouvelle prestation'}
+          </Button>
         </div>
-        <Button size="sm" onClick={() => setShowCreate(!showCreate)}>
-          {showCreate ? <X size={14} /> : <Plus size={14} />}
-          {showCreate ? 'Fermer' : 'Nouvelle prestation'}
-        </Button>
       </div>
 
       {showCreate && (

@@ -5,49 +5,68 @@ import api from '@/lib/api'
 
 interface AuthState {
   user: User | null
-  accessToken: string | null
   isAuthenticated: boolean
+  mustChangePassword: boolean
   login: (email: string, password: string) => Promise<void>
+  loginWithGoogle: (idToken: string) => Promise<void>
+  loginWithPhone: (phone: string, code: string) => Promise<void>
   logout: () => Promise<void>
   setUser: (user: User | null) => void
+  setMustChangePassword: (value: boolean) => void
   fetchMe: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       user: null,
-      accessToken: null,
       isAuthenticated: false,
+      mustChangePassword: false,
 
       login: async (email, password) => {
+        // Tokens are set as HttpOnly cookies by the server — never touch localStorage
         const res = await api.post('/auth/login', { email, password })
-        const { user, accessToken, refreshToken } = res.data.data
-        localStorage.setItem('access_token', accessToken)
-        localStorage.setItem('refresh_token', refreshToken)
-        set({ user, accessToken, isAuthenticated: true })
+        const { user } = res.data.data
+        set({ user, isAuthenticated: true, mustChangePassword: !!user.mustChangePassword })
+      },
+
+      loginWithGoogle: async (idToken) => {
+        const res = await api.post('/auth/google', { idToken })
+        const { user } = res.data.data
+        set({ user, isAuthenticated: true, mustChangePassword: !!user.mustChangePassword })
+      },
+
+      loginWithPhone: async (phone, code) => {
+        const res = await api.post('/auth/otp/verify', { phone, code })
+        const { user } = res.data.data
+        set({ user, isAuthenticated: true, mustChangePassword: !!user.mustChangePassword })
       },
 
       logout: async () => {
-        const refreshToken = localStorage.getItem('refresh_token')
         try {
-          await api.post('/auth/logout', { refreshToken })
+          await api.post('/auth/logout')
         } catch {}
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
-        set({ user: null, accessToken: null, isAuthenticated: false })
+        set({ user: null, isAuthenticated: false, mustChangePassword: false })
       },
 
-      setUser: (user) => set({ user, isAuthenticated: !!user }),
+      setUser: (user) => set({ user, isAuthenticated: !!user, mustChangePassword: !!user?.mustChangePassword }),
+
+      setMustChangePassword: (value) => set({ mustChangePassword: value }),
 
       fetchMe: async () => {
         const res = await api.get('/auth/me')
-        set({ user: res.data.data, isAuthenticated: true })
+        const user = res.data.data
+        set({ user, isAuthenticated: true, mustChangePassword: !!user.mustChangePassword })
       },
     }),
     {
       name: 'sgm-cem-auth',
-      partialize: (state) => ({ user: state.user, accessToken: state.accessToken, isAuthenticated: state.isAuthenticated }),
+      // Only persist non-sensitive user metadata — never tokens
+      partialize: (state) => ({
+        user: state.user,
+        isAuthenticated: state.isAuthenticated,
+        mustChangePassword: state.mustChangePassword,
+      }),
     }
   )
 )

@@ -1,11 +1,84 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { RefreshCw, Save, Settings, ShieldCheck, SlidersHorizontal } from 'lucide-react'
+import { Bell, Info, Play, RefreshCw, Save, Settings, ShieldCheck, SlidersHorizontal, TrendingUp } from 'lucide-react'
 import api from '@/lib/api'
-import { formatDateTime } from '@/lib/utils'
+import { formatAmount, formatDateTime } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
+import { cn } from '@/lib/utils'
 import type { ApiResponse, SystemSettings } from '@/types'
+
+// ── C4 : sons de notification générés par Web Audio API (pas de fichiers audio requis) ──
+const NOTIF_SOUNDS: Array<{ id: string; label: string; play: () => void }> = [
+  {
+    id: 'bip',
+    label: 'Bip standard',
+    play: () => {
+      const ctx = new AudioContext()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain); gain.connect(ctx.destination)
+      osc.type = 'sine'; osc.frequency.setValueAtTime(880, ctx.currentTime)
+      osc.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.25)
+      gain.gain.setValueAtTime(0.3, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35)
+      osc.start(); osc.stop(ctx.currentTime + 0.35)
+    },
+  },
+  {
+    id: 'double',
+    label: 'Double bip',
+    play: () => {
+      const ctx = new AudioContext()
+      ;[0, 0.18].forEach(delay => {
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.connect(gain); gain.connect(ctx.destination)
+        osc.type = 'sine'; osc.frequency.value = 1050
+        gain.gain.setValueAtTime(0.25, ctx.currentTime + delay)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.12)
+        osc.start(ctx.currentTime + delay); osc.stop(ctx.currentTime + delay + 0.14)
+      })
+    },
+  },
+  {
+    id: 'aigu',
+    label: 'Bip aigu',
+    play: () => {
+      const ctx = new AudioContext()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain); gain.connect(ctx.destination)
+      osc.type = 'sine'; osc.frequency.value = 1400
+      gain.gain.setValueAtTime(0.2, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2)
+      osc.start(); osc.stop(ctx.currentTime + 0.2)
+    },
+  },
+  {
+    id: 'grave',
+    label: 'Bip grave',
+    play: () => {
+      const ctx = new AudioContext()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain); gain.connect(ctx.destination)
+      osc.type = 'triangle'; osc.frequency.value = 440
+      gain.gain.setValueAtTime(0.35, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4)
+      osc.start(); osc.stop(ctx.currentTime + 0.4)
+    },
+  },
+  {
+    id: 'off',
+    label: 'Silence',
+    play: () => {},
+  },
+]
+
+const SOUND_STORAGE_KEY = 'cem-notif-sound'
+function getSavedSoundId(): string { return typeof window !== 'undefined' ? (localStorage.getItem(SOUND_STORAGE_KEY) ?? 'bip') : 'bip' }
+function saveSoundId(id: string): void { if (typeof window !== 'undefined') localStorage.setItem(SOUND_STORAGE_KEY, id) }
 
 type SettingsForm = {
   defaultIncreaseRate: string
@@ -34,6 +107,8 @@ export function Parametres() {
   const [form, setForm] = useState<SettingsForm>(emptyForm)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState('')
+  const [simAmount, setSimAmount] = useState('25000')
+  const [selectedSound, setSelectedSound] = useState(getSavedSoundId)
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['settings'],
@@ -74,15 +149,19 @@ export function Parametres() {
 
   return (
     <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter">
-      <div className="flex items-center justify-between gap-3 mb-6">
-        <div>
-          <h2 className="font-display font-semibold text-[#0F4A0F] text-xl">Parametres systeme</h2>
-          <p className="text-gray-500 text-sm">Regles financieres, rappels et identite du ministere</p>
+      <div className="relative overflow-hidden rounded-[18px] border border-[#0F4A0F]/10 bg-white mb-6">
+        <div className="absolute inset-y-0 left-0 w-1.5 bg-gray-600" />
+        <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-gray-600">Administration</p>
+            <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Paramètres système</h2>
+            <p className="text-gray-500 text-sm mt-0.5">Règles financières, rappels et identité du ministère</p>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => refetch()}>
+            <RefreshCw size={14} />
+            Actualiser
+          </Button>
         </div>
-        <Button size="sm" variant="outline" onClick={() => refetch()}>
-          <RefreshCw size={14} />
-          Actualiser
-        </Button>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-5">
@@ -124,11 +203,98 @@ export function Parametres() {
         </form>
 
         <aside className="space-y-4">
+          {/* E : Simulateur de ratios en temps réel */}
+          <div className="rounded-[18px] border border-[#1A6B1A]/20 bg-white p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-9 h-9 rounded-[10px] bg-[#E8F5E8] text-[#1A6B1A] flex items-center justify-center">
+                <TrendingUp size={16} />
+              </div>
+              <h3 className="font-display font-semibold text-[#0F4A0F]">Simulateur de ratios</h3>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">Saisissez un montant de référence (travailleur) pour voir les montants calculés par profil.</p>
+            <input
+              type="number"
+              value={simAmount}
+              onChange={e => setSimAmount(e.target.value)}
+              placeholder="Montant travailleur (FCFA)"
+              className="w-full px-3 py-2 border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30 mb-3 font-mono"
+            />
+            {(() => {
+              const base = Number(simAmount) || 0
+              const etudiant = Math.round(base * (Number(form.etudiantRatio) || 0.5))
+              const couple = Math.round(base * (Number(form.coupleRatio) || 1.5))
+              const nextYear = Math.round(base * (1 + (Number(form.defaultIncreaseRate) || 5) / 100))
+              return (
+                <div className="space-y-2">
+                  {[
+                    { label: 'Travailleur', amount: base, ratio: '× 1.00', color: 'bg-[#E8F5E8] text-[#1A6B1A]' },
+                    { label: 'Etudiant',    amount: etudiant, ratio: `× ${form.etudiantRatio || '0.5'}`, color: 'bg-blue-50 text-blue-700' },
+                    { label: 'Couple',      amount: couple, ratio: `× ${form.coupleRatio || '1.5'}`, color: 'bg-purple-50 text-purple-700' },
+                    { label: 'N+1 (travailleur)', amount: nextYear, ratio: `+${form.defaultIncreaseRate || '5'}%`, color: 'bg-amber-50 text-amber-700' },
+                  ].map(row => (
+                    <div key={row.label} className={cn('flex items-center justify-between rounded-[10px] px-3 py-2', row.color)}>
+                      <span className="text-xs font-semibold">{row.label}</span>
+                      <div className="text-right">
+                        <span className="font-mono font-bold text-sm">{formatAmount(row.amount)}</span>
+                        <span className="text-[10px] ml-1.5 opacity-70">{row.ratio}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
+          </div>
+
+          {/* C4 : Sélecteur de son de notification */}
+          <div className="rounded-[18px] border border-[#1A6B1A]/20 bg-white p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-9 h-9 rounded-[10px] bg-[#E8F5E8] text-[#1A6B1A] flex items-center justify-center">
+                <Bell size={16} />
+              </div>
+              <h3 className="font-display font-semibold text-[#0F4A0F]">Son de notification</h3>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">Choisissez le son joué à chaque nouvelle notification.</p>
+            <div className="space-y-2">
+              {NOTIF_SOUNDS.map(s => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => { setSelectedSound(s.id); saveSoundId(s.id) }}
+                  className={cn(
+                    'w-full flex items-center justify-between rounded-[10px] px-3 py-2.5 border text-sm font-medium transition-all',
+                    selectedSound === s.id
+                      ? 'bg-[#E8F5E8] border-[#1A6B1A]/30 text-[#1A6B1A]'
+                      : 'bg-gray-50 border-gray-200 text-gray-700 hover:border-[#1A6B1A]/30'
+                  )}
+                >
+                  <span>{s.label}</span>
+                  <button
+                    type="button"
+                    onClick={e => { e.stopPropagation(); s.play() }}
+                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-[#1A6B1A] transition-colors"
+                    title="Tester ce son"
+                  >
+                    <Play size={11} />
+                    Tester
+                  </button>
+                </button>
+              ))}
+            </div>
+            {selectedSound === 'off' && (
+              <p className="mt-2 text-xs text-amber-600">Les notifications in-app resteront visibles, mais sans son.</p>
+            )}
+          </div>
+
           <div className="rounded-[18px] border border-gray-100 bg-white p-5">
-            <h3 className="font-display font-semibold text-[#0F4A0F] mb-3">Controle d'acces</h3>
-            <p className="text-sm leading-relaxed text-gray-600">
-              Cette page est reservee aux tresoriers et administrateurs. Chaque modification est inscrite dans les journaux d'audit.
-            </p>
+            <div className="flex items-start gap-2">
+              <Info size={14} className="text-gray-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-gray-600 mb-1">Contrôle d'accès</p>
+                <p className="text-xs leading-relaxed text-gray-500">
+                  Page réservée aux trésoriers et administrateurs. Chaque modification est inscrite dans les journaux d'audit.
+                </p>
+              </div>
+            </div>
           </div>
           <div className="rounded-[18px] border border-gray-100 bg-white p-5">
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Derniere mise a jour</p>

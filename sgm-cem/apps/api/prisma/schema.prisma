@@ -75,15 +75,32 @@ enum ModePaiement {
   ESPECES
   MTN_MOMO
   ORANGE_MONEY
+  YELII
   CARTE_VISA
   VIREMENT
 }
 
+enum TransferType {
+  ESPECES_EN_MAIN
+  DEPOT_MTN
+  DEPOT_ORANGE
+  AUTRE
+}
+
+enum FundsTransferStatus {
+  PENDING_APPROVAL
+  CONFIRMED
+  REFUSED
+  CANCELLED
+}
+
 enum LocalisationFonds {
   CHEZ_COLLECTEUR
-  CAISSE_PRINCIPALE
-  BANQUE
   EN_TRANSIT
+  CHEZ_RESPONSABLE
+  REMIS_TRESORIER
+  EN_CAISSE
+  EN_BANQUE
 }
 
 enum DocumentStatut {
@@ -118,32 +135,43 @@ enum AuditAction {
   REJECT
   APPROVE
   TRANSFER
+  CLAIM
+  TRANSFER_CONFIRMED
+  TRANSFER_REFUSED
+  TRANSFER_CANCELLED
 }
 
 // ─── MODELS ───────────────────────────────────────────────────────────────────
 
 model User {
-  id           String   @id @default(cuid())
-  memberId     String   @unique
-  email        String   @unique
-  phone        String?  @unique
-  firstName    String
-  lastName     String
-  fullName     String
-  passwordHash String
-  role         UserRole @default(MEMBRE)
-  isActive     Boolean  @default(true)
-  lastLoginAt  DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                 String    @id @default(cuid())
+  memberId           String    @unique
+  email              String    @unique
+  phone              String?   @unique
+  whatsappPhone      String?
+  firstName          String
+  lastName           String
+  fullName           String
+  passwordHash       String
+  photoUrl           String?
+  role               UserRole  @default(MEMBRE)
+  isActive           Boolean   @default(true)
+  mustChangePassword Boolean   @default(true)
+  notificationToken  String?
+  lastLoginAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  membre        Membre?
-  collecteurOf  Contribution[] @relation("CollecteurContributions")
+  membre           Membre?
+  collecteurOf     Contribution[] @relation("CollecteurContributions")
   createdRubriques Rubrique[]
-  auditLogs     AuditLog[]
-  notifications Notification[]
-  documents     Document[]
-  sessions      UserSession[]
+  auditLogs        AuditLog[]
+  notifications    Notification[]
+  documents        Document[]
+  sessions         UserSession[]
+
+  sentTransfers     FundsTransfer[] @relation("FundsTransferSender")
+  receivedTransfers FundsTransfer[] @relation("FundsTransferReceiver")
 
   @@index([email])
   @@index([role])
@@ -162,28 +190,31 @@ model UserSession {
 }
 
 model Membre {
-  id              String           @id @default(cuid())
-  userId          String           @unique
-  memberId        String           @unique
+  id              String          @id @default(cuid())
+  userId          String          @unique
+  memberId        String          @unique
   categorie       MembreCategorie
   groupe          MembreGroupe
-  statut          MembreStatut     @default(EN_OBSERVATION)
-  profilFinancier ProfilFinancier  @default(TRAVAILLEUR)
+  statut          MembreStatut    @default(EN_OBSERVATION)
+  profilFinancier ProfilFinancier @default(TRAVAILLEUR)
   phone           String?
-  phoneWhatsapp   String?
   email           String?
   adresse         String?
   photoUrl        String?
   profession      String?
-  dateAdhesion    DateTime         @default(now())
+  dateAdhesion    DateTime        @default(now())
   dateNaissance   DateTime?
-  isActive        Boolean          @default(true)
+  isActive        Boolean         @default(true)
   notes           String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  coupleId        String?
+  nomConjoint     String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
-  user          User             @relation(fields: [userId], references: [id])
+  user          User           @relation(fields: [userId], references: [id])
   contributions Contribution[]
+  couple        Membre?        @relation("CoupleLink", fields: [coupleId], references: [id])
+  coupleOf      Membre[]       @relation("CoupleLink")
 
   @@index([groupe])
   @@index([statut])
@@ -192,27 +223,27 @@ model Membre {
 }
 
 model Rubrique {
-  id                String           @id @default(cuid())
-  code              String           @unique
-  title             String
-  description       String?
-  type              RubriqueType
-  priority          RubriquePriority @default(NORMAL)
-  status            RubriqueStatut   @default(OUVERTE)
-  fiscalYear        Int
-  openDate          DateTime
-  closeDate         DateTime?
-  amountTravailleur Int?
-  amountEtudiant    Int?
-  amountCouple      Int?
-  targetAmount      Int?
-  targetAll         Boolean          @default(false)
+  id                  String           @id @default(cuid())
+  code                String           @unique
+  title               String
+  description         String?
+  type                RubriqueType
+  priority            RubriquePriority @default(NORMAL)
+  status              RubriqueStatut   @default(OUVERTE)
+  fiscalYear          Int
+  openDate            DateTime
+  closeDate           DateTime?
+  amountTravailleur   Int?
+  amountEtudiant      Int?
+  amountCouple        Int?
+  targetAmount        Int?
+  targetAll           Boolean          @default(false)
   personnesConcernees String?
-  isAnnualReference Boolean          @default(false)
-  createdById       String
-  createdByName     String
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
+  isAnnualReference   Boolean          @default(false)
+  createdById         String
+  createdByName       String
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   creator       User?          @relation(fields: [createdById], references: [id])
   contributions Contribution[]
@@ -224,30 +255,36 @@ model Rubrique {
 }
 
 model Contribution {
-  id                    String             @id @default(cuid())
-  membreId              String
-  rubriqueId            String
-  collecteurId          String?
-  montant               Int
-  montantAttendu        Int?
-  modePaiement          ModePaiement
-  statut                ContributionStatut @default(EN_ATTENTE_CONFIRMATION)
-  localisationFonds     LocalisationFonds  @default(CHEZ_COLLECTEUR)
-  periodeLabel          String?
-  referencePaiement     String?
-  mobileMoneyPhone      String?
-  momoTransactionId     String?
-  litigeMotif           String?
-  confirmedAt           DateTime?
-  confirmedById         String?
-  receiptUrl            String?
-  receiptSentAt         DateTime?
-  createdAt             DateTime           @default(now())
-  updatedAt             DateTime           @updatedAt
+  id                String             @id @default(cuid())
+  membreId          String
+  rubriqueId        String
+  collecteurId      String?
+  montant           Int
+  montantAttendu    Int?
+  modePaiement      ModePaiement
+  statut            ContributionStatut @default(EN_ATTENTE_CONFIRMATION)
+  localisationFonds LocalisationFonds  @default(CHEZ_COLLECTEUR)
+  periodeLabel      String?
+  referencePaiement String?
+  mobileMoneyPhone  String?
+  momoTransactionId String?
+  litigeMotif       String?
+  confirmedAt       DateTime?
+  confirmedById     String?
+  receiptUrl        String?
+  receiptSentAt     DateTime?
+  proofUrl          String?
+  proofUploadedAt   DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
-  membre      Membre   @relation(fields: [membreId], references: [id])
-  rubrique    Rubrique @relation(fields: [rubriqueId], references: [id])
-  collecteur  User?    @relation("CollecteurContributions", fields: [collecteurId], references: [id])
+  // Transfer reference
+  transferId    String?
+  fundsTransfer FundsTransfer? @relation("ContributionTransfer", fields: [transferId], references: [id])
+
+  membre     Membre   @relation(fields: [membreId], references: [id])
+  rubrique   Rubrique @relation(fields: [rubriqueId], references: [id])
+  collecteur User?    @relation("CollecteurContributions", fields: [collecteurId], references: [id])
 
   @@index([statut])
   @@index([membreId])
@@ -256,14 +293,49 @@ model Contribution {
   @@map("contributions")
 }
 
+model FundsTransfer {
+  id          String    @id @default(cuid())
+  createdAt   DateTime  @default(now())
+  confirmedAt DateTime?
+  refusedAt   DateTime?
+  cancelledAt DateTime?
+
+  senderId   String
+  sender     User   @relation("FundsTransferSender", fields: [senderId], references: [id])
+  senderName String
+
+  receiverId   String
+  receiver     User   @relation("FundsTransferReceiver", fields: [receiverId], references: [id])
+  receiverName String
+
+  totalAmount  Int
+  transferType TransferType        @default(ESPECES_EN_MAIN)
+  status       FundsTransferStatus @default(PENDING_APPROVAL)
+
+  senderNote    String?
+  refusalReason String?
+
+  contributions Contribution[] @relation("ContributionTransfer")
+  borderauUrl   String?
+
+  remindersSentCount Int       @default(0)
+  lastReminderSentAt DateTime?
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("funds_transfers")
+}
+
 model Commission {
-  id            String     @id @default(cuid())
-  nom           String     @unique
+  id            String   @id @default(cuid())
+  nom           String   @unique
   description   String?
   responsableId String
-  isActive      Boolean    @default(true)
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   documents Document[]
 
@@ -271,37 +343,37 @@ model Commission {
 }
 
 model TypeDocument {
-  code             String     @id
-  libelle          String
-  retentionAnnees  Int
-  documents        Document[]
+  code            String     @id
+  libelle         String
+  retentionAnnees Int
+  documents       Document[]
 
   @@map("type_documents")
 }
 
 model Document {
-  id              String         @id @default(cuid())
-  commissionId    String
-  typeCode        String
-  titre           String
-  description     String?
-  fileName        String
-  fileSize        Int
-  mimeType        String
-  s3Key           String         @unique
-  s3Bucket        String
-  statut          DocumentStatut @default(BROUILLON)
-  version         Int            @default(1)
-  uploadedById    String
-  approvedById    String?
-  approvedAt      DateTime?
-  rejectedById    String?
-  rejectedAt      DateTime?
-  rejetMotif      String?
-  expiresAt       DateTime?
-  tags            String[]
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id           String         @id @default(cuid())
+  commissionId String
+  typeCode     String
+  titre        String
+  description  String?
+  fileName     String
+  fileSize     Int
+  mimeType     String
+  s3Key        String         @unique
+  s3Bucket     String
+  statut       DocumentStatut @default(BROUILLON)
+  version      Int            @default(1)
+  uploadedById String
+  approvedById String?
+  approvedAt   DateTime?
+  rejectedById String?
+  rejectedAt   DateTime?
+  rejetMotif   String?
+  expiresAt    DateTime?
+  tags         String[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
   commission   Commission   @relation(fields: [commissionId], references: [id])
   typeDocument TypeDocument @relation(fields: [typeCode], references: [code])
@@ -313,45 +385,45 @@ model Document {
 }
 
 model Prestation {
-  id                String           @id @default(cuid())
-  reference         String           @unique
-  titre             String
-  description       String?
-  commanditaire     String
-  commanditairePhone String?
-  statut            PrestationStatut @default(EN_PREPARATION)
-  tarifBase         Int
-  rabaisCommanditaire Int            @default(0)
-  rabaisPercent     Float            @default(0)
-  tarifFinal        Int
-  acompte           Int              @default(0)
-  solde             Int              @default(0)
-  totalEntrees      Int              @default(0)
-  totalCours        Int              @default(0)
-  commission        Int?
-  commissionPercent Float            @default(35)
-  commissionVerseeAt DateTime?
-  dateEvenement     DateTime?
-  lieu              String?
-  notes             String?
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
+  id                  String           @id @default(cuid())
+  reference           String           @unique
+  titre               String
+  description         String?
+  commanditaire       String
+  commanditairePhone  String?
+  statut              PrestationStatut @default(EN_PREPARATION)
+  tarifBase           Int
+  rabaisCommanditaire Int              @default(0)
+  rabaisPercent       Float            @default(0)
+  tarifFinal          Int
+  acompte             Int              @default(0)
+  solde               Int              @default(0)
+  totalEntrees        Int              @default(0)
+  totalCours          Int              @default(0)
+  commission          Int?
+  commissionPercent   Float            @default(35)
+  commissionVerseeAt  DateTime?
+  dateEvenement       DateTime?
+  lieu                String?
+  notes               String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
-  cours    CoursPrestation[]
-  entrees  EntreePrestation[]
+  cours   CoursPrestation[]
+  entrees EntreePrestation[]
 
   @@index([statut])
   @@map("prestations")
 }
 
 model CoursPrestation {
-  id           String     @id @default(cuid())
+  id           String   @id @default(cuid())
   prestationId String
   libelle      String
   montant      Int
   justificatif String?
   s3Key        String?
-  createdAt    DateTime   @default(now())
+  createdAt    DateTime @default(now())
 
   prestation Prestation @relation(fields: [prestationId], references: [id], onDelete: Cascade)
 
@@ -359,13 +431,13 @@ model CoursPrestation {
 }
 
 model EntreePrestation {
-  id           String     @id @default(cuid())
+  id           String       @id @default(cuid())
   prestationId String
   libelle      String
   montant      Int
   modePaiement ModePaiement
   reference    String?
-  createdAt    DateTime   @default(now())
+  createdAt    DateTime     @default(now())
 
   prestation Prestation @relation(fields: [prestationId], references: [id], onDelete: Cascade)
 
@@ -373,18 +445,33 @@ model EntreePrestation {
 }
 
 model SystemSettings {
-  id                        String   @id @default("singleton")
-  defaultIncreaseRate       Float    @default(5.0)
-  etudiantRatio             Float    @default(0.5)
-  coupleRatio               Float    @default(1.5)
-  inactivityMonthsThreshold Int      @default(6)
-  reminderDelayDays         Int      @default(7)
-  maxFundsRetentionDays     Int      @default(7)
-  communityName             String   @default("Culte d'Enfants de Melen")
-  communityVerse            String   @default("Or, à celui qui peut faire...")
-  updatedAt                 DateTime @updatedAt
+  id                           String   @id @default("singleton")
+  defaultIncreaseRate          Float    @default(5.0)
+  etudiantRatio                Float    @default(0.5)
+  coupleRatio                  Float    @default(1.5)
+  inactivityMonthsThreshold    Int      @default(6)
+  reminderDelayDays            Int      @default(7)
+  maxFundsRetentionDays        Int      @default(7)
+  transferPendingReminderHours Int      @default(24)
+  transferAlertTresorierHours  Int      @default(48)
+  communityName                String   @default("Culte d'Enfants de Melen")
+  communityVerse               String   @default("Or, à celui qui peut faire...")
+  updatedAt                    DateTime @updatedAt
 
   @@map("system_settings")
+}
+
+model OtpCode {
+  id        String   @id @default(cuid())
+  phone     String
+  code      String
+  attempts  Int      @default(0)
+  used      Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([phone])
+  @@map("otp_codes")
 }
 
 model AuditLog {

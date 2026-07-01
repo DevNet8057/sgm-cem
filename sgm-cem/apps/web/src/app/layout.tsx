@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next'
+import Script from 'next/script'
 import './globals.css'
 import { Providers } from './providers'
 
@@ -18,8 +19,9 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="fr">
-      <body>
+    <html lang="fr" suppressHydrationWarning>
+      <body suppressHydrationWarning>
+        <Script src="https://accounts.google.com/gsi/client" strategy="lazyOnload" />
         <Providers>{children}</Providers>
       </body>
     </html>

@@ -18,15 +18,19 @@ declare global {
 }
 
 export function authenticate(req: Request, _res: Response, next: NextFunction): void {
+  // Cookie HttpOnly takes priority; fall back to Authorization header for API clients
+  const cookieToken: string | undefined = req.cookies?.access_token
   const header = req.headers.authorization
-  if (!header?.startsWith('Bearer ')) throw new AppError('ACCESS_DENIED', 'Token manquant', 401)
+  const token = cookieToken ?? (header?.startsWith('Bearer ') ? header.slice(7) : undefined)
 
-  const token = header.slice(7)
+  if (!token) throw new AppError('ACCESS_DENIED', 'Token manquant', 401)
+
   try {
     const payload = jwt.verify(token, getJwtSecret()) as JwtPayload
     req.user = payload
     next()
-  } catch {
-    throw new AppError('ACCESS_DENIED', 'Token invalide ou expiré', 401)
+  } catch (error) {
+    const msg = error instanceof jwt.TokenExpiredError ? 'Token expiré' : 'Token invalide'
+    throw new AppError('ACCESS_DENIED', msg, 401)
   }
 }

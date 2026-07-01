@@ -5,6 +5,7 @@ export default {
   theme: {
     extend: {
       colors: {
+        // ── Brand identity (EEC) ──────────────────────────────────────
         cem: {
           'green-950': '#031403',
           'green-900': '#052005',
@@ -20,11 +21,30 @@ export default {
           'yellow-400': '#F5C400',
           'yellow-100': '#FDE68A',
           'yellow-50':  '#FEFCE8',
-        }
+        },
+        // ── Semantic — Statuts ────────────────────────────────────────
+        'status-success':   '#10B981',
+        'status-success-bg':'#ECFDF5',
+        'status-warning':   '#F59E0B',
+        'status-warning-bg':'#FFFBEB',
+        'status-error':     '#EF4444',
+        'status-error-bg':  '#FEF2F2',
+        'status-info':      '#3B82F6',
+        'status-info-bg':   '#EFF6FF',
+        'status-urgent':    '#DC2626',
+        // ── Modes de paiement ─────────────────────────────────────────
+        'momo-yellow':  '#FFCC00',
+        'orange-money': '#FF6600',
+        // ── Domaines fonctionnels (icônes) ────────────────────────────
+        'icon-finance':  '#1A6B1A',   // vert EEC
+        'icon-membres':  '#3B82F6',   // bleu
+        'icon-gestion':  '#8B5CF6',   // violet
+        'icon-outils':   '#F59E0B',   // ambre
+        'icon-systeme':  '#475569',   // gris foncé
       },
       fontFamily: {
-        display: ['"Cormorant Garamond"', 'Georgia', 'serif'],
-        body:    ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+        display: ['"Montserrat"', 'system-ui', 'sans-serif'],
+        body:    ['"Montserrat"', 'system-ui', 'sans-serif'],
         mono:    ['"JetBrains Mono"', 'monospace'],
       },
       borderRadius: {

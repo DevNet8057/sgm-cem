@@ -1,9 +1,9 @@
 'use client'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, Edit3, FolderOpen, Lock, Plus, Search, Unlock, X } from 'lucide-react'
+import { AlertTriangle, Archive, Bell, Edit3, FolderOpen, Lock, Plus, Search, Unlock, X } from 'lucide-react'
 import api from '@/lib/api'
-import { formatAmount, progressGradient } from '@/lib/utils'
+import { cn, formatAmount, progressGradient } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { SkeletonCard } from '@/components/ui/Skeleton'
@@ -30,8 +30,10 @@ type RubriqueForm = typeof emptyForm
 
 export function Rubriques() {
   const queryClient = useQueryClient()
-  const [search, setSearch] = useState('')
-  const [mode, setMode] = useState<'none' | 'create' | 'edit'>('none')
+  const [search,       setSearch]       = useState('')
+  const [filterType,   setFilterType]   = useState('')
+  const [filterStatut, setFilterStatut] = useState('')
+  const [mode,         setMode]         = useState<'none' | 'create' | 'edit'>('none')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<RubriqueForm>(emptyForm)
   const [error, setError] = useState('')
@@ -40,6 +42,15 @@ export function Rubriques() {
     queryKey: ['rubriques'],
     queryFn: async () => (await api.get('/rubriques')).data.data,
   })
+
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: async () => (await api.get('/settings')).data.data,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const etudiantRatio: number = (settings as { etudiantRatio?: number })?.etudiantRatio ?? 0.5
+  const coupleRatio: number = (settings as { coupleRatio?: number })?.coupleRatio ?? 1.5
 
   const createRubrique = useMutation({
     mutationFn: async () => api.post('/rubriques', serializeForm(form)),
@@ -102,22 +113,29 @@ export function Rubriques() {
     })
   }
 
-  const rubriques = data?.filter(r =>
-    r.title.toLowerCase().includes(search.toLowerCase()) ||
-    r.code.toLowerCase().includes(search.toLowerCase())
-  ) ?? []
+  const rubriques = (data ?? []).filter(r => {
+    const q = search.toLowerCase()
+    const matchSearch = !q || r.title.toLowerCase().includes(q) || r.code.toLowerCase().includes(q)
+    const matchType   = !filterType   || r.type === filterType
+    const matchStatut = !filterStatut || r.status === filterStatut
+    return matchSearch && matchType && matchStatut
+  })
 
   return (
     <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter">
-      <div className="flex items-center justify-between gap-3 mb-6">
-        <div>
-          <h2 className="font-display font-semibold text-[#0F4A0F] text-xl">Rubriques</h2>
-          <p className="text-gray-500 text-sm">{data?.length ?? 0} rubrique(s) configuree(s)</p>
+      <div className="relative overflow-hidden rounded-[18px] border border-[#0F4A0F]/10 bg-white mb-6">
+        <div className="absolute inset-y-0 left-0 w-1.5 bg-[#F59E0B]" />
+        <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-amber-600">Catégorisation</p>
+            <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Rubriques</h2>
+            <p className="text-gray-500 text-sm mt-0.5">{data?.length ?? 0} rubrique(s) configurée(s)</p>
+          </div>
+          <Button size="sm" onClick={startCreate}>
+            {mode === 'create' ? <X size={14} /> : <Plus size={14} />}
+            {mode === 'create' ? 'Fermer' : 'Nouvelle rubrique'}
+          </Button>
         </div>
-        <Button size="sm" onClick={startCreate}>
-          {mode === 'create' ? <X size={14} /> : <Plus size={14} />}
-          {mode === 'create' ? 'Fermer' : 'Nouvelle rubrique'}
-        </Button>
       </div>
 
       {(mode === 'create' || mode === 'edit') && (
@@ -129,17 +147,57 @@ export function Rubriques() {
           loading={createRubrique.isPending || updateRubrique.isPending}
           onCancel={() => { setMode('none'); setEditingId(null); setError('') }}
           onSubmit={() => mode === 'create' ? createRubrique.mutate() : updateRubrique.mutate()}
+          etudiantRatio={etudiantRatio}
+          coupleRatio={coupleRatio}
         />
       )}
 
-      <div className="relative mb-5">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Rechercher une rubrique..."
-          className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30 focus:border-[#1A6B1A]"
-        />
+      {/* D2 : Recherche + filter chips */}
+      <div className="mb-5 space-y-3">
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Rechercher une rubrique..."
+            className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30 focus:border-[#1A6B1A]"
+          />
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { label: 'Mensuelle',   value: 'REGULIERE_MENSUELLE', active: 'bg-[#1A6B1A] text-white border-[#1A6B1A]' },
+            { label: 'Ponctuelle',  value: 'PONCTUELLE',          active: 'bg-blue-600 text-white border-blue-600' },
+            { label: 'Urgente',     value: 'URGENTE',             active: 'bg-red-600 text-white border-red-600' },
+          ].map(({ label, value, active }) => (
+            <button key={value} type="button" onClick={() => setFilterType(filterType === value ? '' : value)}
+              className={cn(
+                'px-2.5 py-1 rounded-full text-xs font-semibold border transition-all',
+                filterType === value ? active : 'bg-white text-gray-600 border-gray-200 hover:border-[#1A6B1A]/40'
+              )}>
+              {label}
+            </button>
+          ))}
+          {[
+            { label: 'Ouverte',  value: 'OUVERTE',  active: 'bg-emerald-600 text-white border-emerald-600' },
+            { label: 'Fermée',   value: 'FERMEE',   active: 'bg-amber-500 text-white border-amber-500' },
+            { label: 'Archivée', value: 'ARCHIVEE', active: 'bg-gray-500 text-white border-gray-500' },
+          ].map(({ label, value, active }) => (
+            <button key={value} type="button" onClick={() => setFilterStatut(filterStatut === value ? '' : value)}
+              className={cn(
+                'px-2.5 py-1 rounded-full text-xs font-semibold border transition-all',
+                filterStatut === value ? active : 'bg-white text-gray-600 border-gray-200 hover:border-emerald-300'
+              )}>
+              {label}
+            </button>
+          ))}
+          {(filterType || filterStatut) && (
+            <button type="button" onClick={() => { setFilterType(''); setFilterStatut('') }}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border border-red-200 text-red-500 bg-red-50 hover:bg-red-100 transition-all">
+              <X size={10} />Effacer
+            </button>
+          )}
+          <span className="ml-auto self-center text-xs text-gray-400">{rubriques.length} résultat(s)</span>
+        </div>
       </div>
 
       {isLoading ? (
@@ -165,7 +223,7 @@ export function Rubriques() {
   )
 }
 
-function RubriqueEditor({ mode, form, setForm, error, loading, onCancel, onSubmit }: {
+function RubriqueEditor({ mode, form, setForm, error, loading, onCancel, onSubmit, etudiantRatio, coupleRatio }: {
   mode: 'create' | 'edit'
   form: RubriqueForm
   setForm: (form: RubriqueForm) => void
@@ -173,7 +231,15 @@ function RubriqueEditor({ mode, form, setForm, error, loading, onCancel, onSubmi
   loading: boolean
   onCancel: () => void
   onSubmit: () => void
+  etudiantRatio: number
+  coupleRatio: number
 }) {
+  function handleTravailleurChange(v: string) {
+    const base = Number(v)
+    const etudiant = base > 0 ? String(Math.round(base * etudiantRatio)) : ''
+    const couple = base > 0 ? String(Math.round(base * coupleRatio)) : ''
+    setForm({ ...form, amountTravailleur: v, amountEtudiant: etudiant, amountCouple: couple })
+  }
   return (
     <form
       onSubmit={e => { e.preventDefault(); onSubmit() }}
@@ -183,17 +249,51 @@ function RubriqueEditor({ mode, form, setForm, error, loading, onCancel, onSubmi
         <h3 className="font-display font-semibold text-[#0F4A0F]">{mode === 'create' ? 'Creer une rubrique' : 'Modifier la rubrique'}</h3>
         <button type="button" onClick={onCancel} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
       </div>
+      {/* Toggle urgent */}
+      <div className="md:col-span-4">
+        <label className={`flex items-center gap-3 p-3 rounded-[12px] border-2 cursor-pointer transition-all ${form.priority === 'URGENT' ? 'border-red-400 bg-red-50' : 'border-gray-200 bg-gray-50 hover:border-gray-300'}`}>
+          <input type="checkbox" className="sr-only"
+            checked={form.priority === 'URGENT'}
+            onChange={e => setForm({ ...form, priority: e.target.checked ? 'URGENT' : 'NORMAL', type: e.target.checked ? 'URGENTE' : form.type })}
+          />
+          <div className={`w-10 h-6 rounded-full relative transition-colors ${form.priority === 'URGENT' ? 'bg-red-500' : 'bg-gray-300'}`}>
+            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${form.priority === 'URGENT' ? 'translate-x-5' : 'translate-x-1'}`} />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
+              <AlertTriangle size={14} className={form.priority === 'URGENT' ? 'text-red-500' : 'text-gray-400'} />
+              Rubrique urgente
+            </p>
+            <p className="text-xs text-gray-500">Active l'alerte prioritaire et notifie tous les membres</p>
+          </div>
+        </label>
+        {form.priority === 'URGENT' && (
+          <div className="mt-2 flex items-start gap-2 rounded-[10px] bg-red-100 border border-red-300 px-3 py-2.5 text-xs text-red-800">
+            <Bell size={13} className="mt-0.5 shrink-0" />
+            <span>
+              <strong>Notification de masse :</strong> tous les membres actifs seront notifiés par WhatsApp/SMS dès la validation de cette rubrique.
+            </span>
+          </div>
+        )}
+      </div>
+
       <Input label="Code" value={form.code} onChange={code => setForm({ ...form, code })} required />
       <Input label="Titre" value={form.title} onChange={title => setForm({ ...form, title })} required />
       <Select label="Type" value={form.type} onChange={type => setForm({ ...form, type })} options={['REGULIERE_MENSUELLE', 'PONCTUELLE', 'URGENTE']} />
-      <Select label="Priorite" value={form.priority} onChange={priority => setForm({ ...form, priority })} options={['NORMAL', 'PRIORITAIRE', 'URGENT']} />
+      <Select label="Priorité" value={form.priority} onChange={priority => setForm({ ...form, priority })} options={['NORMAL', 'PRIORITAIRE', 'URGENT']} />
       <Input label="Annee" type="number" value={String(form.fiscalYear)} onChange={fiscalYear => setForm({ ...form, fiscalYear: Number(fiscalYear) })} required />
       <Input label="Date ouverture" type="date" value={form.openDate} onChange={openDate => setForm({ ...form, openDate })} required />
       <Input label="Date fermeture" type="date" value={form.closeDate} onChange={closeDate => setForm({ ...form, closeDate })} />
       <Input label="Objectif" type="number" value={form.targetAmount} onChange={targetAmount => setForm({ ...form, targetAmount })} />
-      <Input label="Montant travailleur" type="number" value={form.amountTravailleur} onChange={amountTravailleur => setForm({ ...form, amountTravailleur })} />
-      <Input label="Montant etudiant" type="number" value={form.amountEtudiant} onChange={amountEtudiant => setForm({ ...form, amountEtudiant })} />
-      <Input label="Montant couple" type="number" value={form.amountCouple} onChange={amountCouple => setForm({ ...form, amountCouple })} />
+      <Input label="Montant travailleur (FCFA)" type="number" value={form.amountTravailleur} onChange={handleTravailleurChange} />
+      <div>
+        <Input label={`Montant étudiant (×${etudiantRatio} auto)`} type="number" value={form.amountEtudiant} onChange={amountEtudiant => setForm({ ...form, amountEtudiant })} />
+        {form.amountTravailleur && <p className="text-xs text-blue-500 mt-0.5">Calculé auto depuis montant × {etudiantRatio}</p>}
+      </div>
+      <div>
+        <Input label={`Montant couple (×${coupleRatio} auto)`} type="number" value={form.amountCouple} onChange={amountCouple => setForm({ ...form, amountCouple })} />
+        {form.amountTravailleur && <p className="text-xs text-purple-500 mt-0.5">Calculé auto depuis montant × {coupleRatio}</p>}
+      </div>
       <label className="block">
         <span className="text-xs font-semibold text-gray-600">Cible</span>
         <select value={form.targetAll ? 'all' : 'custom'} onChange={e => setForm({ ...form, targetAll: e.target.value === 'all' })}

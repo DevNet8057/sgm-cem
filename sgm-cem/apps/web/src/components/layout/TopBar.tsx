@@ -1,4 +1,5 @@
 'use client'
+import { useRef } from 'react'
 import { Menu, Bell, Search } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
@@ -21,11 +22,63 @@ const VIEW_TITLES: Record<string, string> = {
   rapports: 'Rapports',
   notifications: 'Notifications',
   parametres: 'Paramètres Système',
+  'mon-profil': 'Mon Profil',
+}
+
+function playNotifSound() {
+  try {
+    const soundId = localStorage.getItem('cem-notif-sound') ?? 'bip'
+    if (soundId === 'off') return
+
+    type WebkitAudio = typeof AudioContext
+    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: WebkitAudio }).webkitAudioContext
+    if (!Ctx) return
+    const ctx = new Ctx()
+
+    if (soundId === 'double') {
+      ;[0, 0.18].forEach(delay => {
+        const osc = ctx.createOscillator(); const gain = ctx.createGain()
+        osc.connect(gain); gain.connect(ctx.destination)
+        osc.type = 'sine'; osc.frequency.value = 1050
+        gain.gain.setValueAtTime(0.2, ctx.currentTime + delay)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.12)
+        osc.start(ctx.currentTime + delay); osc.stop(ctx.currentTime + delay + 0.14)
+      })
+      setTimeout(() => void ctx.close(), 500)
+      return
+    }
+
+    const osc = ctx.createOscillator(); const gain = ctx.createGain()
+    osc.connect(gain); gain.connect(ctx.destination)
+
+    if (soundId === 'aigu') {
+      osc.type = 'sine'; osc.frequency.value = 1400
+      gain.gain.setValueAtTime(0.18, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2)
+      osc.start(); osc.stop(ctx.currentTime + 0.2)
+    } else if (soundId === 'grave') {
+      osc.type = 'triangle'; osc.frequency.value = 440
+      gain.gain.setValueAtTime(0.3, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4)
+      osc.start(); osc.stop(ctx.currentTime + 0.4)
+    } else {
+      // 'bip' (default)
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(880, ctx.currentTime)
+      osc.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.25)
+      gain.gain.setValueAtTime(0.18, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35)
+      osc.start(); osc.stop(ctx.currentTime + 0.35)
+    }
+    void ctx.close()
+  } catch {}
 }
 
 export function TopBar() {
-  const { setSidebarOpen, setActiveView, setNotifications, activeView, unreadCount } = useAppStore()
+  const { setSidebarOpen, setActiveView, setNotifications, addToast, activeView, unreadCount } = useAppStore()
   const { user } = useAuthStore()
+  const seenIds = useRef<Set<string>>(new Set())
+  const firstLoad = useRef(true)
 
   useQuery({
     queryKey: ['notifications'],
@@ -34,9 +87,23 @@ export function TopBar() {
       const res = await api.get<ApiResponse<Notification[]>>('/notifications')
       const notifications = res.data.data ?? []
       setNotifications(notifications)
+
+      // Detect new unread notifications since last poll
+      const newOnes = notifications.filter(n => !n.isRead && !seenIds.current.has(n.id))
+      if (newOnes.length > 0 && !firstLoad.current) {
+        newOnes.forEach(n => {
+          addToast({ title: n.title, message: n.body, variant: 'info', duration: 5000 })
+        })
+        playNotifSound()
+      }
+
+      // Update seen set
+      notifications.forEach(n => seenIds.current.add(n.id))
+      firstLoad.current = false
+
       return notifications
     },
-    refetchInterval: 60000,
+    refetchInterval: 30000,
   })
 
   return (
@@ -77,15 +144,23 @@ export function TopBar() {
       </button>
 
       {user && (
-        <div className="flex items-center gap-2 cursor-pointer group">
-          <div className="w-8 h-8 rounded-[8px] bg-[#F5C400] flex items-center justify-center">
-            <span className="text-[#0F4A0F] font-bold text-xs">{getInitials(user.fullName)}</span>
+        <button
+          onClick={() => setActiveView('mon-profil')}
+          className="flex items-center gap-2 cursor-pointer group hover:opacity-80 transition-opacity"
+          title="Mon profil"
+        >
+          <div className="w-8 h-8 rounded-[8px] bg-[#F5C400] flex items-center justify-center overflow-hidden flex-shrink-0">
+            {user.photoUrl ? (
+              <img src={user.photoUrl} alt={user.firstName} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-[#0F4A0F] font-bold text-xs">{getInitials(user.fullName)}</span>
+            )}
           </div>
           <div className="hidden md:block text-right">
             <p className="text-xs font-semibold text-gray-800 leading-tight">{user.firstName}</p>
             <p className="text-[10px] text-gray-400">{ROLE_LABELS[user.role]}</p>
           </div>
-        </div>
+        </button>
       )}
     </header>
   )

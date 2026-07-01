@@ -1,7 +1,7 @@
 'use client'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, Check, FileText, FolderKanban, Plus, Search, Send, X } from 'lucide-react'
+import { Archive, Check, Download, FileText, FolderKanban, Plus, Search, Send, Upload, X } from 'lucide-react'
 import api from '@/lib/api'
 import { cn, formatDate } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
@@ -22,9 +22,6 @@ const emptyForm = {
   typeCode: '',
   titre: '',
   description: '',
-  fileName: '',
-  fileSize: '',
-  mimeType: 'application/pdf',
   tags: '',
 }
 
@@ -35,9 +32,11 @@ export function Ged() {
   const [statut, setStatut] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState(emptyForm)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [motif, setMotif] = useState('')
   const [error, setError] = useState('')
+  const [dragOver, setDragOver] = useState(false)
 
   const { data: commissions = [] } = useQuery({
     queryKey: ['commissions'],
@@ -76,15 +75,35 @@ export function Ged() {
   }, [documents, search])
 
   const create = useMutation({
-    mutationFn: async () => api.post('/commissions/documents', serializeForm(form)),
+    mutationFn: async () => {
+      if (!selectedFile) throw new Error('Fichier requis')
+      const fd = new FormData()
+      fd.append('file', selectedFile)
+      fd.append('commissionId', form.commissionId)
+      fd.append('typeCode', form.typeCode)
+      fd.append('titre', form.titre)
+      if (form.description) fd.append('description', form.description)
+      if (form.tags) fd.append('tags', JSON.stringify(form.tags.split(',').map(t => t.trim()).filter(Boolean)))
+      return api.post('/commissions/documents', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    },
     onSuccess: async () => {
       setShowCreate(false)
       setForm(emptyForm)
+      setSelectedFile(null)
       setError('')
       await refresh()
     },
     onError: showApiError,
   })
+
+  function downloadDocument(id: string, fileName: string) {
+    const link = document.createElement('a')
+    link.href = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'}/commissions/documents/${id}/download`
+    link.download = fileName
+    link.target = '_blank'
+    link.rel = 'noopener'
+    link.click()
+  }
 
   const submit = useMutation({
     mutationFn: async (id: string) => api.patch(`/commissions/documents/${id}/submit`),
@@ -127,15 +146,19 @@ export function Ged() {
 
   return (
     <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter">
-      <div className="flex items-center justify-between gap-3 mb-6">
-        <div>
-          <h2 className="font-display font-semibold text-[#0F4A0F] text-xl">GED Commissions</h2>
-          <p className="text-gray-500 text-sm">Documents, soumission et validation des commissions</p>
+      <div className="relative overflow-hidden rounded-[18px] border border-[#0F4A0F]/10 bg-white mb-6">
+        <div className="absolute inset-y-0 left-0 w-1.5 bg-[#0EA5E9]" />
+        <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-sky-600">Documents</p>
+            <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">GED Commissions</h2>
+            <p className="text-gray-500 text-sm mt-0.5">Soumission et validation des documents des commissions</p>
+          </div>
+          <Button size="sm" onClick={() => setShowCreate(!showCreate)}>
+            {showCreate ? <X size={14} /> : <Plus size={14} />}
+            {showCreate ? 'Fermer' : 'Nouveau document'}
+          </Button>
         </div>
-        <Button size="sm" onClick={() => setShowCreate(!showCreate)}>
-          {showCreate ? <X size={14} /> : <Plus size={14} />}
-          {showCreate ? 'Fermer' : 'Nouveau document'}
-        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-5">
@@ -146,17 +169,66 @@ export function Ged() {
       </div>
 
       {showCreate && (
-        <form onSubmit={e => { e.preventDefault(); create.mutate() }} className="mb-5 rounded-[18px] border border-gray-100 bg-white p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
-          <Select label="Commission" value={form.commissionId} onChange={value => setForm({ ...form, commissionId: value })} required options={commissions.map(c => ({ value: c.id, label: c.nom }))} />
-          <Select label="Type" value={form.typeCode} onChange={value => setForm({ ...form, typeCode: value })} required options={types.map(t => ({ value: t.code, label: t.libelle }))} />
-          <Input label="Titre" value={form.titre} onChange={titre => setForm({ ...form, titre })} required />
-          <Input label="Nom du fichier" value={form.fileName} onChange={fileName => setForm({ ...form, fileName })} required />
-          <Input label="Taille fichier (octets)" type="number" value={form.fileSize} onChange={fileSize => setForm({ ...form, fileSize })} required />
-          <Input label="MIME" value={form.mimeType} onChange={mimeType => setForm({ ...form, mimeType })} required />
-          <Input label="Tags (separes par virgule)" value={form.tags} onChange={tags => setForm({ ...form, tags })} />
-          <Input label="Description" value={form.description} onChange={description => setForm({ ...form, description })} className="md:col-span-4" />
-          <div className="md:col-span-4 flex justify-end">
-            <Button loading={create.isPending}>Creer la fiche</Button>
+        <form onSubmit={e => { e.preventDefault(); create.mutate() }} className="mb-5 rounded-[18px] border border-gray-100 bg-white overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100" style={{ background: 'linear-gradient(135deg, #0F4A0F, #1A6B1A)' }}>
+            <h3 className="font-display font-semibold text-white text-sm">Nouvelle fiche document</h3>
+          </div>
+
+          {/* Drag-and-drop zone */}
+          <div className="p-5 border-b border-gray-100">
+            <div
+              onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={e => {
+                e.preventDefault()
+                setDragOver(false)
+                const file = e.dataTransfer.files[0]
+                if (file) {
+                  setSelectedFile(file)
+                  setForm(f => ({ ...f, titre: f.titre || file.name.replace(/\.[^.]+$/, '') }))
+                }
+              }}
+              className={cn(
+                'rounded-[14px] border-2 border-dashed transition-all duration-200 p-8 text-center cursor-pointer relative',
+                dragOver
+                  ? 'border-[#1A6B1A] bg-[#F0FDF4] scale-[1.01]'
+                  : 'border-gray-300 hover:border-[#1A6B1A]/50 hover:bg-gray-50'
+              )}>
+              <div className={cn(
+                'w-12 h-12 rounded-[12px] flex items-center justify-center mx-auto mb-3 transition-colors',
+                dragOver ? 'bg-[#1A6B1A] text-white' : 'bg-gray-100 text-gray-400'
+              )}>
+                <Upload size={20} />
+              </div>
+              <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp" className="absolute inset-0 opacity-0 cursor-pointer"
+                onChange={e => { const f = e.target.files?.[0]; if (f) { setSelectedFile(f); setForm(fm => ({ ...fm, titre: fm.titre || f.name.replace(/\.[^.]+$/, '') })) } }} />
+              <p className="text-sm font-semibold text-gray-700 mb-1">
+                {selectedFile ? selectedFile.name : 'Glissez votre fichier ici ou cliquez'}
+              </p>
+              <p className="text-xs text-gray-400">
+                {selectedFile
+                  ? `${(selectedFile.size / 1024).toFixed(1)} Ko · ${selectedFile.type}`
+                  : 'PDF, Word, Excel, Image — max 20 Mo'}
+              </p>
+              {selectedFile && (
+                <button type="button" onClick={e => { e.stopPropagation(); setSelectedFile(null) }}
+                  className="mt-2 text-xs text-gray-400 hover:text-red-500 transition-colors">
+                  Retirer le fichier
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="p-5 grid grid-cols-1 md:grid-cols-4 gap-3">
+            <Select label="Commission" value={form.commissionId} onChange={value => setForm({ ...form, commissionId: value })} required options={commissions.map(c => ({ value: c.id, label: c.nom }))} />
+            <Select label="Type de document" value={form.typeCode} onChange={value => setForm({ ...form, typeCode: value })} required options={types.map(t => ({ value: t.code, label: t.libelle }))} />
+            <Input label="Titre" value={form.titre} onChange={titre => setForm({ ...form, titre })} required className="md:col-span-2" />
+            <Input label="Tags (virgule)" value={form.tags} onChange={tags => setForm({ ...form, tags })} />
+            <Input label="Description" value={form.description} onChange={description => setForm({ ...form, description })} className="md:col-span-3" />
+            <div className="md:col-span-4 flex justify-end gap-2 items-center">
+              {!selectedFile && <p className="text-xs text-amber-600">Sélectionnez un fichier avant de soumettre</p>}
+              <Button loading={create.isPending} disabled={!selectedFile}>Créer la fiche</Button>
+            </div>
           </div>
         </form>
       )}
@@ -218,6 +290,7 @@ export function Ged() {
                     onApprove={() => approve.mutate(document.id)}
                     onReject={() => setRejectingId(document.id)}
                     onArchive={() => archive.mutate(document.id)}
+                    onDownload={() => downloadDocument(document.id, document.fileName)}
                     loading={submit.isPending || approve.isPending || archive.isPending}
                   />
                 ))}
@@ -228,7 +301,7 @@ export function Ged() {
       </div>
 
       {rejectingId && (
-        <div className="fixed inset-0 z-[500] bg-black/30 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-500 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4">
           <form onSubmit={e => { e.preventDefault(); reject.mutate() }} className="w-full max-w-md rounded-[18px] bg-white p-5 shadow-cem-xl">
             <h3 className="font-display font-semibold text-[#0F4A0F] mb-3">Rejeter le document</h3>
             <textarea value={motif} onChange={e => setMotif(e.target.value)} rows={4} required
@@ -245,12 +318,13 @@ export function Ged() {
   )
 }
 
-function DocumentRow({ document, onSubmit, onApprove, onReject, onArchive, loading }: {
+function DocumentRow({ document, onSubmit, onApprove, onReject, onArchive, onDownload, loading }: {
   document: Document
   onSubmit: () => void
   onApprove: () => void
   onReject: () => void
   onArchive: () => void
+  onDownload: () => void
   loading: boolean
 }) {
   return (
@@ -271,6 +345,10 @@ function DocumentRow({ document, onSubmit, onApprove, onReject, onArchive, loadi
       <td className="px-4 py-3 text-xs text-gray-400">{formatDate(document.createdAt)}</td>
       <td className="px-4 py-3">
         <div className="flex flex-wrap gap-1.5">
+          <button onClick={onDownload} title="Télécharger"
+            className="flex items-center gap-1 px-2 py-1.5 rounded-[8px] text-xs font-semibold text-sky-600 border border-sky-200 hover:bg-sky-50 active:scale-95 transition-all">
+            <Download size={12} />
+          </button>
           {['BROUILLON', 'REJETE'].includes(document.statut) && <Button size="sm" variant="outline" loading={loading} onClick={onSubmit}><Send size={13} />Soumettre</Button>}
           {document.statut === 'EN_ATTENTE' && <Button size="sm" loading={loading} onClick={onApprove}><Check size={13} />Approuver</Button>}
           {document.statut === 'EN_ATTENTE' && <Button size="sm" variant="danger" onClick={onReject}><X size={13} />Rejeter</Button>}
@@ -334,10 +412,3 @@ function Select({ label, value, onChange, options, required }: {
   )
 }
 
-function serializeForm(form: typeof emptyForm) {
-  return {
-    ...form,
-    fileSize: Number(form.fileSize),
-    tags: form.tags.split(',').map(tag => tag.trim()).filter(Boolean),
-  }
-}
