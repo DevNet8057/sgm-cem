@@ -154,6 +154,10 @@ export default function LoginPage() {
             callback: handleGoogleCredential,
             auto_select: false,
             cancel_on_tap_outside: true,
+            // FedCM évite le blocage de popup par Chrome moderne et le
+            // blocage des cookies tiers (source des erreurs "popup blocked").
+            use_fedcm_for_prompt: true,
+            itp_support: true,
           })
           if (googleBtnRef.current) {
             window.google.accounts.id.renderButton(googleBtnRef.current, {
