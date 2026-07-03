@@ -64,6 +64,18 @@ export async function notifyInApp(
   } catch (e) { console.error('[InApp]', e) }
 }
 
+/**
+ * Alerte tous les Trésoriers/Admin d'une anomalie nécessitant une résolution manuelle
+ * (ex: montant incohérent entre l'initiation et la confirmation d'un paiement).
+ */
+export async function alertTresoriers(title: string, body: string, data?: Record<string, unknown>): Promise<void> {
+  const tresoriers = await prisma.user.findMany({
+    where: { role: { in: ['ADMIN', 'TRESORIER'] }, isActive: true },
+    select: { id: true },
+  })
+  await Promise.all(tresoriers.map(t => notifyInApp(t.id, title, body, 'ALERTE', data)))
+}
+
 export async function notifyCollecteurNewContribution(p: {
   collecteurId: string; collecteurPhone?: string | null
   memberName: string; montant: number; rubriqueCode: string

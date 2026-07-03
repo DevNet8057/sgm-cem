@@ -69,6 +69,7 @@ export interface Rubrique {
 }
 
 export type ContributionStatut = 'EN_ATTENTE_CONFIRMATION' | 'CONFIRME' | 'LITIGE' | 'ANNULE'
+export type PaymentStatus = 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'FAILED' | 'CANCELLED'
 export type ModePaiement = 'ESPECES' | 'MTN_MOMO' | 'ORANGE_MONEY' | 'YELII' | 'CARTE_VISA' | 'VIREMENT'
 export type LocalisationFonds = 'CHEZ_COLLECTEUR' | 'EN_TRANSIT' | 'CHEZ_RESPONSABLE' | 'REMIS_TRESORIER' | 'EN_CAISSE' | 'EN_BANQUE'
 export type TransferType = 'ESPECES_EN_MAIN' | 'DEPOT_MTN' | 'DEPOT_ORANGE' | 'AUTRE'
@@ -92,6 +93,10 @@ export interface Contribution {
   proofUrl?: string
   proofUploadedAt?: string
   transferId?: string
+  paymentStatus?: PaymentStatus
+  externalTransactionId?: string
+  netAmount?: number
+  paymentUrl?: string
   createdAt: string
   membre?: { user: { fullName: string } }
   rubrique?: { title: string; code: string }
