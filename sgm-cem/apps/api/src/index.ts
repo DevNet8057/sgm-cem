@@ -1,5 +1,6 @@
 import 'dotenv/config'
 import 'express-async-errors'
+import path from 'path'
 import express, { type Request, type Response, type NextFunction } from 'express'
 import helmet from 'helmet'
 import cors from 'cors'
@@ -63,8 +64,12 @@ app.use(cookieParser())
 // CRITICAL: Les webhooks doivent être enregistrés AVANT express.json()
 // Yelii : raw body requis pour vérification HMAC-SHA512
 // CinetPay : urlencoded parsé au niveau de la route, pas affecté par express.json()
-app.use('/webhooks/yelii', yeliiWebhookRouter)
-app.use('/webhooks/cinetpay', cinetpayWebhookRouter)
+app.use('/webhooks', yeliiWebhookRouter)
+app.use('/webhooks', cinetpayWebhookRouter)
+
+// Fichiers stockés localement (avatars, etc.) quand aucun S3 n'est configuré —
+// voir services/storage.ts : storeFile() écrit ici et renvoie ${API_URL}/uploads/<key>.
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')))
 
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))

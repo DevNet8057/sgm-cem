@@ -2,13 +2,14 @@ import { Router } from 'express'
 import { PrismaClient } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
+import { generateFinancialReportPdf } from '../services/financial-report'
 
 const router = Router()
 const prisma = new PrismaClient()
 
-router.get('/dashboard', authenticate, requireLevel(3), async (req, res) => {
+export async function computeDashboardStats(requestedYear?: number) {
   const now = new Date()
-  const year = parseInt(req.query.year as string) || now.getFullYear()
+  const year = requestedYear || now.getFullYear()
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
   const startOfYear = new Date(year, 0, 1)
   const endOfYear = new Date(year, 11, 31, 23, 59, 59, 999)
@@ -141,33 +142,50 @@ router.get('/dashboard', authenticate, requireLevel(3), async (req, res) => {
   const litigeCount = allYearContributions.filter(c => c.statut === 'LITIGE').length
   const globalConfirmationRate = totalContributions ? Math.round((confirmedCount / totalContributions) * 100) : 0
 
-  res.json({
-    success: true,
-    data: {
-      year,
-      totalMembres,
-      membresEnRetard,
-      pendingConfirmations,
-      litiges,
-      totalCollectedMonth: totalMonth._sum.montant ?? 0,
-      totalCollectedYear: totalYear._sum.montant ?? 0,
-      totalConfirmedContributions: totalYear._count,
-      globalConfirmationRate,
-      contributionStatus: {
-        confirmed: confirmedCount,
-        pending: pendingCount,
-        litiges: litigeCount,
-        total: totalContributions,
-      },
-      mostUsedPaymentMode: modePaiementStats[0] ?? null,
-      topContributor: topContributors[0] ?? null,
-      topContributors,
-      modePaiementStats,
-      contributionRates,
-      recentContributions,
-      rubriquesActives,
-    }
-  })
+  return {
+    year,
+    totalMembres,
+    membresEnRetard,
+    pendingConfirmations,
+    litiges,
+    totalCollectedMonth: totalMonth._sum.montant ?? 0,
+    totalCollectedYear: totalYear._sum.montant ?? 0,
+    totalConfirmedContributions: totalYear._count,
+    globalConfirmationRate,
+    contributionStatus: {
+      confirmed: confirmedCount,
+      pending: pendingCount,
+      litiges: litigeCount,
+      total: totalContributions,
+    },
+    mostUsedPaymentMode: modePaiementStats[0] ?? null,
+    topContributor: topContributors[0] ?? null,
+    topContributors,
+    modePaiementStats,
+    contributionRates,
+    recentContributions,
+    rubriquesActives,
+  }
+}
+
+router.get('/dashboard', authenticate, requireLevel(3), async (req, res) => {
+  const year = parseInt(req.query.year as string) || undefined
+  const data = await computeDashboardStats(year)
+  res.json({ success: true, data })
+})
+
+/**
+ * GET /api/stats/financial-report.pdf
+ * Rapport financier annuel — PDF branché à la même identité visuelle que
+ * les reçus et bordereaux. Remplace l'ancien flux popup + impression navigateur.
+ */
+router.get('/financial-report.pdf', authenticate, requireLevel(3), async (req, res) => {
+  const year = parseInt(req.query.year as string) || undefined
+  const pdf = await generateFinancialReportPdf(year)
+  const disposition = req.query.download === '1' ? 'attachment' : 'inline'
+  res.setHeader('Content-Type', 'application/pdf')
+  res.setHeader('Content-Disposition', `${disposition}; filename="Rapport-Financier-CEM-${year ?? new Date().getFullYear()}.pdf"`)
+  res.send(pdf)
 })
 
 router.get('/monthly', authenticate, requireLevel(3), async (req, res) => {

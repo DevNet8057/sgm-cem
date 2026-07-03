@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import type { FundsTransfer } from '@/types'
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'
+
 export function TransferValidations() {
   const queryClient = useQueryClient()
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -21,7 +23,11 @@ export function TransferValidations() {
 
   const confirmMutation = useMutation({
     mutationFn: (id: string) => api.patch(`/funds/transfers/${id}/confirm`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pending-my-approval', 'collecteurs'] }),
+    onSuccess: (_res, id) => {
+      queryClient.invalidateQueries({ queryKey: ['pending-my-approval', 'collecteurs'] })
+      // Le bordereau de remise vient d'être généré — on l'ouvre immédiatement.
+      window.open(`${API_URL}/funds/transfers/${id}/borderau`, '_blank')
+    },
   })
 
   const refuseMutation = useMutation({

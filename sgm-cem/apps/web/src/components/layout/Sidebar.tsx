@@ -95,8 +95,8 @@ export function Sidebar() {
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-white/10">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-[10px] bg-[#F5C400] flex items-center justify-center flex-shrink-0 shadow-cem-yellow">
-              <span className="text-[#0F4A0F] font-black text-sm font-display">CEM</span>
+            <div className="w-9 h-9 rounded-[10px] bg-white flex items-center justify-center flex-shrink-0 shadow-cem-yellow overflow-hidden p-1">
+              <img src="/icon-192.png" alt="Logo CEM" className="w-full h-full object-contain" />
             </div>
             <div>
               <p className="text-white font-semibold text-sm leading-tight font-display">Culte d'Enfants</p>

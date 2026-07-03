@@ -46,6 +46,12 @@
   0%, 100% { transform: translateY(0); }
   50%      { transform: translateY(-6px); }
 }
+@keyframes flow-travel {
+  0%   { left: -6%; opacity: 0; }
+  8%   { opacity: 1; }
+  92%  { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
 
 @layer utilities {
   /* ── Fonts ─────────────────────────────────────────────────────── */
@@ -97,6 +103,29 @@
   }
   .interactive:hover  { transform: translateY(-1px); }
   .interactive:active { transform: translateY(0) scale(0.99); }
+
+  /* ── Trajet de l'argent : flux animé le long d'un connecteur ──────── */
+  .flow-track {
+    position: relative;
+    height: 4px;
+    border-radius: 999px;
+    background: #E2E8F0;
+    overflow: hidden;
+  }
+  .flow-track.flow-track-active { background: #DCEEDC; }
+  .flow-dot {
+    position: absolute;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: #F5C400;
+    box-shadow: 0 0 6px rgba(245,196,0,0.7);
+    transform: translateY(-50%);
+    animation: flow-travel 2.2s linear infinite;
+  }
+  .flow-dot:nth-child(2) { animation-delay: 0.7s; }
+  .flow-dot:nth-child(3) { animation-delay: 1.4s; }
 
   /* ── Custom scrollbar ───────────────────────────────────────────── */
   .scrollbar-thin::-webkit-scrollbar { width: 4px; height: 4px; }

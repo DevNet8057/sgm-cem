@@ -69,7 +69,7 @@ export async function initiateYeliiPayment(params: {
         amount: params.amount,
         senderPhone: phone,
         channel: params.channel,
-        callbackUrl: `${process.env.API_URL}/webhooks/yelii`,
+        callbackUrl: process.env.YELII_WEBHOOK_URL ?? `${process.env.API_URL}/webhooks/yelii`,
       }),
     })
 
@@ -128,7 +128,7 @@ export async function getYeliiStatus(transactionId: string): Promise<'processing
     const payload = (await response.json()) as { data?: { status?: string }; status?: string }
     const s: string = String(payload?.data?.status ?? payload?.status ?? 'processing').toLowerCase()
 
-    if (s === 'success' || s === 'successful') return 'success'
+    if (s === 'success' || s === 'successful' || s === 'completed') return 'success'
     if (s === 'failed' || s === 'cancelled') return 'failed'
     return 'processing'
   } catch {

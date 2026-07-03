@@ -1,5 +1,5 @@
-/* SGM-CEM Service Worker v1 */
-const CACHE_NAME = 'sgm-cem-v1'
+/* SGM-CEM Service Worker v2 */
+const CACHE_NAME = 'sgm-cem-v2'
 
 const PRECACHE_URLS = [
   '/',

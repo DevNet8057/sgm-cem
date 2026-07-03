@@ -262,8 +262,8 @@ export default function LoginPage() {
           style={{ background: 'radial-gradient(circle,#F5C400,transparent)', opacity: 0.08 }} />
 
         <div className="relative z-10">
-          <div className="w-12 h-12 rounded-[12px] bg-[#F5C400] flex items-center justify-center mb-8 shadow-cem-yellow">
-            <span className="text-[#0F4A0F] font-black text-lg font-display">CEM</span>
+          <div className="w-12 h-12 rounded-[12px] bg-white flex items-center justify-center mb-8 shadow-cem-yellow overflow-hidden p-1.5">
+            <img src="/icon-192.png" alt="Logo CEM" className="w-full h-full object-contain" />
           </div>
           <h1 className="font-display text-white text-[40px] font-semibold leading-tight mb-3">
             Système de Gestion<br />du Ministère
@@ -294,8 +294,8 @@ export default function LoginPage() {
         <div className="w-full max-w-sm">
           {/* Logo mobile */}
           <div className="lg:hidden flex justify-center mb-8">
-            <div className="w-14 h-14 rounded-[14px] bg-[#F5C400] flex items-center justify-center shadow-cem-yellow">
-              <span className="text-[#0F4A0F] font-black text-xl font-display">CEM</span>
+            <div className="w-14 h-14 rounded-[14px] bg-white flex items-center justify-center shadow-cem-yellow overflow-hidden p-2">
+              <img src="/icon-192.png" alt="Logo CEM" className="w-full h-full object-contain" />
             </div>
           </div>
 

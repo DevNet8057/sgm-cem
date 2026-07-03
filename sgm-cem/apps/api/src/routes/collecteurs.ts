@@ -33,7 +33,7 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
   const myRole = req.user?.role
   const myUserId = req.user?.userId
 
-  const [contributions, flowGroups, users] = await Promise.all([
+  const [contributions, flowGroups, modeGroups, users] = await Promise.all([
     prisma.contribution.findMany({
       where: {
         statut: 'CONFIRME',
@@ -52,6 +52,11 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
       where: { statut: 'CONFIRME' },
       _sum: { montant: true },
       _count: true,
+    }),
+    prisma.contribution.groupBy({
+      by: ['modePaiement'],
+      where: { statut: 'CONFIRME' },
+      _sum: { montant: true },
     }),
     prisma.user.findMany({
       where: { isActive: true, role: { in: ['TRESORIER', 'COLLECTEUR'] } },
@@ -104,12 +109,27 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
   const summary = Array.from(byCollector.values()).sort((a, b) => b.totalARemettre - a.totalARemettre)
   const totalARemettre = summary.reduce((sum, item) => sum + item.totalARemettre, 0)
   const totalEnRetard = summary.reduce((sum, item) => sum + item.nbEnRetard, 0)
+  // Répartition par canal — l'argent Mobile Money/Carte est crédité directement
+  // chez le trésorier (voir webhooks Yelii/CinetPay), il ne transite jamais par
+  // un collecteur. Seules les espèces suivent le chemin collecteur → transit → trésorier.
+  const ELECTRONIC_MODES = ['MTN_MOMO', 'ORANGE_MONEY', 'YELII', 'CARTE_VISA']
+  const electroniqueTotal = modeGroups
+    .filter(g => ELECTRONIC_MODES.includes(g.modePaiement))
+    .reduce((sum, g) => sum + (g._sum.montant ?? 0), 0)
+  const especesTotal = modeGroups
+    .filter(g => !ELECTRONIC_MODES.includes(g.modePaiement))
+    .reduce((sum, g) => sum + (g._sum.montant ?? 0), 0)
+
   const flow = {
     chezCollecteur: amountFor(flowGroups, 'CHEZ_COLLECTEUR'),
     enTransit: amountFor(flowGroups, 'EN_TRANSIT'),
+    chezResponsable: amountFor(flowGroups, 'CHEZ_RESPONSABLE'),
+    remisTresorier: amountFor(flowGroups, 'REMIS_TRESORIER'),
     enCaisse: amountFor(flowGroups, 'EN_CAISSE'),
     enBanque: amountFor(flowGroups, 'EN_BANQUE'),
     totalConfirme: flowGroups.reduce((sum, item) => sum + (item._sum.montant ?? 0), 0),
+    especesTotal,
+    electroniqueTotal,
   }
 
   res.json({
