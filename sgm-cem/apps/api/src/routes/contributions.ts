@@ -4,6 +4,8 @@ import { PrismaClient } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
+import { getYeliiStatus, requestYelii } from '../services/payment'
+import { calculateAmountWithCommission } from '@sgm-cem/shared'
 
 const router = Router()
 const prisma = new PrismaClient()
@@ -13,9 +15,10 @@ const createSchema = z.object({
   rubriqueId: z.string(),
   collecteurId: z.string().optional(),
   montant: z.number().int().positive(),
-  modePaiement: z.enum(['ESPECES', 'MTN_MOMO', 'ORANGE_MONEY', 'CARTE_VISA', 'VIREMENT']),
+  modePaiement: z.enum(['ESPECES', 'MTN_MOMO', 'ORANGE_MONEY', 'YELII', 'CARTE_VISA', 'VIREMENT']),
   periodeLabel: z.string().optional(),
   mobileMoneyPhone: z.string().optional(),
+  paymentChannel: z.enum(['MTN', 'ORANGE']).optional(),
   referencePaiement: z.string().optional(),
 })
 
@@ -118,6 +121,31 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
     }
   })
 
+  if (data.modePaiement === 'YELII' && data.mobileMoneyPhone) {
+    // §1bis — Le contributeur supporte la commission Yelii de 2,5 %.
+    // On envoie à Yelii le montant MAJORÉ (totalToPay), jamais le montant dû brut.
+    const { totalToPay, commissionAmount } = calculateAmountWithCommission(contribution.montant)
+
+    const payment = await requestYelii({
+      phone: data.mobileMoneyPhone,
+      amount: totalToPay, // ← montant majoré, PAS contribution.montant
+      externalId: contribution.id,
+      channel: data.paymentChannel === 'ORANGE' ? 'ORANGE' : 'MTN',
+      note: `Contribution ${contribution.id}`,
+    })
+
+    await prisma.contribution.update({
+      where: { id: contribution.id },
+      data: {
+        momoTransactionId: payment.transactionId || undefined,
+        referencePaiement: payment.externalId ?? contribution.id,
+        amountChargedToPayer: totalToPay,
+        commissionPaidByPayer: commissionAmount,
+        ...(payment.success ? {} : { statut: 'ANNULE', litigeMotif: payment.message ?? 'Échec de la collecte Yelii' }),
+      },
+    })
+  }
+
   await prisma.auditLog.create({
     data: {
       userId: req.user!.userId,
@@ -130,6 +158,38 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
   })
 
   res.status(201).json({ success: true, data: contribution })
+})
+
+router.get('/:id/payment-status', authenticate, requireLevel(2), async (req, res) => {
+  const contribution = await prisma.contribution.findUnique({ where: { id: String(req.params.id) } })
+  if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
+
+  if (contribution.statut === 'CONFIRME' || contribution.statut === 'ANNULE' || contribution.statut === 'LITIGE') {
+    res.json({ success: true, data: { id: contribution.id, statut: contribution.statut } })
+    return
+  }
+
+  if (contribution.modePaiement === 'YELII' && contribution.momoTransactionId) {
+    const remoteStatus = await getYeliiStatus(contribution.momoTransactionId)
+    if (remoteStatus === 'CONFIRMED' && contribution.statut === 'EN_ATTENTE_CONFIRMATION') {
+      const updated = await prisma.contribution.update({
+        where: { id: contribution.id },
+        data: { statut: 'CONFIRME', confirmedAt: new Date(), referencePaiement: contribution.referencePaiement ?? contribution.momoTransactionId },
+      })
+      res.json({ success: true, data: { id: updated.id, statut: updated.statut } })
+      return
+    }
+    if (remoteStatus === 'FAILED' && contribution.statut === 'EN_ATTENTE_CONFIRMATION') {
+      const updated = await prisma.contribution.update({
+        where: { id: contribution.id },
+        data: { statut: 'ANNULE', litigeMotif: 'Paiement Yelii échoué ou annulé.' },
+      })
+      res.json({ success: true, data: { id: updated.id, statut: updated.statut } })
+      return
+    }
+  }
+
+  res.json({ success: true, data: { id: contribution.id, statut: contribution.statut } })
 })
 
 router.patch('/:id/confirm', authenticate, requireLevel(2), async (req, res) => {

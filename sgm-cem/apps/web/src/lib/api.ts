@@ -59,11 +59,19 @@ api.interceptors.response.use(
       isRefreshing = true
 
       try {
-        // Refresh token is in an HttpOnly cookie — just POST, no body needed
-        await axios.post(`${getBaseURL()}/auth/refresh`, {}, { withCredentials: true })
-
-        // Renew CSRF token after refresh so it stays valid
+        // Always fetch a fresh CSRF token BEFORE the refresh POST.
+        // On full page reload, csrfToken is null until Providers's initCsrf() resolves,
+        // but AppLayout's useEffect (child) fires before Providers's (parent), so fetchMe()
+        // can trigger this interceptor while csrfToken is still null — causing a 403 CSRF.
         await initCsrf()
+
+        // Refresh token is in an HttpOnly cookie — just POST, no body needed.
+        // Use axios directly but include the freshly-fetched CSRF token manually,
+        // since this raw axios call bypasses the api request interceptor.
+        await axios.post(`${getBaseURL()}/auth/refresh`, {}, {
+          withCredentials: true,
+          headers: csrfToken ? { 'x-csrf-token': csrfToken } : {},
+        })
 
         refreshQueue.forEach((resolve) => resolve())
         refreshQueue = []

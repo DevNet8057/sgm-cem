@@ -1,7 +1,12 @@
 import puppeteer from 'puppeteer'
 import { PrismaClient } from '@prisma/client'
+import { storeFile } from './storage'
 
 const prisma = new PrismaClient()
+
+function getPrisma(): PrismaClient {
+  return prisma
+}
 
 function formatXAF(amount: number): string {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XAF', maximumFractionDigits: 0 }).format(amount)
@@ -71,6 +76,9 @@ export async function generateReceiptHtml(contributionId: string): Promise<strin
     <div class="label">Montant regle</div>
     <div class="amount">${formatXAF(contribution.montant)}</div>
   </div>
+  ${contribution.commissionPaidByPayer && contribution.commissionPaidByPayer > 0
+    ? `<p style="text-align:center;font-size:10px;color:#94A3B8;margin:-8px 0 16px;">Regle via Mobile Money : ${formatXAF(contribution.montant)} + ${formatXAF(contribution.commissionPaidByPayer)} de frais de transaction = ${formatXAF(contribution.amountChargedToPayer ?? contribution.montant)} debites</p>`
+    : ''}
 
   <div class="ref">Ref: ${contribution.id.substring(0, 12).toUpperCase()}</div>
 
@@ -102,4 +110,45 @@ export async function generateReceiptPdf(contributionId: string): Promise<Buffer
   const pdf = await page.pdf({ format: 'A5', printBackground: true })
   await browser.close()
   return Buffer.from(pdf)
+}
+
+/**
+ * Generate receipt PDF, store it, and return the URL.
+ * Used by webhooks to send receipt links via WhatsApp.
+ */
+export async function generateReceiptPDF(contribution: {
+  id: string
+  montant: number
+  statut: string
+  modePaiement: string
+  periodeLabel?: string | null
+  referencePaiement?: string | null
+  mobileMoneyPhone?: string | null
+  momoTransactionId?: string | null
+  litigeMotif?: string | null
+  confirmedAt?: Date | null
+  collecteur?: { fullName?: string | null } | null
+  membre?: {
+    memberId?: string | null
+    user?: { fullName?: string | null } | null
+  } | null
+  rubrique?: { title: string; code: string } | null
+}): Promise<string | null> {
+  try {
+    const pdf = await generateReceiptPdf(contribution.id)
+    const key = `receipts/${contribution.id.substring(0, 8)}/${contribution.id}.pdf`
+    const { url } = await storeFile(key, pdf, 'application/pdf')
+
+    // Update contribution with receiptUrl
+    const prisma = getPrisma()
+    await prisma.contribution.update({
+      where: { id: contribution.id },
+      data: { receiptUrl: url, receiptSentAt: new Date() },
+    })
+
+    return url
+  } catch (e) {
+    console.error('[Receipt] Erreur génération PDF:', e)
+    return null
+  }
 }

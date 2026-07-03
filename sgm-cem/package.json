@@ -3,8 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"pnpm --filter web dev\" \"pnpm --filter api dev\"",
-    "build": "pnpm --filter api build && pnpm --filter web build",
+    "dev": "pnpm build:shared && concurrently \"pnpm --filter web dev\" \"pnpm --filter api dev\"",
+    "build:shared": "pnpm --filter @sgm-cem/shared build",
+    "build": "pnpm build:shared && pnpm --filter api build && pnpm --filter web build",
+    "postinstall": "pnpm build:shared",
     "lint": "pnpm -r lint",
     "type-check": "pnpm -r type-check"
   },

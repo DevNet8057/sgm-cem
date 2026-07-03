@@ -21,10 +21,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr" suppressHydrationWarning>
       <body suppressHydrationWarning>
+        {/*
+          Pour que Google OAuth fonctionne, l'origine http://localhost:3000 doit être ajoutée
+          manuellement dans Google Cloud Console → APIs & Services → Credentials → OAuth 2.0
+          Client ID → Origines JavaScript autorisées. En production, remplacer par l'URL de prod.
+          Ne pas ajouter crossOrigin="anonymous" ici — Google GSI ne supporte pas le CORS et
+          le navigateur bloque le script si l'attribut est présent.
+        */}
         <Script
           src="https://accounts.google.com/gsi/client"
           strategy="lazyOnload"
-          crossOrigin="anonymous"
         />
         <Providers>{children}</Providers>
       </body>

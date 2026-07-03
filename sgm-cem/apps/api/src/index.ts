@@ -6,6 +6,8 @@ import cors from 'cors'
 import cookieParser from 'cookie-parser'
 import rateLimit from 'express-rate-limit'
 import { doubleCsrf } from 'csrf-csrf'
+import yeliiWebhookRouter from './webhooks/yelii.webhook'
+import cinetpayWebhookRouter from './webhooks/cinetpay.webhook'
 import { authRouter } from './routes/auth'
 import { membresRouter } from './routes/membres'
 import { rubriquesRouter } from './routes/rubriques'
@@ -16,12 +18,30 @@ import { prestationsRouter } from './routes/prestations'
 import { statsRouter } from './routes/stats'
 import { settingsRouter } from './routes/settings'
 import { notificationsRouter } from './routes/notifications'
+import { profileRouter } from './routes/profile'
+import { fundsRouter } from './routes/funds'
+import { webhooksRouter } from './routes/webhooks'
 import { errorHandler } from './middleware/errorHandler'
+import { paymentsRouter } from './routes/payments'
+import { schedulePaymentReconciliation } from './jobs/payment-reconciliation'
 
 const app = express()
 const PORT = process.env.PORT ?? 3001
 
-app.use(helmet())
+// CSP étendu pour autoriser Google Identity Services (OAuth)
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://accounts.google.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://accounts.google.com"],
+      connectSrc: ["'self'", "https://accounts.google.com", "https://oauth2.googleapis.com"],
+      frameSrc: ["https://accounts.google.com"],
+      imgSrc: ["'self'", "data:", "https:"],
+      fontSrc: ["'self'", "data:"],
+    },
+  },
+}))
 
 const allowedOrigins = (process.env.APP_URL ?? 'http://localhost:3000')
   .split(',')
@@ -39,6 +59,13 @@ app.use(cors({
   credentials: true,
 }))
 app.use(cookieParser())
+
+// CRITICAL: Les webhooks doivent être enregistrés AVANT express.json()
+// Yelii : raw body requis pour vérification HMAC-SHA512
+// CinetPay : urlencoded parsé au niveau de la route, pas affecté par express.json()
+app.use('/webhooks/yelii', yeliiWebhookRouter)
+app.use('/webhooks/cinetpay', cinetpayWebhookRouter)
+
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 
@@ -76,19 +103,26 @@ app.use('/api/auth', authRouter)
 app.use('/api/membres', membresRouter)
 app.use('/api/rubriques', rubriquesRouter)
 app.use('/api/contributions', contributionsRouter)
+app.use('/api/payments', paymentsRouter)
 app.use('/api/collecteurs', collecteursRouter)
 app.use('/api/commissions', commissionsRouter)
 app.use('/api/prestations', prestationsRouter)
 app.use('/api/stats', statsRouter)
 app.use('/api/settings', settingsRouter)
 app.use('/api/notifications', notificationsRouter)
+app.use('/api/profile', profileRouter)
+app.use('/api/funds', fundsRouter)
+app.use('/api/webhooks', webhooksRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }))
 
 app.use(errorHandler)
 
-app.listen(PORT, () => {
-  console.log(`✅ SGM-CEM API running on port ${PORT}`)
-})
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`✅ SGM-CEM API running on port ${PORT}`)
+  })
+  schedulePaymentReconciliation()
+}
 
 export default app

@@ -71,6 +71,14 @@ enum ContributionStatut {
   ANNULE
 }
 
+enum PaymentStatus {
+  PENDING       // Contribution créée, paiement pas encore initié
+  PROCESSING    // Demande envoyée à Yelii/CinetPay, en attente PIN/validation
+  SUCCESS       // Paiement confirmé par le prestataire (webhook reçu)
+  FAILED        // Paiement refusé ou expiré
+  CANCELLED     // Annulé manuellement avant confirmation
+}
+
 enum ModePaiement {
   ESPECES
   MTN_MOMO
@@ -268,15 +276,30 @@ model Contribution {
   referencePaiement String?
   mobileMoneyPhone  String?
   momoTransactionId String?
-  litigeMotif       String?
-  confirmedAt       DateTime?
-  confirmedById     String?
-  receiptUrl        String?
-  receiptSentAt     DateTime?
-  proofUrl          String?
-  proofUploadedAt   DateTime?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+
+  // ── Champs pour les paiements en ligne (Yelii / CinetPay) ──────────────────
+  externalTransactionId String?       @unique
+  paymentStatus         PaymentStatus? @default(PENDING)
+  netAmount             Int?
+  paymentUrl            String?
+
+  // ── Commission payée par le contributeur — règle métier §1bis ──────────────
+  // amountChargedToPayer = montant majoré réellement débité (montant dû + commission)
+  // commissionPaidByPayer = amountChargedToPayer - montant
+  // Le montant dû à la rubrique reste `montant` ; ces champs ne servent qu'à la
+  // traçabilité du surcoût Mobile Money supporté par le payeur.
+  amountChargedToPayer  Int?
+  commissionPaidByPayer Int?
+
+  litigeMotif     String?
+  confirmedAt     DateTime?
+  confirmedById   String?
+  receiptUrl      String?
+  receiptSentAt   DateTime?
+  proofUrl        String?
+  proofUploadedAt DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
   // Transfer reference
   transferId    String?
@@ -289,6 +312,8 @@ model Contribution {
   @@index([statut])
   @@index([membreId])
   @@index([rubriqueId])
+  @@index([externalTransactionId])
+  @@index([paymentStatus])
   @@index([createdAt])
   @@map("contributions")
 }

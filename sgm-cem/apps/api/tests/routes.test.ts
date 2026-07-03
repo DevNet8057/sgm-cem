@@ -136,6 +136,13 @@ describe('Profile routes — auth guard', () => {
   })
 })
 
+describe('Contributions routes — auth guard', () => {
+  it('GET /api/contributions/nonexistent/payment-status requires auth', async () => {
+    const res = await request(app).get('/api/contributions/nonexistent/payment-status')
+    expect(UNAUTH).toContain(res.status)
+  })
+})
+
 describe('Funds routes — auth guard', () => {
   it('GET /api/funds/overview requires auth', async () => {
     const res = await request(app).get('/api/funds/overview')

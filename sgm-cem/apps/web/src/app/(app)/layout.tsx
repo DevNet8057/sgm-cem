@@ -1,5 +1,5 @@
 'use client'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { TopBar } from '@/components/layout/TopBar'
@@ -45,7 +45,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, mustChangePassword, fetchMe, logout } = useAuthStore()
   const router = useRouter()
 
+  // Zustand persist rehydrate le localStorage de façon asynchrone.
+  // Sans ce flag, le premier rendu lit isAuthenticated=false (état initial)
+  // et le useEffect suivant redirige vers '/' avant que Zustand ait le temps
+  // de restaurer la session — l'utilisateur est déconnecté à chaque refresh.
+  const [hydrated, setHydrated] = useState(false)
+  useEffect(() => { setHydrated(true) }, [])
+
   useEffect(() => {
+    if (!hydrated) return  // attendre la réhydratation avant toute décision de routage
+
     if (!isAuthenticated) {
       router.replace('/')
       return
@@ -62,9 +71,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [isAuthenticated, fetchMe, logout, router])
+  }, [hydrated, isAuthenticated, fetchMe, logout, router])
 
-  if (!isAuthenticated) return null
+  if (!hydrated || !isAuthenticated) return null
 
   // Forcer le changement de mot de passe avant d'accéder à l'app
   if (mustChangePassword) {

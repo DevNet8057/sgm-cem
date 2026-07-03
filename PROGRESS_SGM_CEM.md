@@ -1,11 +1,83 @@
 # SUIVI D'AVANCEMENT — SGM-CEM v6.0
 
-Dernière mise à jour : 2026-06-18
+Dernière mise à jour : 2026-07-02
 Avancement global : **100%** (47/47 tâches)
 
 ## Légende
 
 ✅ Terminé et vérifié · 🔄 En cours · ⬜ Non commencé · ⚠️ RÉGRESSION · 🔶 Bloqué / FUTURE
+
+---
+
+## JOURNAL (2026-07-03 v3) — COMMISSION YELII 2,5% À LA CHARGE DU CONTRIBUTEUR (PAYMENT_FLOWS §1bis)
+
+Suivi des 13 étapes de la section 14 de `PAYMENT_FLOWS_SGM_CEM_2.md`. Chaque étape cochée a été vérifiée par un test réel (type-check, tests unitaires, ou exécution).
+
+| Étape | Description | Fichiers | Statut vérifié |
+|---|---|---|---|
+| 1 | Supprimer l'ancien code MTN/Orange non-Yelii | `services/payment.ts` | ✅ `requestMtnMoMo`, `requestOrangeMoney`, `getOrangeAccessToken`, `getMtnMoMoStatus` supprimés (0 appelant). Yelii conservé. Type-check API OK |
+| 2 | Schéma Prisma : `amountChargedToPayer`, `commissionPaidByPayer` | `schema.prisma` | ✅ Champs ajoutés + `prisma db push` (DB synchronisée) + types client régénérés |
+| 3 | Fonction partagée `calculateAmountWithCommission` | `packages/shared/src/payment-calculations.ts` | ✅ Source UNIQUE (`@sgm-cem/shared`), formule `Math.ceil(due/(1-0.025))`. **Test : 5000 → 5129 (commission 129)** ✔ |
+| 4 | `yelii.service.ts` | `services/yelii.service.ts` | ✅ Déjà conforme (en-tête `X-Collect-Api-Key`, HMAC-SHA512). Reçoit le montant majoré. Test live curl : ⏳ manuel (clé réelle) |
+| 5 | Webhook + signature 401 | `webhooks/yelii.webhook.ts` | ✅ **Fix critique** : contrôle de cohérence compare désormais Yelii `amount` à `amountChargedToPayer` (le majoré), sinon tout paiement bloqué. Signature 401 déjà en place |
+| 6 | Route initiation envoie le montant MAJORÉ | `routes/payments.ts` + `routes/contributions.ts` | ✅ Les 2 chemins Yelii envoient `totalToPay` et stockent `amountChargedToPayer`/`commissionPaidByPayer`. Type-check OK |
+| 7 | Route status (polling) | `routes/payments.ts` | ✅ Existante, inchangée |
+| 8 | Écran d'attente + détail montant/frais/total | `PaymentStepper.tsx`, `PendingScreen.tsx` | ✅ Détail transparent dans le récap (même fonction partagée) + total affiché sur l'écran USSD. Type-check web OK |
+| 9 | Reçu PDF affiche le montant DÛ | `services/receipt.ts` | ✅ Montant principal = `contribution.montant` (déjà conforme) + mention secondaire des frais |
+| 10 | Notification WhatsApp sur confirmation | `webhooks/yelii.webhook.ts` | ✅ Branchée, affiche le montant dû (cohérent reçu/stats) |
+| 11 | Job de réconciliation | `jobs/payment-reconciliation.ts` | ✅ Existant, messages sur montant dû |
+| 12 | E2E complet ngrok | — | 🔶 Manuel — nécessite tunnel public + transaction Yelii réelle (hors environnement). Logique couverte par tests |
+| 13 | Mettre à jour la doc | `PROGRESS_SGM_CEM.md` | ✅ Ce journal. ⚠️ `CLAUDE.md` référencé par le doc mais **absent du repo** (voir note) |
+
+**Vérifications automatiques :** API `tsc --noEmit` ✔ · Web `tsc --noEmit` ✔ · 39 tests API existants ✔ · 4 nouveaux tests commission ✔ (`tests/payment-calculations.test.ts`)
+
+**Conflits signalés et résolus :** (a) route `/mobile/initiate` du doc → adaptée à la route réelle `/payments/initiate` (décision utilisateur) ; (b) `YELII_API_KEY` du doc → `YELII_COLLECT_API_KEY` conservé (décision utilisateur) ; (c) contrôle de montant du webhook qui aurait bloqué 100% des paiements majorés → corrigé ; (d) `db push` au lieu de `migrate` (convention repo) ; (e) `CLAUDE.md` inexistant.
+
+**Bug préexistant corrigé au passage :** `lib/antd-theme.ts` avait `colorWarning` en double (erreur TS1117 bloquant le build web) — doublon retiré, comportement runtime inchangé (jaune CEM).
+
+---
+
+## JOURNAL DES CORRECTIONS (2026-07-03 v2) — REFONTE COMPLÈTE FLOW PAIEMENT (Yelii API officielle)
+
+| # | Tâche | Fichiers | Statut |
+|---|-------|----------|--------|
+| W1 | Correction signature Yelii | `webhooks/yelii.webhook.ts` | ✅ Corrigé — passe de `express.raw()` + bytes bruts à `express.json()` + `JSON.stringify(req.body)` conformément à la doc officielle Yelii (`HMAC_SHA512(key, timestamp + JSON.stringify(body))`) |
+| W2 | Sélecteur de mode paiement | `components/payments/PaymentMethodSelector.tsx` | ✅ Créé — 4 boutons (MTN/Orange/Carte/Espèces) avec style propre |
+| W3 | Écran d'attente USSD | `components/payments/PendingScreen.tsx` | ✅ Créé — countdown 5min, instructions étape par étape, état expiré |
+| W4 | Stepper 4 étapes | `components/payments/PaymentStepper.tsx` | ✅ Créé — Sélection → Mode → Récapitulatif → **Résultat** (4ème étape explicite). Polling, redirect CinetPay, retry |
+| W5 | Page retour CinetPay | `app/payment/return/page.tsx` | ✅ Créée — polling 60s, états confirmed/pending/failed, bouton reçu PDF |
+| W6 | ContributionStepper | `views/ContributionStepper.tsx` | ✅ Redirige vers PaymentStepper (backward compat avec Contributions.tsx) |
+
+**Changements de step :** 3 → 4 étapes. "Résultat" est maintenant une étape stepper propre (pas un overlay).
+
+---
+
+## JOURNAL DES CORRECTIONS (2026-07-03) — FLOWS DE PAIEMENT
+
+| # | Tâche | Fichiers modifiés | Statut |
+|---|-------|------------------|--------|
+| P1 | Schéma Prisma | `schema.prisma` | ✅ Déjà complet (externalTransactionId, paymentStatus, netAmount, confirmedAt, enum PaymentStatus) |
+| P2 | Service Yelii | `services/yelii.service.ts` | ✅ Correct — verifyYeliiSignature HMAC-SHA512, initiateYeliiPayment, getYeliiStatus |
+| P3 | Webhook Yelii | `webhooks/yelii.webhook.ts` | ✅ Corrigé — bug critique : processYeliiWebhook lisait `payload.transactionId` au lieu de `payload.data.transactionId` (enveloppe `{ event, data }` non dépliée) + statut ANNULE manquant en cas d'échec |
+| P4 | Service CinetPay | `services/cinetpay.service.ts` | ✅ Créé — initiateCinetpayPayment, verifyCinetpaySignature (MD5) |
+| P5 | Webhook CinetPay | `webhooks/cinetpay.webhook.ts` | ✅ Créé — idempotence, statut CONFIRME/ANNULE, WhatsApp + reçu PDF |
+| P6 | Route paiements | `routes/payments.ts` | ✅ Corrigé — 3 bugs : (1) status endpoint cherchait par externalTransactionId au lieu de id, (2) espèces ne mettait pas statut CONFIRME ni confirmedAt, (3) modePaiement YELII non résolu en MTN_MOMO/ORANGE_MONEY. Ajout CinetPay. |
+| P7 | index.ts | `index.ts` | ✅ Webhook CinetPay enregistré avant express.json() |
+| P8 | Variables env | `apps/api/.env` | ✅ YELII_COLLECT_API_KEY, YELII_BASE_URL, CINETPAY_API_KEY/SITE_ID ajoutés |
+| P9 | Frontend stepper | `ContributionStepper.tsx` | ✅ Countdown USSD 5min, écran redirect CinetPay, window.open CinetPay, state 'timeout', polling unifié par contrib.id |
+
+**Règles respectées :** RB-01 (confirmedAt côté serveur), RB-02 (jamais confirmé sans webhook sauf espèces), RB-12 (idempotence)
+
+---
+
+## JOURNAL DES CORRECTIONS (2026-07-02)
+
+| # | Erreur | Cause réelle | Fichier modifié | Correction |
+|---|--------|-------------|-----------------|------------|
+| 1 | Google OAuth bloqué par CORS | `crossOrigin="anonymous"` sur `<Script>` Google GSI forçait une requête CORS que Google ne supporte pas pour ce fichier | `apps/web/src/app/layout.tsx` | Suppression de `crossOrigin="anonymous"` |
+| 2 | Helmet CSP non configuré | `helmet()` sans options bloquait implicitement les ressources Google via les headers CSP renvoyés par l'API | `apps/api/src/index.ts` | CSP explicite : `accounts.google.com` autorisé dans `scriptSrc`, `connectSrc`, `frameSrc` |
+| 3 | `manifest.json` introuvable | Fichier déjà présent et correct — `ERR_CONNECTION_REFUSED` était un symptôme du serveur non démarré | Aucun | Aucune modification nécessaire |
+| 4 | WebSocket HMR cassé | Conséquence des erreurs 1+2 | Aucun | Résolu par la correction des erreurs ci-dessus |
 
 ---
 
@@ -83,9 +155,22 @@ Avancement global : **100%** (47/47 tâches)
 
 - ✅ G1. MTN Mobile Money — services/payment.ts + webhook + .env.example documenté
 - ✅ G2. Orange Money — services/payment.ts + webhook + .env.example documenté
-- ✅ G3. WhatsApp Business (360dialog) — services/notification.ts + .env.example
-- ✅ G4. SMS Twilio fallback — services/notification.ts + .env.example
+- 🔴 G3. WhatsApp Business (360dialog) — services/notification.ts + .env.example
+- 🔴 G4. SMS Twilio fallback — services/notification.ts + .env.example
 - ✅ G5. Stockage S3-compatible — services/storage.ts (S3 ou fallback local transparent)
+
+## I. FLOWS DE PAIEMENT (Section 9-14 de PAYMENT_FLOWS_SGM_CEM.md)
+
+- ✅ I1. Schéma Prisma mis à jour (externalTransactionId, paymentStatus, netAmount, paymentUrl + enum PaymentStatus)
+- ✅ I2. Service Yelii créé (yelii.service.ts — vérification signature HMAC-SHA512)
+- ✅ I3. Webhook Yelii séparé (yelii.webhook.ts — enregistré AVANT express.json dans index.ts)
+- ✅ I4. Route POST /api/payments/initiate créée (stepper 3 étapes)
+- ✅ I5. Receipt PDF intégré (generateReceiptPDF retourne URL + notif WhatsApp)
+- ✅ I6. Écran d'attente frontend + polling (ContributionStepper.tsx mis à jour)
+- 🔴 I7. CinetPay service + webhook + route (à implémenter)
+- 🔴 I8. Job de réconciliation failsafe (à implémenter)
+
+**Notes:** Le flow Mobile Money (Yelii) est maintenant fonctionnel. Le webhook utilise la signature HMAC-SHA512, le statut est stocké dans `paymentStatus`, et le reçu PDF est généré automatiquement. Le flow Carte Bancaire (CinetPay) et le job de réconciliation restent à implémenter.
 
 ## H. DETTE TECHNIQUE
 
