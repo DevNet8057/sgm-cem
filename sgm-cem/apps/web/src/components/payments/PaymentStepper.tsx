@@ -52,6 +52,7 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
   const [contribId, setContribId] = useState<string | null>(null)
   const [cinetpayUrl, setCinetpayUrl] = useState<string | null>(null)
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null)
+  const [failReason, setFailReason] = useState('')
   const [countdown, setCountdown] = useState(USSD_TIMEOUT)
 
   // ── Données dérivées ──────────────────────────────────────────────────────
@@ -147,6 +148,18 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
         paymentChannel: isMobileMoney ? operator : undefined,
       }),
     onSuccess: async (res) => {
+      // Le backend renvoie HTTP 200 avec { success:false, error } quand
+      // l'initiation échoue (Yelii injoignable, solde insuffisant, etc.).
+      // Sans ce garde-fou, l'accès à res.data.data (undefined) planterait
+      // et l'utilisateur resterait bloqué sur le récapitulatif sans message.
+      if (!res.data?.success) {
+        const err = res.data?.error
+        setFailReason(typeof err === 'string' ? err : (err?.message ?? ''))
+        setStep(3)
+        setPayStatus('failed')
+        return
+      }
+
       const d = res.data.data
       const id = d.contributionId ?? d.id
       setContribId(id)
@@ -173,8 +186,11 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
       }
     },
     onError: (err: unknown) => {
-      const e = err as { response?: { data?: { error?: { message?: string } } } }
-      setError(e.response?.data?.error?.message ?? 'Enregistrement impossible')
+      // L'API renvoie parfois error sous forme de string, parfois { message }.
+      const data = (err as { response?: { data?: { error?: unknown } } }).response?.data
+      const raw = data?.error
+      const msg = typeof raw === 'string' ? raw : (raw as { message?: string } | undefined)?.message
+      setError(msg ?? 'Enregistrement impossible')
     },
   })
 
@@ -202,6 +218,7 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
   function retry() {
     setPayStatus('idle')
     setContribId(null)
+    setFailReason('')
     setStep(2) // Retour au récap pour re-confirmer
     setError('')
   }
@@ -559,7 +576,7 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
                   <div>
                     <h3 className="font-semibold text-red-700 text-xl mb-1">Paiement échoué</h3>
                     <p className="text-sm text-gray-500">
-                      La demande n'a pas abouti. Vérifiez votre solde ou essayez un autre mode.
+                      {failReason || "La demande n'a pas abouti. Vérifiez votre solde ou essayez un autre mode."}
                     </p>
                   </div>
                   <button onClick={retry} className="flex items-center gap-2 mx-auto text-sm text-[#1A6B1A] hover:underline">

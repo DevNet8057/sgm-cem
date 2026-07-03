@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { User } from '@/types'
-import api from '@/lib/api'
+import api, { initCsrf } from '@/lib/api'
 
 interface AuthState {
   user: User | null
@@ -27,18 +27,23 @@ export const useAuthStore = create<AuthState>()(
         // Tokens are set as HttpOnly cookies by the server — never touch localStorage
         const res = await api.post('/auth/login', { email, password })
         const { user } = res.data.data
+        // Le token CSRF est lié au cookie access_token : après login il faut le
+        // resynchroniser, sinon la 1re requête mutante échoue en "CSRF invalide".
+        await initCsrf()
         set({ user, isAuthenticated: true, mustChangePassword: !!user.mustChangePassword })
       },
 
       loginWithGoogle: async (idToken) => {
         const res = await api.post('/auth/google', { idToken })
         const { user } = res.data.data
+        await initCsrf()
         set({ user, isAuthenticated: true, mustChangePassword: !!user.mustChangePassword })
       },
 
       loginWithPhone: async (phone, code) => {
         const res = await api.post('/auth/otp/verify', { phone, code })
         const { user } = res.data.data
+        await initCsrf()
         set({ user, isAuthenticated: true, mustChangePassword: !!user.mustChangePassword })
       },
 
@@ -46,6 +51,9 @@ export const useAuthStore = create<AuthState>()(
         try {
           await api.post('/auth/logout')
         } catch {}
+        // Resynchronise le token CSRF sur la session déconnectée (access_token vide)
+        // pour que le prochain login parte avec un token valide.
+        await initCsrf()
         set({ user: null, isAuthenticated: false, mustChangePassword: false })
       },
 
