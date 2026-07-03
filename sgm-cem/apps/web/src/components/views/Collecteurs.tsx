@@ -1,7 +1,7 @@
 'use client'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ArrowRight, Building2, Calendar, Check, ChevronDown, CreditCard, FolderOpen, HandCoins, Landmark, MapPin, Plus, RefreshCw, ShieldCheck, Shield, User, UserCheck, UserPlus, Wallet, X, XCircle, Loader2, Banknote } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Building2, Calendar, Check, ChevronDown, CreditCard, FolderOpen, HandCoins, Landmark, MapPin, Plus, RefreshCw, ShieldCheck, Shield, Smartphone, User, UserCheck, UserPlus, Wallet, X, XCircle, Loader2, Banknote } from 'lucide-react'
 import api from '@/lib/api'
 import { cn, formatAmount, formatDate, formatDateTime, getInitials, LOCALISATION_FONDS_LABELS, MODE_PAIEMENT_LABELS, ROLE_LABELS, TRANSFER_TYPE_LABELS } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
@@ -366,15 +366,22 @@ function MoneyFlow({ flow, selectedTotal, destination }: {
   selectedTotal: number
   destination: Extract<LocalisationFonds, 'EN_CAISSE' | 'EN_BANQUE'>
 }) {
-  const toCaisse = destination === 'EN_CAISSE'
   const toBanque = destination === 'EN_BANQUE'
+
+  const chezCollecteur = flow?.chezCollecteur ?? 0
+  const enTransit = flow?.enTransit ?? 0
+  const electronique = flow?.electroniqueTotal ?? 0
+  const chezTresorier = (flow?.remisTresorier ?? 0) + (flow?.chezResponsable ?? 0) + (flow?.enCaisse ?? 0)
+  const enBanque = flow?.enBanque ?? 0
 
   return (
     <div className="mb-5 rounded-[18px] border border-gray-100 bg-white p-4 overflow-hidden">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 mb-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 mb-5">
         <div>
           <h3 className="font-display font-semibold text-[#0F4A0F] text-lg">Trajet de l'argent</h3>
-          <p className="text-xs text-gray-500">Vision du mouvement : collecteur vers tresorier/caisse, puis banque.</p>
+          <p className="text-xs text-gray-500">
+            Espèces : contributeur → collecteur → trésorier. Mobile Money / Carte : crédité directement chez le trésorier, aucun collecteur ne le détient.
+          </p>
         </div>
         {selectedTotal > 0 && (
           <div className="rounded-[10px] bg-[#F5C400]/20 px-3 py-2 text-xs font-semibold text-[#0F4A0F]">
@@ -383,60 +390,80 @@ function MoneyFlow({ flow, selectedTotal, destination }: {
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] gap-3 items-stretch">
-        <FlowStep
-          icon={HandCoins}
-          label="Chez collecteurs"
-          value={flow?.chezCollecteur ?? 0}
-          active={selectedTotal > 0}
-        />
-        <FlowArrow active={selectedTotal > 0} />
-        <FlowStep
-          icon={RefreshCw}
-          label="En transit"
-          value={flow?.enTransit ?? 0}
-          active={selectedTotal > 0}
-          muted
-        />
-        <FlowArrow active={selectedTotal > 0 && toCaisse} />
-        <FlowStep
-          icon={ShieldCheck}
-          label="Tresorier / Caisse"
-          value={flow?.enCaisse ?? 0}
-          active={selectedTotal > 0 && toCaisse}
-        />
-        <FlowArrow active={selectedTotal > 0 && toBanque} />
-        <FlowStep
-          icon={Building2}
-          label="Banque"
-          value={flow?.enBanque ?? 0}
-          active={selectedTotal > 0 && toBanque}
-        />
+      {/* Voie 1 — Espèces, via le collecteur */}
+      <FlowLane label="Espèces — remises en main propre" icon={HandCoins} amount={chezCollecteur + enTransit}>
+        <FlowStep icon={HandCoins} label="Chez collecteurs" value={chezCollecteur} active={chezCollecteur > 0} />
+        <FlowTrack active={chezCollecteur > 0} />
+        <FlowStep icon={RefreshCw} label="En transit" value={enTransit} active={enTransit > 0} muted />
+      </FlowLane>
+
+      {/* Voie 2 — Mobile Money / Carte, direct chez le trésorier */}
+      <FlowLane label="Mobile Money & Carte — direct, sans collecteur" icon={Smartphone} amount={electronique}>
+        <FlowStep icon={Smartphone} label="Yelii / CinetPay" value={electronique} active={electronique > 0} />
+        <FlowTrack active={electronique > 0} instant />
+        <FlowStep icon={ShieldCheck} label="Chez le trésorier" value={electronique} active={electronique > 0} ghost />
+      </FlowLane>
+
+      {/* Convergence — trésorerie puis banque */}
+      <div className="mt-1 pt-4 border-t border-dashed border-gray-200">
+        <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Trésorerie</p>
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] gap-3 items-stretch">
+          <FlowStep icon={ShieldCheck} label="Trésorier / Caisse / Responsable" value={chezTresorier} active={chezTresorier > 0} />
+          <FlowTrack active={enBanque > 0} vertical />
+          <FlowStep icon={Building2} label="Banque" value={enBanque} active={enBanque > 0} />
+        </div>
       </div>
 
       <div className="mt-4 h-2 rounded-full bg-gray-100 overflow-hidden flex">
-        <FlowBar color="bg-amber-400" value={flow?.chezCollecteur ?? 0} total={flow?.totalConfirme ?? 0} />
-        <FlowBar color="bg-blue-400" value={flow?.enTransit ?? 0} total={flow?.totalConfirme ?? 0} />
-        <FlowBar color="bg-[#1A6B1A]" value={flow?.enCaisse ?? 0} total={flow?.totalConfirme ?? 0} />
-        <FlowBar color="bg-[#0F4A0F]" value={flow?.enBanque ?? 0} total={flow?.totalConfirme ?? 0} />
+        <FlowBar color="bg-amber-400" value={chezCollecteur + enTransit} total={flow?.totalConfirme ?? 0} />
+        <FlowBar color="bg-purple-400" value={electronique} total={flow?.totalConfirme ?? 0} />
+        <FlowBar color="bg-[#1A6B1A]" value={chezTresorier - electronique} total={flow?.totalConfirme ?? 0} />
+        <FlowBar color="bg-[#0F4A0F]" value={enBanque} total={flow?.totalConfirme ?? 0} />
       </div>
-      <p className="mt-2 text-xs text-gray-400">Total confirme trace : {formatAmount(flow?.totalConfirme ?? 0)}</p>
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400">
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400" /> Espèces en circulation</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-400" /> Mobile Money / Carte</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#1A6B1A]" /> Trésorerie</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#0F4A0F]" /> Banque</span>
+        <span className="ml-auto font-semibold text-gray-500">Total confirmé tracé : {formatAmount(flow?.totalConfirme ?? 0)}</span>
+      </div>
     </div>
   )
 }
 
-function FlowStep({ icon: Icon, label, value, active, muted }: {
+function FlowLane({ label, icon: Icon, amount, children }: {
+  label: string
+  icon: React.ElementType
+  amount: number
+  children: React.ReactNode
+}) {
+  return (
+    <div className="mb-4 last:mb-0">
+      <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">
+        <Icon size={12} /> {label}
+        {amount > 0 && <span className="normal-case font-semibold text-[#1A6B1A]">· {formatAmount(amount)}</span>}
+      </p>
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] gap-3 items-stretch">
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function FlowStep({ icon: Icon, label, value, active, muted, ghost }: {
   icon: React.ElementType
   label: string
   value: number
   active?: boolean
   muted?: boolean
+  ghost?: boolean
 }) {
   return (
     <div className={cn(
       'relative rounded-[14px] border p-4 transition-all duration-300',
       active ? 'border-[#1A6B1A]/40 bg-[#F2FFF4] shadow-cem' : 'border-gray-100 bg-gray-50/70',
-      muted && !active && 'opacity-80'
+      muted && !active && 'opacity-80',
+      ghost && 'border-dashed'
     )}>
       {active && <span className="absolute right-3 top-3 h-2 w-2 rounded-full bg-[#F5C400] animate-ping" />}
       <div className="flex items-center gap-3">
@@ -455,15 +482,17 @@ function FlowStep({ icon: Icon, label, value, active, muted }: {
   )
 }
 
-function FlowArrow({ active }: { active?: boolean }) {
+/** Connecteur animé entre deux étapes : des points d'or défilent en continu tant que
+ * l'étape amont contient des fonds — représentation "vivante" du mouvement réel. */
+function FlowTrack({ active, instant, vertical }: { active?: boolean; instant?: boolean; vertical?: boolean }) {
   return (
-    <div className="hidden lg:flex items-center justify-center">
-      <div className={cn(
-        'flex h-9 w-9 items-center justify-center rounded-full border transition-all duration-300',
-        active ? 'border-[#F5C400] bg-[#F5C400] text-[#0F4A0F] translate-x-1' : 'border-gray-200 bg-white text-gray-300'
-      )}>
-        <ArrowRight size={18} />
+    <div className={cn('hidden lg:flex items-center justify-center', vertical ? 'flex-col' : '')} style={{ width: vertical ? 'auto' : 56 }}>
+      <div className={cn('flow-track w-12', active && 'flow-track-active')} title={instant ? 'Crédit instantané' : 'Transfert physique'}>
+        {active && <span className="flow-dot" />}
+        {active && <span className="flow-dot" />}
+        {active && <span className="flow-dot" />}
       </div>
+      <ArrowRight size={14} className={cn('mt-0.5', active ? 'text-[#F5C400]' : 'text-gray-300')} />
     </div>
   )
 }

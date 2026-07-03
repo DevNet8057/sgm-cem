@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { initiateYeliiPayment, retryYeliiCallback } from '../services/yelii.service'
 import { initiateCinetpayPayment } from '../services/cinetpay.service'
+import { generateReceiptPDF } from '../services/receipt'
 import { calculateAmountWithCommission } from '@sgm-cem/shared'
 import { getPrisma } from '../lib/prisma'
 
@@ -123,6 +124,7 @@ router.post('/initiate', authenticate, requireLevel(2), async (req, res) => {
         paymentStatus: 'SUCCESS',
       },
     })
+    await generateReceiptPDF(contribution.id)
     return res.json({
       success: true,
       data: { contributionId: contribution.id, status: 'SUCCESS' },

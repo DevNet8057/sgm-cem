@@ -5,6 +5,8 @@ import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { formatAmount } from '../lib/utils'
+import { generateBorderauPdf, generateAndStoreBorderau } from '../services/borderau'
+import { getFileStream } from '../services/storage'
 
 const router = Router()
 const prisma = new PrismaClient()
@@ -347,16 +349,7 @@ router.patch('/transfers/:id/confirm', authenticate, requireLevel(2), async (req
   })
 
   // Générer le bordereau PDF
-  let borderauUrl: string | undefined
-  try {
-    borderauUrl = await generateTransferBorderau(transfer)
-    await prisma.fundsTransfer.update({
-      where: { id },
-      data: { borderauUrl },
-    })
-  } catch (e) {
-    console.error('[PDF] Failed to generate borderau:', e)
-  }
+  const borderauUrl = await generateAndStoreBorderau(id) ?? undefined
 
   // Notification à l'expéditeur
   try {
@@ -573,10 +566,6 @@ async function notifyTransferRefused(p: {
   })
 }
 
-async function generateTransferBorderau(transfer: { id: string; totalAmount: number; contributions: { length: number } }): Promise<string> {
-  return `${process.env.APP_URL ?? 'http://localhost:3000'}/api/borderau/${transfer.id}.pdf`
-}
-
 // ── B6 : Trésorier marque des fonds comme déposés en banque ──────────
 router.patch('/bank-deposit', authenticate, async (req, res) => {
   if (!['TRESORIER', 'ADMIN'].includes(req.user!.role)) {
@@ -633,6 +622,49 @@ router.patch('/bank-deposit', authenticate, async (req, res) => {
     success: true,
     data: { count: contributions.length, totalAmount, referenceBordereau },
   })
+})
+
+/**
+ * GET /api/funds/transfers/:id/borderau
+ * Bordereau PDF — vue inline par défaut (?download=1 force le téléchargement).
+ * Réservé à l'expéditeur, au récepteur, ou à un rôle de supervision.
+ */
+router.get('/transfers/:id/borderau', authenticate, requireLevel(2), async (req, res) => {
+  const id = String(req.params.id)
+  const myUserId = req.user!.userId
+  const myRole = req.user!.role as string
+
+  const transfer = await prisma.fundsTransfer.findUnique({ where: { id } })
+  if (!transfer) throw new AppError('NOT_FOUND', 'Transfert introuvable', 404)
+  if (transfer.status !== 'CONFIRMED') {
+    throw new AppError('BUSINESS_RULE', 'Le bordereau est disponible uniquement pour les transferts confirmés', 400)
+  }
+  const canView = transfer.senderId === myUserId || transfer.receiverId === myUserId || ['ADMIN', 'TRESORIER'].includes(myRole)
+  if (!canView) throw new AppError('ACCESS_DENIED', 'Accès refusé à ce bordereau', 403)
+
+  let pdfBuffer: Buffer | null = null
+  const apiUrl = process.env.API_URL ?? 'http://localhost:3001'
+
+  if (transfer.borderauUrl?.startsWith(`${apiUrl}/uploads/`)) {
+    const key = transfer.borderauUrl.replace(`${apiUrl}/uploads/`, '')
+    const file = await getFileStream(key)
+    if (file) {
+      const chunks: Buffer[] = []
+      for await (const chunk of file.stream) chunks.push(chunk as Buffer)
+      pdfBuffer = Buffer.concat(chunks)
+    }
+  }
+
+  if (!pdfBuffer) {
+    pdfBuffer = await generateBorderauPdf(id)
+    await generateAndStoreBorderau(id)
+  }
+
+  const filename = `Bordereau-CEM-${id.substring(0, 8).toUpperCase()}.pdf`
+  const disposition = req.query.download === '1' ? 'attachment' : 'inline'
+  res.setHeader('Content-Type', 'application/pdf')
+  res.setHeader('Content-Disposition', `${disposition}; filename="${filename}"`)
+  res.send(pdfBuffer)
 })
 
 export { router as fundsRouter }

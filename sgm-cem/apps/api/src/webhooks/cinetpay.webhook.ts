@@ -83,10 +83,14 @@ async function processCinetpayWebhook(body: Record<string, string>) {
         confirmedAt: new Date(),
         paymentStatus: 'SUCCESS',
         netAmount: Math.round(montantNum * 0.965), // ~3.5% commission CinetPay
+        // Paiement carte bancaire : réglé directement sur le compte marchand
+        // CinetPay de l'organisation, géré par le trésorier — aucun collecteur
+        // ne le détient physiquement.
+        localisationFonds: 'REMIS_TRESORIER',
       },
     })
 
-    const receiptUrl = await generateReceiptPDF(contribution)
+    const receiptUrl = await generateReceiptPDF(contribution.id)
     const msg = `CEM Melen - Paiement par carte confirmé\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${contribution.rubrique.title}\nMerci pour votre contribution !`
 
     if (memberPhone && receiptUrl) {

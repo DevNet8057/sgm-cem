@@ -156,6 +156,8 @@ export interface CollecteursResponse {
     enCaisse: number
     enBanque: number
     totalConfirme: number
+    especesTotal: number
+    electroniqueTotal: number
   }
   eligibleRecipients: Array<{ id: string; fullName: string; email: string; role: string }>
   myRole?: UserRole

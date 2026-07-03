@@ -890,29 +890,106 @@ npx prisma generate
 
 ---
 
-## 12. TESTS
+## 12. TESTS ET CONFIGURATION LOCALE — LE TUNNEL WEBHOOK
 
-### Tester les webhooks en local avec ngrok
+### Le concept — pourquoi un tunnel et pas une adresse IP
 
-Ton serveur local (`localhost:3001`) n'est pas accessible depuis internet. Yelii ne peut donc pas t'envoyer de webhook. Ngrok crée un tunnel public :
+Yelii doit pouvoir appeler ton serveur pour lui envoyer le webhook (voir section 3). Mais ton serveur tourne en local sur `localhost:3001`, une adresse qui n'existe que sur ta machine — personne sur internet, y compris Yelii, ne peut l'atteindre.
 
-```bash
-npm install -g ngrok
-ngrok http 3001
-# → te donne : https://abc123.ngrok.io
+**Ce n'est pas ton adresse IP qu'il faut exposer.** Ce qu'il faut, c'est une **URL publique en HTTPS** qui redirige automatiquement chaque requête reçue vers `localhost:3001` sur ta machine. C'est exactement ce que fait un outil de tunneling : il ouvre un chemin depuis internet jusqu'à ton port local, sans que tu aies besoin de configurer ton routeur, ton pare-feu, ou de connaître ton IP publique.
 
-# Mettre cette URL dans .env :
-YELII_WEBHOOK_URL="https://abc123.ngrok.io/webhooks/yelii"
+```
+Yelii  →  POST vers https://ton-tunnel.exemple.com/webhooks/yelii
+                            │
+                            │  (le tunnel redirige)
+                            ▼
+                    localhost:3001/webhooks/yelii
+                    (ton serveur API en local)
 ```
 
-⚠️ Cette URL change à chaque redémarrage de ngrok. La configurer aussi dans le dashboard Yelii si un webhook global y est défini.
+Cette URL publique, c'est celle que tu donnes à Yelii dans `callbackUrl` (voir section 5, fonction `initiateCollection`) et/ou dans le champ webhook du tableau de bord Yelii.
+
+### Deux outils possibles — comparatif
+
+| Critère | ngrok | Cloudflare Tunnel |
+|---|---|---|
+| Installation | `npm install -g ngrok` | `cloudflared` (binaire à télécharger) |
+| Compte requis | Non (usage basique) | Oui pour une URL fixe |
+| URL obtenue | Aléatoire, change à chaque redémarrage | Aléatoire (tunnel rapide) ou **fixe** si domaine Cloudflare |
+| Mise en place | Immédiate, 2 minutes | Immédiate pour tunnel rapide, ~15 min pour URL fixe |
+| Recommandé pour | Développement actif, tests ponctuels | Développement prolongé ou pré-production |
+
+**Recommandation pour cette phase du projet : ngrok.** C'est le plus rapide à mettre en place pour débloquer les tests dès maintenant. Une fois le projet déployé sur le vrai serveur de production (Hetzner, voir `CLAUDE.md`), aucun tunnel ne sera nécessaire — le vrai domaine du serveur servira d'URL de webhook permanente.
+
+### Procédure exacte — ngrok
+
+```bash
+# 1. Installer ngrok (une seule fois)
+npm install -g ngrok
+
+# 2. Démarrer ton API normalement, dans un premier terminal
+pnpm dev
+# → l'API tourne sur localhost:3001
+
+# 3. Dans un DEUXIÈME terminal, ouvrir le tunnel
+ngrok http 3001
+
+# ngrok affiche quelque chose comme :
+# Forwarding   https://a1b2c3d4.ngrok-free.app -> http://localhost:3001
+
+# 4. Copier cette URL et mettre à jour .env
+YELII_WEBHOOK_URL="https://a1b2c3d4.ngrok-free.app/webhooks/yelii"
+
+# 5. Redémarrer l'API pour qu'elle prenne en compte la nouvelle variable
+```
+
+⚠️ **Cette URL change à chaque redémarrage de ngrok.** Si tu arrêtes et relances ngrok, il faut recopier la nouvelle URL dans `.env` et redémarrer l'API. Pense aussi à vérifier si le tableau de bord Yelii (`https://api.yelii.xyz/dashboard`) a un champ de configuration webhook global — si oui, mets à jour cette URL également, car certains systèmes utilisent l'URL du dashboard comme repli quand `callbackUrl` n'est pas fourni dans la requête.
+
+### Procédure exacte — Cloudflare Tunnel (alternative avec URL fixe)
+
+À utiliser si tu préfères une URL qui ne change jamais, par exemple si tu possèdes déjà un nom de domaine sur Cloudflare.
+
+**Tunnel rapide (URL aléatoire, sans compte) :**
+```bash
+# Installer cloudflared
+# Windows : winget install --id Cloudflare.cloudflared
+# Mac     : brew install cloudflared
+
+cloudflared tunnel --url http://localhost:3001
+# → donne une URL du type https://mots-aleatoires.trycloudflare.com
+```
+
+**Tunnel avec URL fixe (nécessite un compte Cloudflare + un domaine) :**
+```bash
+cloudflared tunnel login
+cloudflared tunnel create sgm-cem-dev
+cloudflared tunnel route dns sgm-cem-dev webhook-dev.tondomaine.com
+cloudflared tunnel run sgm-cem-dev
+```
+L'URL webhook devient alors permanente :
+```
+YELII_WEBHOOK_URL="https://webhook-dev.tondomaine.com/webhooks/yelii"
+```
+Plus besoin de la changer à chaque redémarrage.
+
+### Vérifier que le tunnel fonctionne avant de tester un vrai paiement
+
+Avant de lancer un test de paiement complet, vérifie que le tunnel redirige bien vers ton serveur :
+
+```bash
+curl https://ton-url-tunnel.exemple.com/api/health
+# doit retourner la même réponse que curl http://localhost:3001/api/health
+```
+
+Si cette commande échoue, le problème vient du tunnel, pas de l'intégration Yelii — inutile de déboguer le code de paiement tant que cette étape ne fonctionne pas.
 
 ### Checklist "go live" (issue de la doc Yelii)
 
-- [ ] URL webhook configurée en HTTPS (pas HTTP)
+- [ ] URL webhook configurée en HTTPS (pas HTTP) — ngrok et Cloudflare fournissent HTTPS par défaut
 - [ ] Vérification de la signature HMAC en place et testée
 - [ ] Tests d'intégration effectués (sandbox si disponible)
 - [ ] Gestion des retries et de l'idempotence en place
+- [ ] En production : plus de tunnel — l'URL du vrai serveur (Hetzner) est utilisée directement
 
 ---
 

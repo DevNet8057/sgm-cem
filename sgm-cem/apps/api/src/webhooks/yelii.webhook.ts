@@ -44,7 +44,7 @@ type YeliiEnvelope = {
   event: string
   data: {
     transactionId: string
-    status: 'success' | 'failed' | 'processing'
+    status: 'success' | 'completed' | 'successful' | 'failed' | 'cancelled' | 'processing'
     amount?: number
     commissionAmount?: number
     netCredited?: number
@@ -53,6 +53,11 @@ type YeliiEnvelope = {
     updatedAt?: string
   }
 }
+
+// Yelii utilise plusieurs libellés selon l'endpoint (webhook vs /collect/status) :
+// "success"/"successful"/"completed" pour un paiement abouti, "failed"/"cancelled" pour un échec.
+const SUCCESS_STATUSES = new Set(['success', 'successful', 'completed'])
+const FAILED_STATUSES = new Set(['failed', 'cancelled'])
 
 async function processYeliiWebhook(envelope: YeliiEnvelope) {
   if (envelope.event !== 'collect.transaction.updated') return
@@ -95,7 +100,7 @@ async function processYeliiWebhook(envelope: YeliiEnvelope) {
   // Cas 4 — montant reçu incohérent : Yelii renvoie le montant MAJORÉ (§1bis),
   // on compare donc à amountChargedToPayer (fallback montant pour l'historique/espèces).
   const expectedCharged = contribution.amountChargedToPayer ?? contribution.montant
-  if (status === 'success' && amount != null && amount !== expectedCharged) {
+  if (SUCCESS_STATUSES.has(status) && amount != null && amount !== expectedCharged) {
     console.warn(`[Yelii] Montant incohérent pour ${transactionId} : attendu ${expectedCharged}, reçu ${amount}`)
     await alertTresoriers(
       'Montant incohérent — paiement Mobile Money',
@@ -105,7 +110,7 @@ async function processYeliiWebhook(envelope: YeliiEnvelope) {
     return
   }
 
-  if (status === 'success') {
+  if (SUCCESS_STATUSES.has(status)) {
     await prisma.contribution.update({
       where: { id: contribution.id },
       data: {
@@ -113,10 +118,14 @@ async function processYeliiWebhook(envelope: YeliiEnvelope) {
         confirmedAt: new Date(), // RB-01 : horodatage serveur
         paymentStatus: 'SUCCESS',
         netAmount: netCredited ?? null,
+        // Paiement Mobile Money : l'argent est crédité directement dans le wallet
+        // Yelii de l'organisation, géré par le trésorier — aucun collecteur ne le
+        // détient physiquement, donc pas de EN_TRANSIT/CHEZ_COLLECTEUR ici.
+        localisationFonds: 'REMIS_TRESORIER',
       },
     })
 
-    const receiptUrl = await generateReceiptPDF(contribution)
+    const receiptUrl = await generateReceiptPDF(contribution.id)
     const msg = `CEM Melen - Paiement confirmé\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${contribution.rubrique.title}\nMerci pour votre contribution !`
 
     if (memberPhone && receiptUrl) {
@@ -126,7 +135,7 @@ async function processYeliiWebhook(envelope: YeliiEnvelope) {
     }
 
     console.info(`[Yelii] ✅ ${transactionId} — confirmé (net: ${netCredited} FCFA)`)
-  } else if (status === 'failed') {
+  } else if (FAILED_STATUSES.has(status)) {
     await prisma.contribution.update({
       where: { id: contribution.id },
       data: { statut: 'ANNULE', paymentStatus: 'FAILED' },
@@ -138,6 +147,8 @@ async function processYeliiWebhook(envelope: YeliiEnvelope) {
     }
 
     console.info(`[Yelii] ❌ ${transactionId} — échoué`)
+  } else {
+    console.warn(`[Yelii] ${transactionId} — statut non géré: "${status}"`)
   }
 }
 

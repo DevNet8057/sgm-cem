@@ -4,8 +4,19 @@ import { PrismaClient } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
-import { getYeliiStatus, requestYelii } from '../services/payment'
+import { initiateYeliiPayment, getYeliiStatus } from '../services/yelii.service'
+import { generateReceiptPDF, generateReceiptPdf } from '../services/receipt'
+import { getFileStream } from '../services/storage'
 import { calculateAmountWithCommission } from '@sgm-cem/shared'
+
+// Modes réglés via Yelii Pro Pay (Mobile Money). "YELII" est l'option générique
+// du formulaire rapide (opérateur non précisé) — on part sur MTN par défaut dans ce cas.
+const YELII_MODES = ['MTN_MOMO', 'ORANGE_MONEY', 'YELII'] as const
+function yeliiChannelFor(modePaiement: string, paymentChannel?: 'MTN' | 'ORANGE'): 'orange_money' | 'mtn_money' {
+  if (modePaiement === 'ORANGE_MONEY') return 'orange_money'
+  if (modePaiement === 'MTN_MOMO') return 'mtn_money'
+  return paymentChannel === 'ORANGE' ? 'orange_money' : 'mtn_money'
+}
 
 const router = Router()
 const prisma = new PrismaClient()
@@ -20,6 +31,8 @@ const createSchema = z.object({
   mobileMoneyPhone: z.string().optional(),
   paymentChannel: z.enum(['MTN', 'ORANGE']).optional(),
   referencePaiement: z.string().optional(),
+  // B1 — le collecteur encaisse en présentiel : confirmation immédiate, pas de double validation.
+  directCollection: z.boolean().optional(),
 })
 
 router.get('/', authenticate, requireLevel(2), async (req, res) => {
@@ -106,13 +119,18 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
     membre.profilFinancier === 'COUPLE' ? rubrique.amountCouple :
     rubrique.amountTravailleur
 
+  // B1 — encaissement en présentiel : confirmation immédiate, sans double validation.
+  const isDirectCash = data.modePaiement === 'ESPECES' && data.directCollection === true
+
   const contribution = await prisma.contribution.create({
     data: {
       ...data,
       collecteurId: data.collecteurId ?? req.user!.userId,
       montantAttendu: montantAttendu ?? data.montant,
-      statut: 'EN_ATTENTE_CONFIRMATION',
+      statut: isDirectCash ? 'CONFIRME' : 'EN_ATTENTE_CONFIRMATION',
       localisationFonds: data.modePaiement === 'ESPECES' ? 'CHEZ_COLLECTEUR' : 'EN_TRANSIT',
+      confirmedAt: isDirectCash ? new Date() : undefined,
+      confirmedById: isDirectCash ? req.user!.userId : undefined,
     },
     include: {
       membre: { include: { user: { select: { fullName: true } } } },
@@ -121,29 +139,39 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
     }
   })
 
-  if (data.modePaiement === 'YELII' && data.mobileMoneyPhone) {
+  if (isDirectCash) {
+    await generateReceiptPDF(contribution.id)
+  }
+
+  if ((YELII_MODES as readonly string[]).includes(data.modePaiement) && data.mobileMoneyPhone) {
     // §1bis — Le contributeur supporte la commission Yelii de 2,5 %.
     // On envoie à Yelii le montant MAJORÉ (totalToPay), jamais le montant dû brut.
     const { totalToPay, commissionAmount } = calculateAmountWithCommission(contribution.montant)
+    const channel = yeliiChannelFor(data.modePaiement, data.paymentChannel)
 
-    const payment = await requestYelii({
-      phone: data.mobileMoneyPhone,
+    const payment = await initiateYeliiPayment({
       amount: totalToPay, // ← montant majoré, PAS contribution.montant
-      externalId: contribution.id,
-      channel: data.paymentChannel === 'ORANGE' ? 'ORANGE' : 'MTN',
-      note: `Contribution ${contribution.id}`,
+      senderPhone: data.mobileMoneyPhone,
+      channel,
     })
 
-    await prisma.contribution.update({
-      where: { id: contribution.id },
-      data: {
-        momoTransactionId: payment.transactionId || undefined,
-        referencePaiement: payment.externalId ?? contribution.id,
-        amountChargedToPayer: totalToPay,
-        commissionPaidByPayer: commissionAmount,
-        ...(payment.success ? {} : { statut: 'ANNULE', litigeMotif: payment.message ?? 'Échec de la collecte Yelii' }),
-      },
-    })
+    if (payment.success && payment.transactionId) {
+      await prisma.contribution.update({
+        where: { id: contribution.id },
+        data: {
+          externalTransactionId: payment.transactionId,
+          paymentStatus: 'PROCESSING',
+          modePaiement: channel === 'orange_money' ? 'ORANGE_MONEY' : 'MTN_MOMO',
+          amountChargedToPayer: totalToPay,
+          commissionPaidByPayer: commissionAmount,
+        },
+      })
+    } else {
+      await prisma.contribution.update({
+        where: { id: contribution.id },
+        data: { statut: 'ANNULE', paymentStatus: 'FAILED', litigeMotif: payment.message ?? 'Échec de la collecte Yelii' },
+      })
+    }
   }
 
   await prisma.auditLog.create({
@@ -169,20 +197,21 @@ router.get('/:id/payment-status', authenticate, requireLevel(2), async (req, res
     return
   }
 
-  if (contribution.modePaiement === 'YELII' && contribution.momoTransactionId) {
-    const remoteStatus = await getYeliiStatus(contribution.momoTransactionId)
-    if (remoteStatus === 'CONFIRMED' && contribution.statut === 'EN_ATTENTE_CONFIRMATION') {
+  if ((YELII_MODES as readonly string[]).includes(contribution.modePaiement) && contribution.externalTransactionId) {
+    const remoteStatus = await getYeliiStatus(contribution.externalTransactionId)
+    if (remoteStatus === 'success' && contribution.statut === 'EN_ATTENTE_CONFIRMATION') {
       const updated = await prisma.contribution.update({
         where: { id: contribution.id },
-        data: { statut: 'CONFIRME', confirmedAt: new Date(), referencePaiement: contribution.referencePaiement ?? contribution.momoTransactionId },
+        data: { statut: 'CONFIRME', paymentStatus: 'SUCCESS', confirmedAt: new Date(), referencePaiement: contribution.referencePaiement ?? contribution.externalTransactionId },
       })
+      await generateReceiptPDF(updated.id)
       res.json({ success: true, data: { id: updated.id, statut: updated.statut } })
       return
     }
-    if (remoteStatus === 'FAILED' && contribution.statut === 'EN_ATTENTE_CONFIRMATION') {
+    if ((remoteStatus === 'failed' || remoteStatus === 'cancelled') && contribution.statut === 'EN_ATTENTE_CONFIRMATION') {
       const updated = await prisma.contribution.update({
         where: { id: contribution.id },
-        data: { statut: 'ANNULE', litigeMotif: 'Paiement Yelii échoué ou annulé.' },
+        data: { statut: 'ANNULE', paymentStatus: 'FAILED', litigeMotif: 'Paiement Yelii échoué ou annulé.' },
       })
       res.json({ success: true, data: { id: updated.id, statut: updated.statut } })
       return
@@ -215,6 +244,8 @@ router.patch('/:id/confirm', authenticate, requireLevel(2), async (req, res) => 
       details: { montant: updated.montant },
     }
   })
+
+  await generateReceiptPDF(updated.id)
 
   res.json({ success: true, data: updated })
 })
@@ -272,7 +303,51 @@ router.patch('/:id/resolve-litige', authenticate, requireLevel(3), async (req, r
     }
   })
 
+  if (resolution === 'CONFIRME') {
+    await generateReceiptPDF(updated.id)
+  }
+
   res.json({ success: true, data: updated })
+})
+
+/**
+ * GET /api/contributions/:id/receipt
+ * Reçu PDF — vue inline par défaut (?download=1 force le téléchargement).
+ * Réutilise le PDF déjà généré s'il existe (webhook/confirmation), sinon le
+ * génère à la volée (auto-guérison pour les contributions confirmées avant
+ * la mise en place de la génération automatique).
+ */
+router.get('/:id/receipt', authenticate, requireLevel(2), async (req, res) => {
+  const id = String(req.params.id)
+  const contribution = await prisma.contribution.findUnique({ where: { id } })
+  if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
+  if (contribution.statut !== 'CONFIRME') {
+    throw new AppError('BUSINESS_RULE', 'Le reçu est disponible uniquement pour les contributions confirmées', 400)
+  }
+
+  let pdfBuffer: Buffer | null = null
+  const apiUrl = process.env.API_URL ?? 'http://localhost:3001'
+
+  if (contribution.receiptUrl?.startsWith(`${apiUrl}/uploads/`)) {
+    const key = contribution.receiptUrl.replace(`${apiUrl}/uploads/`, '')
+    const file = await getFileStream(key)
+    if (file) {
+      const chunks: Buffer[] = []
+      for await (const chunk of file.stream) chunks.push(chunk as Buffer)
+      pdfBuffer = Buffer.concat(chunks)
+    }
+  }
+
+  if (!pdfBuffer) {
+    pdfBuffer = await generateReceiptPdf(id)
+    await generateReceiptPDF(id) // persiste receiptUrl pour les prochains appels
+  }
+
+  const filename = `Recu-CEM-${id.substring(0, 8).toUpperCase()}.pdf`
+  const disposition = req.query.download === '1' ? 'attachment' : 'inline'
+  res.setHeader('Content-Type', 'application/pdf')
+  res.setHeader('Content-Disposition', `${disposition}; filename="${filename}"`)
+  res.send(pdfBuffer)
 })
 
 export { router as contributionsRouter }

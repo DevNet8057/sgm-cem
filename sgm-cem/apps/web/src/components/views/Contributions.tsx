@@ -1,7 +1,7 @@
 'use client'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Activity, AlertTriangle, ChevronsUpDown, Clock, CreditCard, FileText, Filter, Loader2, MapPin, Paperclip, Plus, Search, Wand2, X } from 'lucide-react'
+import { Activity, AlertTriangle, ChevronsUpDown, Clock, CreditCard, Eye, FileText, Filter, Loader2, MapPin, Paperclip, Plus, Search, Wand2, X } from 'lucide-react'
 import api from '@/lib/api'
 import { cn, formatAmount, formatDate, formatDateTime, MODE_PAIEMENT_LABELS } from '@/lib/utils'
 import { useAppStore } from '@/store/appStore'
@@ -14,6 +14,8 @@ import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { Modal } from '@/components/ui/Modal'
 import { queueContribution } from '@/lib/offlineQueue'
 import type { Contribution, Membre, ModePaiement, Rubrique } from '@/types'
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'
 
 const initialForm = {
   membreId: '',
@@ -527,18 +529,27 @@ export function Contributions() {
                             <Paperclip size={11} />
                           </a>
                         )}
-                        {c.statut !== 'ANNULE' && (
-                          <button
-                            onClick={() => downloadReceipt(c.id, c.membre?.user.fullName)}
-                            disabled={receiptLoading === c.id}
-                            title="Télécharger / partager le reçu"
-                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] text-xs font-semibold text-[#1A6B1A] border border-[#1A6B1A]/25 hover:bg-[#E8F5E8] active:scale-95 transition-all disabled:opacity-40"
-                          >
-                            {receiptLoading === c.id
-                              ? <Loader2 size={11} className="animate-spin" />
-                              : <FileText size={11} />}
-                            <span className="hidden sm:inline">Reçu</span>
-                          </button>
+                        {c.statut === 'CONFIRME' && (
+                          <>
+                            <button
+                              onClick={() => window.open(`${API_URL}/contributions/${c.id}/receipt`, '_blank')}
+                              title="Afficher le reçu"
+                              className="flex items-center gap-1 px-2 py-1.5 rounded-[8px] text-xs font-semibold text-[#1A6B1A] border border-[#1A6B1A]/25 hover:bg-[#E8F5E8] active:scale-95 transition-all"
+                            >
+                              <Eye size={11} />
+                            </button>
+                            <button
+                              onClick={() => downloadReceipt(c.id, c.membre?.user.fullName)}
+                              disabled={receiptLoading === c.id}
+                              title="Télécharger / partager le reçu"
+                              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] text-xs font-semibold text-[#1A6B1A] border border-[#1A6B1A]/25 hover:bg-[#E8F5E8] active:scale-95 transition-all disabled:opacity-40"
+                            >
+                              {receiptLoading === c.id
+                                ? <Loader2 size={11} className="animate-spin" />
+                                : <FileText size={11} />}
+                              <span className="hidden sm:inline">Reçu</span>
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>

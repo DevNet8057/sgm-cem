@@ -60,10 +60,10 @@ export async function runPaymentReconciliation(): Promise<{ checked: number; con
     if (status === 'success') {
       await prisma.contribution.update({
         where: { id: contribution.id },
-        data: { statut: 'CONFIRME', confirmedAt: new Date(), paymentStatus: 'SUCCESS' },
+        data: { statut: 'CONFIRME', confirmedAt: new Date(), paymentStatus: 'SUCCESS', localisationFonds: 'REMIS_TRESORIER' },
       })
 
-      const receiptUrl = await generateReceiptPDF(contribution)
+      const receiptUrl = await generateReceiptPDF(contribution.id)
       const msg = `CEM Melen - Paiement confirmé\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${contribution.rubrique.title}\nMerci pour votre contribution !`
       if (memberPhone && receiptUrl) {
         await sendWhatsAppDocument(memberPhone, receiptUrl, msg)
