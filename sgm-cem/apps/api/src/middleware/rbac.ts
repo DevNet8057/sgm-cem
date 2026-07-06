@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express'
 import { AppError } from './errorHandler'
 
 const ROLE_LEVELS: Record<string, number> = {
+  DEVELOPER: 6,
   ADMIN: 5,
   TRESORIER: 4,
   RESPONSABLE: 3,
@@ -44,3 +45,7 @@ export const requireRole = (...roles: string[]) =>
     }
     next()
   }
+
+// Panneau développeur (DEVELOPER_PANEL_SGM_CEM.md) — DEVELOPER uniquement.
+// Ne JAMAIS remplacer par requireLevel(5) : même ADMIN ne doit pas y accéder.
+export const requireDeveloper = requireRole('DEVELOPER')

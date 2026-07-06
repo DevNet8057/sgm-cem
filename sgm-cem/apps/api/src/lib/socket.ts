@@ -1,3 +1,4 @@
+import { getConfig } from '../services/config.service'
 import { Server as SocketIOServer } from 'socket.io'
 import type { Server as HttpServer } from 'http'
 import jwt from 'jsonwebtoken'
@@ -12,7 +13,7 @@ interface JwtPayload {
 let io: SocketIOServer | null = null
 
 export function initSocketIO(server: HttpServer): SocketIOServer {
-  const allowedOrigins = (process.env.APP_URL ?? 'http://localhost:3000')
+  const allowedOrigins = (getConfig('APP_URL') ?? 'http://localhost:3000')
     .split(',')
     .map(o => o.trim())
     .filter(Boolean)

@@ -2,7 +2,7 @@
 import {
   LayoutDashboard, FolderOpen, CreditCard, Wallet, UserCheck, Shield,
   Users, Archive, Briefcase, AlertTriangle, BarChart3, FileText,
-  Bell, Settings, LogOut, X, UserCog, CreditCard as CardIcon, UserCircle,
+  Bell, Settings, LogOut, X, UserCog, CreditCard as CardIcon, UserCircle, Terminal,
 } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { useAuthStore } from '@/store/authStore'
@@ -33,8 +33,10 @@ const NAV_ITEMS = [
   { id: 'rapports',        label: 'Rapports',            icon: FileText,        section: 'OUTILS',       minLevel: 3 },
   { id: 'notifications',   label: 'Notifications',       icon: Bell,            section: 'OUTILS',       minLevel: 1 },
   // ── Système ─────────────────────────────────────────────────────────
-  { id: 'utilisateurs',    label: 'Utilisateurs',        icon: UserCog,         section: 'SYSTEME',      roles: ['ADMIN'] },
-  { id: 'parametres',      label: 'Paramètres',          icon: Settings,        section: 'SYSTEME',      roles: ['ADMIN'] },
+  { id: 'utilisateurs',    label: 'Utilisateurs',        icon: UserCog,         section: 'SYSTEME',      roles: ['ADMIN', 'DEVELOPER'] },
+  { id: 'parametres',      label: 'Paramètres',          icon: Settings,        section: 'SYSTEME',      roles: ['ADMIN', 'DEVELOPER'] },
+  // Panneau développeur — rôle DEVELOPER exclusivement (jamais ADMIN)
+  { id: 'developer',       label: 'Développeur',         icon: Terminal,        section: 'SYSTEME',      roles: ['DEVELOPER'] },
   // ── Mon compte ──────────────────────────────────────────────────────
   { id: 'mon-profil',      label: 'Mon Profil',          icon: UserCircle,      section: 'MON_COMPTE',   minLevel: 1 },
 ]

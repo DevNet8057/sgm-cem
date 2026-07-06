@@ -1,4 +1,16 @@
 import crypto from 'crypto'
+import { getConfig } from './config.service'
+
+// Configuration lue au moment de l'appel (panneau développeur → effet immédiat)
+function getCinetpayConfig() {
+  return {
+    apiKey: getConfig('CINETPAY_API_KEY'),
+    siteId: getConfig('CINETPAY_SITE_ID'),
+    returnUrl: getConfig('PAYMENT_RETURN_URL')
+      ?? `${(getConfig('APP_URL') ?? 'http://localhost:3000').split(',')[0]}/payment/return`,
+    notifyUrl: `${getConfig('API_URL') ?? 'http://localhost:3001'}/webhooks/cinetpay`,
+  }
+}
 
 export async function initiateCinetpayPayment(params: {
   transactionId: string
@@ -7,22 +19,23 @@ export async function initiateCinetpayPayment(params: {
   customerName: string
   customerSurname: string
 }): Promise<{ paymentUrl: string }> {
-  if (!process.env.CINETPAY_API_KEY || !process.env.CINETPAY_SITE_ID) {
-    throw new Error('CinetPay non configuré — CINETPAY_API_KEY et CINETPAY_SITE_ID requis dans .env')
+  const { apiKey, siteId, returnUrl, notifyUrl } = getCinetpayConfig()
+  if (!apiKey || !siteId) {
+    throw new Error('CinetPay non configuré — CINETPAY_API_KEY et CINETPAY_SITE_ID requis (panneau développeur ou .env)')
   }
 
   const response = await fetch('https://api-checkout.cinetpay.com/v2/payment', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      apikey: process.env.CINETPAY_API_KEY,
-      site_id: process.env.CINETPAY_SITE_ID,
+      apikey: apiKey,
+      site_id: siteId,
       transaction_id: params.transactionId,
       amount: params.amount,
       currency: 'XAF',
       description: params.description,
-      return_url: `${(process.env.APP_URL ?? 'http://localhost:3000').split(',')[0]}/payment/return`,
-      notify_url: `${process.env.API_URL ?? 'http://localhost:3001'}/webhooks/cinetpay`,
+      return_url: returnUrl,
+      notify_url: notifyUrl,
       customer_name: params.customerName,
       customer_surname: params.customerSurname,
       channels: 'ALL',
@@ -43,14 +56,15 @@ export async function initiateCinetpayPayment(params: {
  * CinetPay utilise MD5 : MD5(site_id + trans_id + amount + api_key)
  */
 export function verifyCinetpaySignature(body: Record<string, string>): boolean {
-  if (!process.env.CINETPAY_API_KEY) return false
+  const { apiKey } = getCinetpayConfig()
+  if (!apiKey) return false
   const expected = crypto
     .createHash('md5')
     .update(
       (body.cpm_site_id ?? '') +
       (body.cpm_trans_id ?? '') +
       (body.cpm_amount ?? '') +
-      process.env.CINETPAY_API_KEY
+      apiKey
     )
     .digest('hex')
   return body.signature === expected

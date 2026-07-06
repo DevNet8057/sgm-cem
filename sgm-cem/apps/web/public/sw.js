@@ -1,5 +1,5 @@
 /* SGM-CEM Service Worker v2 */
-const CACHE_NAME = 'sgm-cem-v2'
+const CACHE_NAME = 'sgm-cem-v3'
 
 const PRECACHE_URLS = [
   '/',
@@ -57,4 +57,34 @@ self.addEventListener('fetch', event => {
       })
     )
   }
+})
+
+/* ── WEB PUSH — notifications dans la barre système ─────────────────── */
+self.addEventListener('push', event => {
+  let payload = { title: 'SGM-CEM', body: 'Nouvelle notification' }
+  try { payload = { ...payload, ...event.data.json() } } catch { /* payload texte ou vide */ }
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      data: payload.data ?? {},
+      // regrouper les notifications de même type plutôt que d'empiler
+      tag: (payload.data && payload.data.tag) || 'sgm-cem',
+      renotify: true,
+    })
+  )
+})
+
+/* Clic sur la notification : focaliser l'app (ou l'ouvrir) sur le dashboard */
+self.addEventListener('notificationclick', event => {
+  event.notification.close()
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      const existing = list.find(c => c.url.includes(self.location.origin))
+      if (existing) return existing.focus()
+      return clients.openWindow('/dashboard')
+    })
+  )
 })

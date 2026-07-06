@@ -1,4 +1,4 @@
-export type UserRole = 'ADMIN' | 'TRESORIER' | 'RESPONSABLE' | 'ADJOINT_RESPONSABLE' | 'COLLECTEUR' | 'MEMBRE'
+export type UserRole = 'DEVELOPER' | 'ADMIN' | 'TRESORIER' | 'RESPONSABLE' | 'ADJOINT_RESPONSABLE' | 'COLLECTEUR' | 'MEMBRE'
 
 export interface User {
   id: string
@@ -16,6 +16,8 @@ export interface User {
   notificationToken?: string
   lastLoginAt?: string
   createdAt?: string
+  // Id du DEVELOPER initiateur quand la session est une impersonation
+  impersonatedBy?: string | null
 }
 
 export type MembreCategorie = 'MCE_EN_SERVICE' | 'ENFANTS' | 'DIASPORA'

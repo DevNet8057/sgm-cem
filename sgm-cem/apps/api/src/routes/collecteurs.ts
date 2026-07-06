@@ -203,7 +203,7 @@ router.patch('/transfer', authenticate, requireLevel(3), async (req, res) => {
 
 router.patch('/transfer-to-user', authenticate, async (req, res) => {
   const data = transferToUserSchema.parse(req.body)
-  const myRole = req.user!.role as 'ADMIN' | 'TRESORIER' | 'RESPONSABLE' | 'ADJOINT_RESPONSABLE' | 'COLLECTEUR' | 'MEMBRE'
+  const myRole = req.user!.role as 'DEVELOPER' | 'ADMIN' | 'TRESORIER' | 'RESPONSABLE' | 'ADJOINT_RESPONSABLE' | 'COLLECTEUR' | 'MEMBRE'
   const myUserId = req.user!.userId
 
   const targetUser = await prisma.user.findFirst({
@@ -282,9 +282,9 @@ router.patch('/claim', authenticate, async (req, res) => {
   }
   const note = typeof body.note === 'string' ? body.note.slice(0, 500) : undefined
   const myUserId = req.user!.userId
-  const myRole = req.user!.role as 'ADMIN' | 'TRESORIER' | 'RESPONSABLE' | 'ADJOINT_RESPONSABLE' | 'COLLECTEUR' | 'MEMBRE'
+  const myRole = req.user!.role as 'DEVELOPER' | 'ADMIN' | 'TRESORIER' | 'RESPONSABLE' | 'ADJOINT_RESPONSABLE' | 'COLLECTEUR' | 'MEMBRE'
 
-  if (!['TRESORIER', 'COLLECTEUR', 'ADMIN', 'RESPONSABLE', 'ADJOINT_RESPONSABLE'].includes(myRole)) {
+  if (!['TRESORIER', 'COLLECTEUR', 'ADMIN', 'DEVELOPER', 'RESPONSABLE', 'ADJOINT_RESPONSABLE'].includes(myRole)) {
     throw new AppError('INSUFFICIENT_PERMISSIONS', 'Role non autorise', 403)
   }
 

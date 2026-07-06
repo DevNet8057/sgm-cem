@@ -40,7 +40,7 @@ export const getInitials = (fullName: string): string =>
   fullName.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
 
 export const ROLE_LEVELS: Record<string, number> = {
-  ADMIN: 5, TRESORIER: 4, RESPONSABLE: 3,
+  DEVELOPER: 6, ADMIN: 5, TRESORIER: 4, RESPONSABLE: 3,
   ADJOINT_RESPONSABLE: 3, COLLECTEUR: 2, MEMBRE: 1,
 }
 
@@ -51,6 +51,7 @@ export const canAccess = (userRole: string, requiredRoles: string[]): boolean =>
   requiredRoles.includes(userRole)
 
 export const ROLE_LABELS: Record<string, string> = {
+  DEVELOPER: 'Développeur',
   ADMIN: 'Administrateur',
   TRESORIER: 'Trésorier',
   RESPONSABLE: 'Responsable',

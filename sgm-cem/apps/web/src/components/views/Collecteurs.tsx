@@ -49,13 +49,15 @@ export function Collecteurs() {
         (c.localisationFonds === 'REMIS_TRESORIER' || c.localisationFonds === 'EN_CAISSE')
       )
     },
-    enabled: data?.myRole === 'TRESORIER' || data?.myRole === 'ADMIN',
+    enabled: data?.myRole === 'TRESORIER' || data?.myRole === 'ADMIN' || data?.myRole === 'DEVELOPER',
     refetchInterval: 30000,
   })
 
   const myRole = (data?.myRole ?? 'MEMBRE') as UserRole
   const isCollector = myRole === 'COLLECTEUR'
   const isTreasurer = myRole === 'TRESORIER'
+  // L'ADMIN (et le DEVELOPER) voit les preuves de dépôt : références de bordereau
+  const canSeeDeposits = ['TRESORIER', 'ADMIN', 'DEVELOPER'].includes(myRole)
   const eligibleRecipients = data?.eligibleRecipients ?? []
 
   const transferMutation = useMutation({
@@ -356,7 +358,117 @@ export function Collecteurs() {
         </div>
       )}
 
+      {/* B6 : Historique des dépôts — les références de bordereau sont les PREUVES
+          consultables par l'ADMIN (et le trésorier) */}
+      {canSeeDeposits && <BankDepositHistory />}
+
       <TraceSection />
+    </div>
+  )
+}
+
+// ── B6 : Historique des dépôts bancaires (preuves) ─────────────────────
+interface BankDepositEntry {
+  id: string
+  referenceBordereau: string
+  dateBordereau: string | null
+  note: string | null
+  totalAmount: number
+  depositedByName: string
+  createdAt: string
+  contributions: Array<{
+    id: string
+    montant: number
+    modePaiement: string
+    membre?: { user: { fullName: string } }
+    rubrique?: { code: string; title: string }
+  }>
+}
+
+function BankDepositHistory() {
+  const [detail, setDetail] = useState<BankDepositEntry | null>(null)
+  const { data: deposits, isLoading } = useQuery<BankDepositEntry[]>({
+    queryKey: ['bank-deposits'],
+    queryFn: async () => (await api.get('/funds/bank-deposits')).data.data,
+    refetchInterval: 30000,
+  })
+
+  return (
+    <div className="mt-5 bg-white rounded-[18px] border border-gray-100 overflow-hidden">
+      <div className="px-5 py-4"
+        style={{ background: 'linear-gradient(135deg, #0F4A0F, #1A6B1A)' }}>
+        <h3 className="font-display font-semibold text-white text-sm flex items-center gap-2">
+          <Landmark size={16} /> Historique des dépôts bancaires
+        </h3>
+        <p className="text-white/60 text-xs">Chaque référence de bordereau/relevé est la preuve du versement en banque</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-100 bg-gray-50/50">
+              {['Date', 'Réf. bordereau / relevé', 'Montant', 'Déposé par', 'Contributions', ''].map(col => (
+                <th key={col} className="px-4 py-3 text-left text-xs font-semibold text-gray-500">{col}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              Array.from({ length: 3 }).map((_, i) => <SkeletonTableRow key={i} cols={6} />)
+            ) : (deposits?.length ?? 0) === 0 ? (
+              <tr><td colSpan={6}><EmptyState icon={Landmark} title="Aucun dépôt enregistré" description="Les dépôts bancaires du trésorier apparaîtront ici avec leur référence de bordereau." /></td></tr>
+            ) : (
+              (deposits ?? []).map(d => (
+                <tr key={d.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
+                  <td className="px-4 py-3 text-xs text-gray-500">
+                    {formatDateTime(d.createdAt)}
+                    {d.dateBordereau && <p className="text-[10px] text-gray-400">Bordereau : {formatDate(d.dateBordereau)}</p>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="inline-flex items-center gap-1.5 font-mono font-bold text-[#0F4A0F] bg-[#E8F5E8] border border-[#1A6B1A]/20 px-2.5 py-1 rounded-[8px]">
+                      <ShieldCheck size={12} className="text-[#1A6B1A]" />
+                      {d.referenceBordereau}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 font-mono font-bold text-[#0F4A0F]">{formatAmount(d.totalAmount)}</td>
+                  <td className="px-4 py-3 text-xs text-gray-600">{d.depositedByName}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{d.contributions.length} contribution(s)</td>
+                  <td className="px-4 py-3 text-right">
+                    <Button size="sm" variant="ghost" onClick={() => setDetail(d)}>Détail</Button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Détail d'un dépôt : contributions couvertes par la preuve */}
+      <Modal open={!!detail} onClose={() => setDetail(null)} size="lg"
+        title={`Dépôt ${detail?.referenceBordereau ?? ''}`}
+        description={`${formatAmount(detail?.totalAmount ?? 0)} FCFA · déposé par ${detail?.depositedByName ?? ''} · ${detail ? formatDateTime(detail.createdAt) : ''}`}>
+        {detail?.note && <p className="mb-3 text-xs text-gray-500 italic">Note : « {detail.note} »</p>}
+        <div className="max-h-[45vh] overflow-y-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100">
+                {['Membre', 'Rubrique', 'Mode', 'Montant'].map(col => (
+                  <th key={col} className="px-3 py-2 text-left text-xs font-semibold text-gray-500">{col}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {detail?.contributions.map(c => (
+                <tr key={c.id} className="border-b border-gray-50">
+                  <td className="px-3 py-2 text-gray-800">{c.membre?.user.fullName ?? '-'}</td>
+                  <td className="px-3 py-2 text-xs font-mono text-gray-600">{c.rubrique?.code}</td>
+                  <td className="px-3 py-2 text-xs text-gray-500">{MODE_PAIEMENT_LABELS[c.modePaiement] ?? c.modePaiement}</td>
+                  <td className="px-3 py-2 font-mono font-semibold text-[#0F4A0F]">{formatAmount(c.montant)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Modal>
     </div>
   )
 }

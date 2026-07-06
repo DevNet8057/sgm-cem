@@ -7,6 +7,9 @@ interface JwtPayload {
   userId: string
   role: string
   email: string
+  // Présent uniquement quand un DEVELOPER est connecté "en tant que" cet
+  // utilisateur (impersonation) — contient l'id du développeur initiateur.
+  impersonatedBy?: string
 }
 
 declare global {

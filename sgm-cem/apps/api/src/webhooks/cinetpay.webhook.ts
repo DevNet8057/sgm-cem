@@ -93,10 +93,10 @@ async function processCinetpayWebhook(body: Record<string, string>) {
     const receiptUrl = await generateReceiptPDF(contribution.id)
     const msg = `CEM Melen - Paiement par carte confirmé\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${contribution.rubrique.title}\nMerci pour votre contribution !`
 
-    if (memberPhone && receiptUrl) {
-      await sendWhatsAppDocument(memberPhone, receiptUrl, msg)
-    } else if (memberPhone) {
-      await sendWhatsApp(memberPhone, msg)
+    if (memberPhone) {
+      let sent = false
+      if (receiptUrl) sent = await sendWhatsAppDocument(memberPhone, receiptUrl, msg)
+      if (!sent) await sendWhatsApp(memberPhone, msg)
     }
 
     console.info(`[CinetPay] ✅ Paiement confirmé — ${cpm_trans_id}`)

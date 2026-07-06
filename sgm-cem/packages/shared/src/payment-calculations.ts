@@ -32,9 +32,13 @@ export interface AmountWithCommission {
  * ne jamais recevoir moins que le montant dû.
  *
  * Exemple : dueAmount = 5000 → totalToPay = ceil(5000 / 0.975) = 5129 (commission 129).
+ *
+ * @param rate Taux effectif — configurable depuis le panneau développeur
+ *             (clé YELII_COMMISSION_RATE en base). Par défaut le taux statique.
+ *             La FORMULE reste ici l'unique source, jamais dupliquée.
  */
-export function calculateAmountWithCommission(dueAmount: number): AmountWithCommission {
-  const totalToPay = Math.ceil(dueAmount / (1 - YELII_COMMISSION_RATE))
+export function calculateAmountWithCommission(dueAmount: number, rate: number = YELII_COMMISSION_RATE): AmountWithCommission {
+  const totalToPay = Math.ceil(dueAmount / (1 - rate))
   const commissionAmount = totalToPay - dueAmount
   return { dueAmount, commissionAmount, totalToPay }
 }

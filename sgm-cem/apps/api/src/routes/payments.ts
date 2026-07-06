@@ -5,8 +5,9 @@ import { requireLevel } from '../middleware/rbac'
 import { initiateYeliiPayment, retryYeliiCallback } from '../services/yelii.service'
 import { initiateCinetpayPayment } from '../services/cinetpay.service'
 import { generateReceiptPDF } from '../services/receipt'
-import { calculateAmountWithCommission } from '@sgm-cem/shared'
+import { calculateAmountWithCommission, YELII_COMMISSION_RATE } from '@sgm-cem/shared'
 import { getPrisma } from '../lib/prisma'
+import { getConfigBool, getConfigNumber } from '../services/config.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -71,6 +72,11 @@ router.post('/initiate', authenticate, requireLevel(2), async (req, res) => {
 
   // ── MODE MOBILE MONEY (Yelii) ─────────────────────────────────────────────
   if (data.modePaiement === 'YELII') {
+    // Interrupteur section E du panneau développeur
+    if (!getConfigBool('MOBILE_MONEY_ENABLED', true)) {
+      await prisma.contribution.update({ where: { id: contribution.id }, data: { paymentStatus: 'FAILED' } })
+      return res.status(403).json({ success: false, error: 'Le paiement Mobile Money est temporairement désactivé' })
+    }
     if (!data.mobileMoneyPhone || !data.paymentChannel) {
       await prisma.contribution.update({ where: { id: contribution.id }, data: { paymentStatus: 'FAILED' } })
       return res.status(400).json({ success: false, error: 'Numéro de téléphone et réseau requis pour Mobile Money' })
@@ -78,7 +84,12 @@ router.post('/initiate', authenticate, requireLevel(2), async (req, res) => {
 
     // §1bis — Le contributeur supporte la commission Yelii de 2,5 %.
     // On envoie à Yelii le montant MAJORÉ (totalToPay), jamais le montant dû brut.
-    const { totalToPay, commissionAmount } = calculateAmountWithCommission(contribution.montant)
+    // Taux effectif lu en base à CHAQUE appel (panneau développeur, section C) —
+    // la formule reste unique dans @sgm-cem/shared.
+    const { totalToPay, commissionAmount } = calculateAmountWithCommission(
+      contribution.montant,
+      getConfigNumber('YELII_COMMISSION_RATE', YELII_COMMISSION_RATE)
+    )
 
     const payment = await initiateYeliiPayment({
       amount: totalToPay, // ← montant majoré, PAS contribution.montant
@@ -115,6 +126,11 @@ router.post('/initiate', authenticate, requireLevel(2), async (req, res) => {
 
   // ── MODE ESPÈCES — confirmation directe par le collecteur ─────────────────
   if (data.modePaiement === 'ESPECES') {
+    // Interrupteur section E du panneau développeur
+    if (!getConfigBool('CASH_ENABLED', true)) {
+      await prisma.contribution.update({ where: { id: contribution.id }, data: { paymentStatus: 'FAILED' } })
+      return res.status(403).json({ success: false, error: 'Le paiement en espèces est temporairement désactivé' })
+    }
     // RB-02 exception : espèces confirmées sans webhook car l'argent est physiquement présent
     await prisma.contribution.update({
       where: { id: contribution.id },
@@ -179,6 +195,23 @@ router.post('/initiate', authenticate, requireLevel(2), async (req, res) => {
       return res.status(500).json({ success: false, error: message })
     }
   }
+})
+
+/**
+ * GET /api/payments/config
+ * Expose au frontend les paramètres de paiement dynamiques (panneau développeur) :
+ * taux de commission Yelii effectif + interrupteurs de mode. Le frontend NE doit
+ * plus se fier au taux statique compilé (il peut avoir changé en base).
+ */
+router.get('/config', authenticate, async (_req, res) => {
+  res.json({
+    success: true,
+    data: {
+      yeliiCommissionRate: getConfigNumber('YELII_COMMISSION_RATE', YELII_COMMISSION_RATE),
+      mobileMoneyEnabled: getConfigBool('MOBILE_MONEY_ENABLED', true),
+      cashEnabled: getConfigBool('CASH_ENABLED', true),
+    },
+  })
 })
 
 /**

@@ -58,7 +58,7 @@ async function main() {
 
   // ── 1. Admin (gère le cas où il existe déjà avec un autre memberId) ──
   seq = 100  // Partir de 100 pour éviter les conflits avec le memberId admin existant
-  const existingAdmin = await prisma.user.findFirst({ where: { role: 'ADMIN' } })
+  const existingAdmin = await prisma.user.findFirst({ where: { role: { in: ['DEVELOPER', 'ADMIN'] } } })
   if (!existingAdmin) {
     await prisma.user.create({
       data: {
@@ -113,7 +113,7 @@ async function main() {
   ] as const
 
   for (const r of rubriques) {
-    const admin = await prisma.user.findFirst({ where: { role: 'ADMIN' } })
+    const admin = await prisma.user.findFirst({ where: { role: { in: ['DEVELOPER', 'ADMIN'] } } })
     await prisma.rubrique.upsert({
       where: { code: r.code },
       update: {},
@@ -132,7 +132,7 @@ async function main() {
   console.log(`   ✅ ${rubriques.length} rubriques`)
 
   // ── 4. Commissions GED ───────────────────────────────────────────────
-  const admin = await prisma.user.findFirst({ where: { role: 'ADMIN' } })
+  const admin = await prisma.user.findFirst({ where: { role: { in: ['DEVELOPER', 'ADMIN'] } } })
   const commissions = [
     { nom: 'Finance & Trésorerie',       description: 'Gestion financière et comptable' },
     { nom: 'Communication & Médias',     description: 'Communication interne et externe' },
@@ -442,7 +442,7 @@ async function main() {
   }
 
   // ── 10. Notifications d'exemple ─────────────────────────────────────
-  const adminUser = await prisma.user.findFirst({ where: { role: 'ADMIN' } })
+  const adminUser = await prisma.user.findFirst({ where: { role: { in: ['DEVELOPER', 'ADMIN'] } } })
   if (adminUser) {
     const existing = await prisma.notification.count({ where: { userId: adminUser.id } })
     if (existing === 0) {

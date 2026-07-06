@@ -32,7 +32,9 @@
 }
 @keyframes page-enter {
   from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
+  /* transform:none à la fin — un transform persistant (fill-mode both) sur un
+     ancêtre casserait le position:fixed des modals (popup mal positionné). */
+  to   { opacity: 1; transform: none; }
 }
 @keyframes modal-in {
   from { opacity: 0; transform: translateY(32px) scale(0.97); }

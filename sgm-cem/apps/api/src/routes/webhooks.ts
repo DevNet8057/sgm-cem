@@ -1,3 +1,4 @@
+import { getConfig } from '../services/config.service'
 import { Router } from 'express'
 import { PrismaClient } from '@prisma/client'
 import crypto from 'crypto'
@@ -9,7 +10,7 @@ const prisma = new PrismaClient()
 // ── MTN MoMo webhook ─────────────────────────────────────────────────
 router.post('/mtn', async (req, res) => {
   // Vérification signature MTN (X-Callback-Url header)
-  const secret     = process.env.MTN_WEBHOOK_SECRET
+  const secret     = getConfig('MTN_WEBHOOK_SECRET')
   const signature  = req.headers['x-callback-signature'] as string | undefined
   const body       = JSON.stringify(req.body)
 
@@ -140,8 +141,8 @@ router.post('/orange', async (req, res) => {
 })
 
 // ── Orange return/cancel (redirect URLs) ─────────────────────────────
-router.get('/orange/return',  (_req, res) => res.redirect(`${process.env.APP_URL}/dashboard?payment=success`))
-router.get('/orange/cancel',  (_req, res) => res.redirect(`${process.env.APP_URL}/dashboard?payment=cancel`))
+router.get('/orange/return',  (_req, res) => res.redirect(`${(getConfig('APP_URL') ?? 'http://localhost:3000').split(',')[0]}/dashboard?payment=success`))
+router.get('/orange/cancel',  (_req, res) => res.redirect(`${(getConfig('APP_URL') ?? 'http://localhost:3000').split(',')[0]}/dashboard?payment=cancel`))
 
 // Le webhook Yelii vit exclusivement dans apps/api/src/webhooks/yelii.webhook.ts
 // (monté sur /webhooks, body brut requis pour la vérification HMAC — voir index.ts).

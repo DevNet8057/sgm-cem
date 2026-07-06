@@ -1,3 +1,4 @@
+import { getConfig, getConfigBool, getConfigNumber } from '../services/config.service'
 import { Router } from 'express'
 import { z } from 'zod'
 import { PrismaClient } from '@prisma/client'
@@ -7,7 +8,7 @@ import { AppError } from '../middleware/errorHandler'
 import { initiateYeliiPayment, getYeliiStatus } from '../services/yelii.service'
 import { generateReceiptPDF, generateReceiptPdf } from '../services/receipt'
 import { getFileStream } from '../services/storage'
-import { calculateAmountWithCommission } from '@sgm-cem/shared'
+import { calculateAmountWithCommission, YELII_COMMISSION_RATE } from '@sgm-cem/shared'
 
 // Modes réglés via Yelii Pro Pay (Mobile Money). "YELII" est l'option générique
 // du formulaire rapide (opérateur non précisé) — on part sur MTN par défaut dans ce cas.
@@ -144,9 +145,17 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
   }
 
   if ((YELII_MODES as readonly string[]).includes(data.modePaiement) && data.mobileMoneyPhone) {
+    // Interrupteur section E du panneau développeur
+    if (!getConfigBool('MOBILE_MONEY_ENABLED', true)) {
+      return res.status(403).json({ success: false, error: { code: 'DISABLED', message: 'Le paiement Mobile Money est temporairement désactivé' } })
+    }
     // §1bis — Le contributeur supporte la commission Yelii de 2,5 %.
     // On envoie à Yelii le montant MAJORÉ (totalToPay), jamais le montant dû brut.
-    const { totalToPay, commissionAmount } = calculateAmountWithCommission(contribution.montant)
+    // Taux effectif lu en base à CHAQUE appel (panneau développeur, section C).
+    const { totalToPay, commissionAmount } = calculateAmountWithCommission(
+      contribution.montant,
+      getConfigNumber('YELII_COMMISSION_RATE', YELII_COMMISSION_RATE)
+    )
     const channel = yeliiChannelFor(data.modePaiement, data.paymentChannel)
 
     const payment = await initiateYeliiPayment({
@@ -326,7 +335,7 @@ router.get('/:id/receipt', authenticate, requireLevel(2), async (req, res) => {
   }
 
   let pdfBuffer: Buffer | null = null
-  const apiUrl = process.env.API_URL ?? 'http://localhost:3001'
+  const apiUrl = getConfig('API_URL') ?? 'http://localhost:3001'
 
   if (contribution.receiptUrl?.startsWith(`${apiUrl}/uploads/`)) {
     const key = contribution.receiptUrl.replace(`${apiUrl}/uploads/`, '')

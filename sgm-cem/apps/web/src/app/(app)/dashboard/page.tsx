@@ -21,6 +21,7 @@ import { Ged }                  from '@/components/views/Ged'
 import { GestionUtilisateurs }  from '@/components/views/GestionUtilisateurs'
 import { MesContributions }     from '@/components/views/MesContributions'
 import { MonProfil }            from '@/components/views/MonProfil'
+import { Developer }            from '@/components/views/Developer'
 
 function AccessDenied() {
   return (
@@ -39,7 +40,7 @@ export default function AppPage() {
   const { activeView } = useAppStore()
   const { user } = useAuthStore()
   const level = ROLE_LEVELS[user?.role ?? ''] ?? 1
-  const isAdmin  = user?.role === 'ADMIN'
+  const isAdmin  = user?.role === 'ADMIN' || user?.role === 'DEVELOPER'
   const isMembre = user?.role === 'MEMBRE'
 
   // MEMBRE : interface simplifiée
@@ -82,6 +83,8 @@ export default function AppPage() {
     case 'notifications':        return <Notifications />
     case 'parametres':           return level >= 5 ? <Parametres /> : <AccessDenied />
     case 'utilisateurs':         return isAdmin     ? <GestionUtilisateurs /> : <AccessDenied />
+    // Panneau développeur — rôle DEVELOPER EXACT (jamais ADMIN, jamais level >= 5)
+    case 'developer':            return user?.role === 'DEVELOPER' ? <Developer /> : <AccessDenied />
     case 'mon-profil':           return <MonProfil />
     default:                     return <Dashboard />
   }

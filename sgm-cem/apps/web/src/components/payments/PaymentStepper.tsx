@@ -1,9 +1,9 @@
 'use client'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle, Check, CheckCircle2, CreditCard, ExternalLink,
-  Heart, Loader2, RefreshCw, X,
+  FileText, Heart, Loader2, Printer, RefreshCw, Share2, X,
 } from 'lucide-react'
 import api from '@/lib/api'
 import { cn, formatAmount, MODE_PAIEMENT_LABELS } from '@/lib/utils'
@@ -32,6 +32,16 @@ const STEPS = ['Sélection', 'Mode', 'Récapitulatif', 'Résultat']
 
 export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: PaymentStepperProps) {
   const queryClient = useQueryClient()
+
+  // Taux de commission EFFECTIF servi par l'API (panneau développeur —
+  // clé YELII_COMMISSION_RATE en base). Le taux compilé n'est qu'un fallback :
+  // il peut être périmé si le développeur l'a changé sans redéploiement.
+  const { data: paymentConfig } = useQuery({
+    queryKey: ['payments-config'],
+    queryFn: async () => (await api.get('/payments/config')).data.data as { yeliiCommissionRate: number },
+    staleTime: 60_000,
+  })
+  const commissionRate = paymentConfig?.yeliiCommissionRate ?? YELII_COMMISSION_RATE
 
   // Navigation
   const [step, setStep] = useState(0)
@@ -83,8 +93,8 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
   // §1bis — détail transparent de la commission Mobile Money (source unique @sgm-cem/shared).
   // Le contributeur paie le montant majoré ; le montant dû à la rubrique reste `montant`.
   const mmBreakdown = useMemo(
-    () => (isMobileMoney && Number(montant) > 0 ? calculateAmountWithCommission(Number(montant)) : null),
-    [isMobileMoney, montant]
+    () => (isMobileMoney && Number(montant) > 0 ? calculateAmountWithCommission(Number(montant), commissionRate) : null),
+    [isMobileMoney, montant, commissionRate]
   )
 
   // ── Countdown USSD (5 minutes) ────────────────────────────────────────────
@@ -180,7 +190,12 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
         setPayStatus('redirected')
       } else if (d.status === 'SUCCESS' || d.paymentStatus === 'SUCCESS') {
         setPayStatus('confirmed')
-        setTimeout(onSuccess, 2500)
+        // Pas de fermeture automatique : l'utilisateur consulte le reçu
+        // (Partager / Imprimer) puis ferme lui-même.
+        // Récupérer l'URL du reçu généré (espèces : confirmation immédiate)
+        api.get(`/payments/status/${id}`)
+          .then(r => setReceiptUrl(r.data.data.receiptUrl ?? null))
+          .catch(() => {})
       } else {
         setPayStatus('failed')
       }
@@ -399,7 +414,7 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
               {mode === 'ESPECES' && (
                 <div className="rounded-[12px] bg-[#E8F5E8] border border-[#1A6B1A]/20 p-3">
                   <p className="text-xs text-[#0F4A0F]">
-                    La contribution sera enregistrée et confirmée immédiatement. Un reçu sera généré et le membre notifié par WhatsApp.
+                    La contribution sera enregistrée et confirmée immédiatement. Le reçu sera présenté à l&apos;écran — partage et impression possibles.
                   </p>
                 </div>
               )}
@@ -437,7 +452,7 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
                     <span className="font-mono font-semibold text-gray-800">{formatAmount(mmBreakdown.dueAmount)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Frais de transaction ({(YELII_COMMISSION_RATE * 100).toLocaleString('fr-FR')}%)</span>
+                    <span className="text-gray-600">Frais de transaction ({(commissionRate * 100).toLocaleString('fr-FR')}%)</span>
                     <span className="font-mono font-semibold text-gray-800">{formatAmount(mmBreakdown.commissionAmount)}</span>
                   </div>
                   <div className="flex items-center justify-between border-t border-[#F5C400]/50 pt-2">
@@ -470,7 +485,7 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
 
               <div className="flex items-start gap-2 rounded-[12px] bg-[#E8F5E8] border border-[#1A6B1A]/20 px-3 py-2.5 text-xs text-[#0F4A0F]">
                 <CheckCircle2 size={13} className="mt-0.5 shrink-0" />
-                Un reçu PDF sera généré automatiquement et envoyé par WhatsApp après confirmation.
+                Un reçu PDF sera généré automatiquement après confirmation — vous pourrez le voir, le partager ou l&apos;imprimer.
               </div>
             </div>
           )}
@@ -542,7 +557,7 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
                 </div>
               )}
 
-              {/* Paiement confirmé */}
+              {/* Paiement confirmé — le reçu est PRÉSENTÉ (pas envoyé automatiquement) */}
               {payStatus === 'confirmed' && (
                 <div className="py-6 text-center space-y-4">
                   <div className="w-16 h-16 rounded-full bg-[#E8F5E8] flex items-center justify-center mx-auto">
@@ -551,18 +566,48 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
                   <div>
                     <h3 className="font-display font-semibold text-[#0F4A0F] text-xl mb-1">Paiement confirmé !</h3>
                     <p className="text-sm text-gray-500">
-                      La contribution est enregistrée. Le reçu a été envoyé par WhatsApp.
+                      La contribution est enregistrée. Votre reçu est prêt ci-dessous.
                     </p>
                   </div>
-                  {receiptUrl && (
-                    <a
-                      href={receiptUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-[10px] border-2 border-[#1A6B1A] text-[#1A6B1A] text-sm font-semibold hover:bg-[#E8F5E8] transition-colors"
-                    >
-                      Télécharger le reçu PDF
-                    </a>
+                  {receiptUrl ? (
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <a
+                        href={receiptUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-[10px] bg-[#1A6B1A] text-white text-sm font-semibold hover:bg-[#0F4A0F] transition-colors"
+                      >
+                        <FileText size={14} /> Voir le reçu
+                      </a>
+                      <button
+                        onClick={() => {
+                          const w = window.open(receiptUrl, '_blank', 'noopener,noreferrer')
+                          // PDF cross-origin : si print() est bloqué, le lecteur PDF
+                          // du navigateur permet d'imprimer (Ctrl+P)
+                          try { w?.addEventListener('load', () => { try { w.print() } catch { /* viewer */ } }) } catch { /* cross-origin */ }
+                        }}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-[10px] border-2 border-[#1A6B1A] text-[#1A6B1A] text-sm font-semibold hover:bg-[#E8F5E8] transition-colors"
+                      >
+                        <Printer size={14} /> Imprimer
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const text = 'Reçu de contribution — CEM Melen'
+                          if (navigator.share) {
+                            try { await navigator.share({ title: 'Reçu CEM Melen', text, url: receiptUrl }); return } catch { /* partage annulé */ }
+                          }
+                          // Fallback : partage WhatsApp choisi PAR l'utilisateur (pas automatique)
+                          window.open(`https://wa.me/?text=${encodeURIComponent(`${text} : ${receiptUrl}`)}`, '_blank', 'noopener,noreferrer')
+                        }}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-[10px] border-2 border-[#1A6B1A] text-[#1A6B1A] text-sm font-semibold hover:bg-[#E8F5E8] transition-colors"
+                      >
+                        <Share2 size={14} /> Partager
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center gap-2 text-xs text-gray-400">
+                      <Loader2 size={12} className="animate-spin" /> Génération du reçu…
+                    </div>
                   )}
                 </div>
               )}

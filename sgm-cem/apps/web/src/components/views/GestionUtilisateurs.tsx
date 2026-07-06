@@ -2,11 +2,12 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Check, Copy, Edit3, KeyRound, Plus, RefreshCw, Shield,
+  Check, Copy, Edit3, KeyRound, LogIn, Plus, RefreshCw, Shield,
   ToggleLeft, ToggleRight, UserCog, Users, X,
 } from 'lucide-react'
 import api from '@/lib/api'
 import { cn, formatDate, ROLE_LABELS } from '@/lib/utils'
+import { useAuthStore } from '@/store/authStore'
 import { Button } from '@/components/ui/Button'
 import { PasswordInput } from '@/components/ui/PasswordInput'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -27,6 +28,9 @@ const emptyForm = { firstName: '', lastName: '', email: '', phone: '', role: 'ME
 
 export function GestionUtilisateurs() {
   const queryClient = useQueryClient()
+  const { user: currentUser } = useAuthStore()
+  // Bouton "Connecter" (impersonation) : outil réservé au rôle DEVELOPER
+  const isDeveloper = currentUser?.role === 'DEVELOPER'
   const [showCreate, setShowCreate] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [form, setForm] = useState(emptyForm)
@@ -78,6 +82,24 @@ export function GestionUtilisateurs() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
     onError: showApiError,
   })
+
+  // Impersonation — bascule la session vers le compte cible puis recharge
+  // l'app entière (cookie + CSRF + /me + caches React Query resynchronisés).
+  const impersonate = useMutation({
+    mutationFn: async (id: string) => api.post(`/developer/impersonate/${id}`),
+    onSuccess: () => { window.location.reload() },
+    onError: showApiError,
+  })
+
+  function askImpersonate(u: User) {
+    if (window.confirm(
+      `Se connecter en tant que ${u.fullName} (${ROLE_LABELS[u.role] ?? u.role}) ?\n\n` +
+      `Vous verrez l'application exactement comme cet utilisateur (durée max 1 h).\n` +
+      `Cette action est enregistrée dans l'audit.`
+    )) {
+      impersonate.mutate(u.id)
+    }
+  }
 
   const resetPwd = useMutation({
     mutationFn: async () => api.post(`/users/${resetTarget?.id}/reset-password`, {
@@ -214,6 +236,18 @@ export function GestionUtilisateurs() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1.5">
+                        {/* Connecter (impersonation) — DEVELOPER uniquement, cible active non-DEVELOPER */}
+                        {isDeveloper && u.isActive && u.role !== 'DEVELOPER' && u.id !== currentUser?.id && (
+                          <button
+                            title={`Se connecter en tant que ${u.fullName}`}
+                            onClick={() => askImpersonate(u)}
+                            disabled={impersonate.isPending}
+                            className="h-7 px-2 flex items-center gap-1 rounded-[7px] border border-[#0F172A]/20 bg-[#0F172A] text-[#F5C400] text-[10px] font-bold hover:bg-[#1E293B] transition-colors disabled:opacity-50"
+                          >
+                            <LogIn size={11} />
+                            Connecter
+                          </button>
+                        )}
                         <button title="Modifier" onClick={() => startEdit(u)}
                           className="w-7 h-7 flex items-center justify-center rounded-[7px] border border-gray-200 text-gray-500 hover:bg-gray-100 transition-colors">
                           <Edit3 size={12} />

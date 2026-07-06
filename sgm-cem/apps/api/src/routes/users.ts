@@ -11,8 +11,17 @@ const prisma = new PrismaClient()
 
 const DEFAULT_PASSWORD = 'CEM@2026!'
 
+// Hiérarchie DEVELOPER (niveau 6) > ADMIN (niveau 5) : un ADMIN ne peut pas
+// modifier/désactiver/réinitialiser un compte DEVELOPER — sinon il pourrait
+// contourner la restriction du panneau développeur.
+function assertCanManageTarget(requesterRole: string, targetRole: string) {
+  if (targetRole === 'DEVELOPER' && requesterRole !== 'DEVELOPER') {
+    throw new AppError('INSUFFICIENT_PERMISSIONS', 'Seul un DEVELOPER peut gérer un compte DEVELOPER', 403)
+  }
+}
+
 // ── List all users (ADMIN only) ───────────────────────────────────────
-router.get('/', authenticate, requireRole('ADMIN'), async (req, res) => {
+router.get('/', authenticate, requireRole('ADMIN', 'DEVELOPER'), async (req, res) => {
   const users = await prisma.user.findMany({
     select: {
       id: true, memberId: true, firstName: true, lastName: true,
@@ -26,7 +35,7 @@ router.get('/', authenticate, requireRole('ADMIN'), async (req, res) => {
 })
 
 // ── Create user (ADMIN only) ──────────────────────────────────────────
-router.post('/', authenticate, requireRole('ADMIN'), async (req, res) => {
+router.post('/', authenticate, requireRole('ADMIN', 'DEVELOPER'), async (req, res) => {
   const schema = z.object({
     firstName: z.string().min(1),
     lastName:  z.string().min(1),
@@ -86,7 +95,7 @@ router.post('/', authenticate, requireRole('ADMIN'), async (req, res) => {
 })
 
 // ── Update user (ADMIN only) ──────────────────────────────────────────
-router.patch('/:id', authenticate, requireRole('ADMIN'), async (req, res) => {
+router.patch('/:id', authenticate, requireRole('ADMIN', 'DEVELOPER'), async (req, res) => {
   const id = String(req.params.id)
   const schema = z.object({
     firstName: z.string().min(1).optional(),
@@ -99,6 +108,7 @@ router.patch('/:id', authenticate, requireRole('ADMIN'), async (req, res) => {
 
   const user = await prisma.user.findUnique({ where: { id } })
   if (!user) throw new AppError('NOT_FOUND', 'Utilisateur introuvable', 404)
+  assertCanManageTarget(req.user!.role, user.role)
 
   const update: Record<string, unknown> = { ...data }
   if (data.firstName || data.lastName) {
@@ -132,10 +142,11 @@ router.patch('/:id', authenticate, requireRole('ADMIN'), async (req, res) => {
 })
 
 // ── Toggle active (ADMIN only) ────────────────────────────────────────
-router.patch('/:id/toggle-active', authenticate, requireRole('ADMIN'), async (req, res) => {
+router.patch('/:id/toggle-active', authenticate, requireRole('ADMIN', 'DEVELOPER'), async (req, res) => {
   const id = String(req.params.id)
   const user = await prisma.user.findUnique({ where: { id } })
   if (!user) throw new AppError('NOT_FOUND', 'Utilisateur introuvable', 404)
+  assertCanManageTarget(req.user!.role, user.role)
   if (user.id === req.user!.userId) {
     throw new AppError('BUSINESS_RULE', 'Vous ne pouvez pas désactiver votre propre compte', 400)
   }
@@ -150,12 +161,13 @@ router.patch('/:id/toggle-active', authenticate, requireRole('ADMIN'), async (re
 })
 
 // ── Reset password (ADMIN only) ───────────────────────────────────────
-router.post('/:id/reset-password', authenticate, requireRole('ADMIN'), async (req, res) => {
+router.post('/:id/reset-password', authenticate, requireRole('ADMIN', 'DEVELOPER'), async (req, res) => {
   const id = String(req.params.id)
   const { password } = z.object({ password: z.string().min(8).optional() }).parse(req.body)
 
   const user = await prisma.user.findUnique({ where: { id } })
   if (!user) throw new AppError('NOT_FOUND', 'Utilisateur introuvable', 404)
+  assertCanManageTarget(req.user!.role, user.role)
 
   const rawPassword = password ?? DEFAULT_PASSWORD
   const passwordHash = await bcrypt.hash(rawPassword, 12)

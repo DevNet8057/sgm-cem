@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client'
 import { getYeliiStatus } from '../services/yelii.service'
 import { generateReceiptPDF } from '../services/receipt'
 import { sendWhatsAppDocument, sendWhatsApp, alertTresoriers } from '../services/notification'
+import { getConfigNumber } from '../services/config.service'
 
 const prisma = new PrismaClient()
 
@@ -10,13 +11,23 @@ const STALE_AFTER_MS = 15 * 60 * 1000 // 15 minutes
 
 /**
  * I8 — Job de réconciliation failsafe (section 11 Cas 2 du doc paiements).
- * Toutes les 10 minutes, vérifie directement chez Yelii les contributions
- * Mobile Money bloquées en PROCESSING depuis plus de 15 minutes
- * (cas où le webhook n'est jamais arrivé).
+ * Vérifie directement chez Yelii les contributions Mobile Money bloquées en
+ * PROCESSING depuis plus de 15 minutes (cas où le webhook n'est jamais arrivé).
+ *
+ * Fréquence DYNAMIQUE (panneau développeur, section E) : le cron tourne chaque
+ * minute et n'exécute le job que si RECONCILIATION_INTERVAL_MINUTES se sont
+ * écoulées depuis la dernière exécution — un changement de fréquence prend
+ * effet sans redémarrage.
  */
+let lastRunAt = 0
+
 export function schedulePaymentReconciliation(): void {
-  cron.schedule('*/10 * * * *', async () => {
-    console.log('[Cron] Starting payment reconciliation job...')
+  cron.schedule('* * * * *', async () => {
+    const intervalMinutes = Math.max(1, getConfigNumber('RECONCILIATION_INTERVAL_MINUTES', 10))
+    if (Date.now() - lastRunAt < intervalMinutes * 60_000) return
+    lastRunAt = Date.now()
+
+    console.log(`[Cron] Starting payment reconciliation job (intervalle ${intervalMinutes} min)...`)
     try {
       const result = await runPaymentReconciliation()
       console.log(`[Cron] Payment reconciliation complete: ${result.checked} checked, ${result.confirmed} confirmed, ${result.failed} failed.`)
@@ -25,7 +36,7 @@ export function schedulePaymentReconciliation(): void {
     }
   })
 
-  console.log('[Cron] Payment reconciliation job scheduled (every 10 minutes)')
+  console.log('[Cron] Payment reconciliation job scheduled (intervalle dynamique, défaut 10 min)')
 }
 
 export async function runPaymentReconciliation(): Promise<{ checked: number; confirmed: number; failed: number }> {
@@ -65,10 +76,10 @@ export async function runPaymentReconciliation(): Promise<{ checked: number; con
 
       const receiptUrl = await generateReceiptPDF(contribution.id)
       const msg = `CEM Melen - Paiement confirmé\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${contribution.rubrique.title}\nMerci pour votre contribution !`
-      if (memberPhone && receiptUrl) {
-        await sendWhatsAppDocument(memberPhone, receiptUrl, msg)
-      } else if (memberPhone) {
-        await sendWhatsApp(memberPhone, msg)
+      if (memberPhone) {
+        let sent = false
+        if (receiptUrl) sent = await sendWhatsAppDocument(memberPhone, receiptUrl, msg)
+        if (!sent) await sendWhatsApp(memberPhone, msg)
       }
 
       console.info(`[Reconciliation] ✅ ${contribution.externalTransactionId} — confirmé via polling`)

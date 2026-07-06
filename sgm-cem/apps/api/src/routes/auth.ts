@@ -9,10 +9,24 @@ import { AppError } from '../middleware/errorHandler'
 import { authenticate } from '../middleware/auth'
 import { getJwtSecret, getRefreshTokenSecret } from '../lib/security'
 import { sendSMS, sendWhatsApp } from '../services/notification'
+import { getConfig } from '../services/config.service'
 
 const router = Router()
 const prisma = new PrismaClient()
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
+
+// Client Google reconstruit si le Client ID change depuis le panneau
+// développeur (lecture au moment de l'appel, pas au chargement du module).
+let googleClient: OAuth2Client | null = null
+let googleClientId = ''
+
+function getGoogleClient(): OAuth2Client | null {
+  const clientId = getConfig('GOOGLE_CLIENT_ID')
+  if (!clientId) return null
+  if (googleClient && clientId === googleClientId) return googleClient
+  googleClient = new OAuth2Client(clientId)
+  googleClientId = clientId
+  return googleClient
+}
 
 const authLimiter  = rateLimit({ windowMs: 60 * 60 * 1000, max: 10 })
 const otpLimiter   = rateLimit({ windowMs: 10 * 60 * 1000, max: 5, message: { success: false, error: { code: 'RATE_LIMITED', message: 'Trop de tentatives. Attendez 10 minutes.' } } })
@@ -25,12 +39,14 @@ const loginSchema = z.object({
 // ── Cookie helpers ────────────────────────────────────────────────────
 const IS_PROD = process.env.NODE_ENV === 'production'
 
-function setAuthCookies(res: Response, accessToken: string, refreshToken?: string): void {
+// Exporté pour routes/developer.ts (impersonation) — accessMaxAgeMs permet
+// une durée de cookie alignée sur le jeton d'impersonation (1 h).
+export function setAuthCookies(res: Response, accessToken: string, refreshToken?: string, accessMaxAgeMs = 15 * 60 * 1000): void {
   res.cookie('access_token', accessToken, {
     httpOnly: true,
     secure: IS_PROD,
     sameSite: 'strict',
-    maxAge: 15 * 60 * 1000,
+    maxAge: accessMaxAgeMs,
     path: '/',
   })
   if (refreshToken) {
@@ -108,7 +124,7 @@ router.post('/forgot-password', authLimiter, async (req, res) => {
   const user = await prisma.user.findUnique({ where: { email: normalizedEmail } })
 
   // Compte ADMIN actif → récupération via connexion Google (pas de mot de passe à réinitialiser)
-  if (user?.role === 'ADMIN' && user.isActive) {
+  if ((user?.role === 'ADMIN' || user?.role === 'DEVELOPER') && user.isActive) {
     res.json({
       success: true,
       data: {
@@ -121,7 +137,7 @@ router.post('/forgot-password', authLimiter, async (req, res) => {
 
   // Membre (ou compte introuvable/inactif) → contacter l'administrateur
   const admin = await prisma.user.findFirst({
-    where: { role: 'ADMIN', isActive: true },
+    where: { role: { in: ['ADMIN', 'DEVELOPER'] }, isActive: true },
     select: { fullName: true, email: true, phone: true, whatsappPhone: true },
     orderBy: { createdAt: 'asc' },
   })
@@ -243,15 +259,16 @@ router.post('/otp/verify', otpLimiter, async (req, res) => {
 router.post('/google', authLimiter, async (req, res) => {
   const { idToken } = z.object({ idToken: z.string() }).parse(req.body)
 
-  if (!process.env.GOOGLE_CLIENT_ID) {
+  const client = getGoogleClient()
+  if (!client) {
     throw new AppError('SERVER_ERROR', 'Connexion Google non configurée', 503)
   }
 
   let ticket
   try {
-    ticket = await googleClient.verifyIdToken({
+    ticket = await client.verifyIdToken({
       idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
+      audience: getConfig('GOOGLE_CLIENT_ID'),
     })
   } catch {
     throw new AppError('ACCESS_DENIED', 'Token Google invalide ou expiré', 401)
@@ -368,7 +385,51 @@ router.get('/me', authenticate, async (req, res) => {
     },
   })
   if (!user) throw new AppError('NOT_FOUND', 'Utilisateur introuvable', 404)
-  res.json({ success: true, data: user })
+  // Marqueur d'impersonation (bandeau "Revenir à mon compte" côté web).
+  // En impersonation, ne jamais forcer l'écran "changer le mot de passe" du
+  // compte cible : c'est le développeur qui navigue, pas l'utilisateur.
+  const impersonatedBy = req.user!.impersonatedBy ?? null
+  res.json({
+    success: true,
+    data: {
+      ...user,
+      impersonatedBy,
+      mustChangePassword: impersonatedBy ? false : user.mustChangePassword,
+    },
+  })
+})
+
+// ── Fin d'impersonation — retour au compte DEVELOPER initiateur ───────
+router.post('/stop-impersonation', authenticate, async (req, res) => {
+  const developerId = req.user!.impersonatedBy
+  if (!developerId) {
+    throw new AppError('VALIDATION_ERROR', 'Aucune impersonation en cours', 400)
+  }
+
+  const developer = await prisma.user.findUnique({ where: { id: developerId } })
+  // Sécurité : on ne restaure la session que si l'initiateur est TOUJOURS
+  // un DEVELOPER actif (le rôle a pu changer entre-temps).
+  if (!developer || !developer.isActive || developer.role !== 'DEVELOPER') {
+    clearAuthCookies(res)
+    throw new AppError('ACCESS_DENIED', 'Compte développeur initiateur introuvable — reconnectez-vous', 403)
+  }
+
+  await prisma.auditLog.create({
+    data: {
+      userId: developer.id,
+      userName: developer.fullName,
+      action: 'IMPERSONATE',
+      entityType: 'User',
+      entityId: req.user!.userId,
+      details: { action: 'stop', targetEmail: req.user!.email },
+    },
+  })
+
+  const payload = { userId: developer.id, role: developer.role, email: developer.email }
+  const accessToken = jwt.sign(payload, getJwtSecret(), { expiresIn: '15m' })
+  setAuthCookies(res, accessToken)
+
+  res.json({ success: true, data: { user: buildUser(developer) } })
 })
 
 export { router as authRouter }

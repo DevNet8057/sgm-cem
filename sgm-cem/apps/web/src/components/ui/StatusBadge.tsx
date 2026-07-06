@@ -3,7 +3,7 @@ type S =
   | 'CONFIRME' | 'EN_ATTENTE_CONFIRMATION' | 'LITIGE' | 'ANNULE'
   | 'OUVERTE' | 'FERMEE' | 'ARCHIVEE' | 'URGENT' | 'PRIORITAIRE'
   | 'BROUILLON' | 'EN_ATTENTE' | 'APPROUVE' | 'REJETE' | 'ARCHIVE'
-  | 'ADMIN' | 'TRESORIER' | 'RESPONSABLE' | 'ADJOINT_RESPONSABLE' | 'COLLECTEUR' | 'MEMBRE'
+  | 'DEVELOPER' | 'ADMIN' | 'TRESORIER' | 'RESPONSABLE' | 'ADJOINT_RESPONSABLE' | 'COLLECTEUR' | 'MEMBRE'
 
 // Colors aligned with the semantic palette from design system A1
 const STYLE: Record<S, string> = {
@@ -31,6 +31,7 @@ const STYLE: Record<S, string> = {
   APPROUVE:                'bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]',
   REJETE:                  'bg-[#FEF2F2] text-[#991B1B] border-[#FECACA]',
   // Rôles utilisateurs
+  DEVELOPER:           'bg-[#0F172A] text-[#F5C400] border-[#334155]',
   ADMIN:               'bg-[#F3F0FF] text-[#4C1D95] border-[#DDD6FE]',
   TRESORIER:           'bg-[#0F4A0F]  text-[#F5C400] border-[#1A6B1A]',
   RESPONSABLE:         'bg-[#EFF6FF]  text-[#1E40AF] border-[#BFDBFE]',
@@ -46,6 +47,7 @@ const LABEL: Record<S, string> = {
   ARCHIVEE: 'Archivée', ARCHIVE: 'Archivé',
   URGENT: 'URGENT', PRIORITAIRE: 'PRIORITAIRE',
   BROUILLON: 'Brouillon', EN_ATTENTE: 'En attente', APPROUVE: 'Approuvé', REJETE: 'Rejeté',
+  DEVELOPER: 'Développeur',
   ADMIN: 'Administrateur', TRESORIER: 'Trésorier', RESPONSABLE: 'Responsable',
   ADJOINT_RESPONSABLE: 'Adjoint Resp.', COLLECTEUR: 'Collecteur', MEMBRE: 'Membre',
 }

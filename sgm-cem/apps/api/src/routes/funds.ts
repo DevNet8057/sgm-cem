@@ -1,3 +1,4 @@
+import { getConfig } from '../services/config.service'
 import { Router } from 'express'
 import { z } from 'zod'
 import { PrismaClient, FundsTransferStatus } from '@prisma/client'
@@ -105,7 +106,7 @@ router.get('/eligible-receivers', authenticate, requireLevel(2), async (req, res
   const users = await prisma.user.findMany({
     where: {
       isActive: true,
-      role: { in: ['ADMIN', 'TRESORIER', 'RESPONSABLE', 'ADJOINT_RESPONSABLE', 'COLLECTEUR'] },
+      role: { in: ['ADMIN', 'DEVELOPER', 'TRESORIER', 'RESPONSABLE', 'ADJOINT_RESPONSABLE', 'COLLECTEUR'] },
     },
     select: { id: true, fullName: true, email: true, role: true },
     orderBy: [{ role: 'asc' }, { fullName: 'asc' }],
@@ -128,7 +129,7 @@ router.post('/transfer', authenticate, requireLevel(2), async (req, res) => {
     where: {
       id: data.receiverId,
       isActive: true,
-      role: { in: ['ADMIN', 'TRESORIER', 'RESPONSABLE', 'ADJOINT_RESPONSABLE', 'COLLECTEUR'] },
+      role: { in: ['ADMIN', 'DEVELOPER', 'TRESORIER', 'RESPONSABLE', 'ADJOINT_RESPONSABLE', 'COLLECTEUR'] },
     },
     select: { id: true, fullName: true, role: true },
   })
@@ -307,7 +308,7 @@ router.patch('/transfers/:id/confirm', authenticate, requireLevel(2), async (req
 
   // Déterminer la nouvelle localisation selon le rôle du récepteur
   const newLocation: string =
-    ['ADMIN', 'TRESORIER'].includes(userRole) ? 'REMIS_TRESORIER' :
+    ['ADMIN', 'DEVELOPER', 'TRESORIER'].includes(userRole) ? 'REMIS_TRESORIER' :
     ['RESPONSABLE', 'ADJOINT_RESPONSABLE'].includes(userRole) ? 'CHEZ_RESPONSABLE' :
     'CHEZ_COLLECTEUR'
 
@@ -568,7 +569,7 @@ async function notifyTransferRefused(p: {
 
 // ── B6 : Trésorier marque des fonds comme déposés en banque ──────────
 router.patch('/bank-deposit', authenticate, async (req, res) => {
-  if (!['TRESORIER', 'ADMIN'].includes(req.user!.role)) {
+  if (!['TRESORIER', 'ADMIN', 'DEVELOPER'].includes(req.user!.role)) {
     throw new AppError('ACCESS_DENIED', 'Seul le trésorier peut effectuer un dépôt en banque', 403)
   }
 
@@ -596,18 +597,37 @@ router.patch('/bank-deposit', authenticate, async (req, res) => {
 
   const totalAmount = contributions.reduce((sum, c) => sum + c.montant, 0)
 
+  const depositor = await prisma.user.findUnique({
+    where: { id: req.user!.userId },
+    select: { id: true, fullName: true },
+  })
+
+  // Le dépôt est un ENREGISTREMENT consultable (preuve pour l'ADMIN),
+  // plus seulement une ligne d'audit : référence de bordereau/relevé + date +
+  // déposant + contributions liées.
+  const deposit = await prisma.bankDeposit.create({
+    data: {
+      referenceBordereau,
+      dateBordereau: dateBordereau ? new Date(dateBordereau) : null,
+      note,
+      totalAmount,
+      depositedById: req.user!.userId,
+      depositedByName: depositor?.fullName ?? req.user!.email,
+    },
+  })
+
   await prisma.contribution.updateMany({
     where: { id: { in: contributionIds } },
-    data:  { localisationFonds: 'EN_BANQUE' },
+    data:  { localisationFonds: 'EN_BANQUE', bankDepositId: deposit.id },
   })
 
   await prisma.auditLog.create({
     data: {
       userId:     req.user!.userId,
-      userName:   req.user!.email,
+      userName:   depositor?.fullName ?? req.user!.email,
       action:     'TRANSFER',
       entityType: 'BankDeposit',
-      entityId:   referenceBordereau,
+      entityId:   deposit.id,
       details:    {
         contributionIds,
         referenceBordereau,
@@ -620,8 +640,27 @@ router.patch('/bank-deposit', authenticate, async (req, res) => {
 
   res.json({
     success: true,
-    data: { count: contributions.length, totalAmount, referenceBordereau },
+    data: { id: deposit.id, count: contributions.length, totalAmount, referenceBordereau },
   })
+})
+
+// ── B6 : Historique des dépôts bancaires — PREUVES consultables ───────
+// L'ADMIN (et le trésorier) voit chaque dépôt : référence de bordereau/relevé,
+// date, montant, déposant, et le détail des contributions couvertes.
+router.get('/bank-deposits', authenticate, requireLevel(4), async (_req, res) => {
+  const deposits = await prisma.bankDeposit.findMany({
+    include: {
+      contributions: {
+        select: {
+          id: true, montant: true, modePaiement: true,
+          membre: { include: { user: { select: { fullName: true } } } },
+          rubrique: { select: { code: true, title: true } },
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+  res.json({ success: true, data: deposits })
 })
 
 /**
@@ -639,11 +678,11 @@ router.get('/transfers/:id/borderau', authenticate, requireLevel(2), async (req,
   if (transfer.status !== 'CONFIRMED') {
     throw new AppError('BUSINESS_RULE', 'Le bordereau est disponible uniquement pour les transferts confirmés', 400)
   }
-  const canView = transfer.senderId === myUserId || transfer.receiverId === myUserId || ['ADMIN', 'TRESORIER'].includes(myRole)
+  const canView = transfer.senderId === myUserId || transfer.receiverId === myUserId || ['ADMIN', 'DEVELOPER', 'TRESORIER'].includes(myRole)
   if (!canView) throw new AppError('ACCESS_DENIED', 'Accès refusé à ce bordereau', 403)
 
   let pdfBuffer: Buffer | null = null
-  const apiUrl = process.env.API_URL ?? 'http://localhost:3001'
+  const apiUrl = getConfig('API_URL') ?? 'http://localhost:3001'
 
   if (transfer.borderauUrl?.startsWith(`${apiUrl}/uploads/`)) {
     const key = transfer.borderauUrl.replace(`${apiUrl}/uploads/`, '')

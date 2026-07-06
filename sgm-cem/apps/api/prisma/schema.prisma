@@ -10,6 +10,7 @@ datasource db {
 // ─── ENUMS ────────────────────────────────────────────────────────────────────
 
 enum UserRole {
+  DEVELOPER // niveau 6 — accès total + panneau de configuration technique (DEVELOPER_PANEL_SGM_CEM.md)
   ADMIN
   TRESORIER
   RESPONSABLE
@@ -147,6 +148,19 @@ enum AuditAction {
   TRANSFER_CONFIRMED
   TRANSFER_REFUSED
   TRANSFER_CANCELLED
+  DEVELOPER_PANEL_CONFIG_CHANGED // panneau développeur — changement de config technique
+  IMPERSONATE // développeur connecté en tant qu'un autre utilisateur (début/fin)
+}
+
+// Catégories du panneau développeur (DEVELOPER_PANEL_SGM_CEM.md §2)
+enum ConfigCategory {
+  WEBHOOKS          // URLs de callback
+  INTEGRATION_KEYS  // clés API externes
+  FINANCIAL         // taux, commissions
+  INFRASTRUCTURE    // URLs de base, CORS
+  SYSTEM_BEHAVIOR   // délais, fréquences
+  NOTIFICATIONS     // sons, templates
+  FEATURE_FLAGS     // interrupteurs on/off
 }
 
 // ─── MODELS ───────────────────────────────────────────────────────────────────
@@ -180,6 +194,8 @@ model User {
 
   sentTransfers     FundsTransfer[] @relation("FundsTransferSender")
   receivedTransfers FundsTransfer[] @relation("FundsTransferReceiver")
+  bankDeposits      BankDeposit[]   @relation("BankDepositDepositor")
+  pushSubscriptions PushSubscription[]
 
   @@index([email])
   @@index([role])
@@ -305,6 +321,10 @@ model Contribution {
   transferId    String?
   fundsTransfer FundsTransfer? @relation("ContributionTransfer", fields: [transferId], references: [id])
 
+  // Dépôt bancaire (B6) — la référence de bordereau est la preuve consultable
+  bankDepositId String?
+  bankDeposit   BankDeposit? @relation("ContributionBankDeposit", fields: [bankDepositId], references: [id])
+
   membre     Membre   @relation(fields: [membreId], references: [id])
   rubrique   Rubrique @relation(fields: [rubriqueId], references: [id])
   collecteur User?    @relation("CollecteurContributions", fields: [collecteurId], references: [id])
@@ -316,6 +336,44 @@ model Contribution {
   @@index([paymentStatus])
   @@index([createdAt])
   @@map("contributions")
+}
+
+// ─── WEB PUSH — abonnements navigateur ────────────────────────────────────────
+// Un utilisateur peut avoir plusieurs abonnements (PC + téléphone).
+// endpoint est unique : re-souscrire depuis le même navigateur = upsert.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String // clé publique du navigateur
+  auth      String // secret d'authentification du navigateur
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+// ─── B6 : DÉPÔT BANCAIRE ──────────────────────────────────────────────────────
+// Chaque dépôt du trésorier en banque est enregistré avec sa référence de
+// bordereau/relevé : c'est la PREUVE consultable par l'ADMIN (traçabilité).
+model BankDeposit {
+  id                 String    @id @default(cuid())
+  referenceBordereau String // numéro de bordereau / relevé bancaire (preuve)
+  dateBordereau      DateTime? // date figurant sur le bordereau
+  note               String?   @db.Text
+  totalAmount        Int // somme des contributions déposées
+  depositedById      String
+  depositedBy        User      @relation("BankDepositDepositor", fields: [depositedById], references: [id])
+  depositedByName    String // snapshot du nom au moment du dépôt
+  createdAt          DateTime  @default(now())
+
+  contributions Contribution[] @relation("ContributionBankDeposit")
+
+  @@index([createdAt])
+  @@index([referenceBordereau])
+  @@map("bank_deposits")
 }
 
 model FundsTransfer {
@@ -497,6 +555,43 @@ model OtpCode {
 
   @@index([phone])
   @@map("otp_codes")
+}
+
+// ─── PANNEAU DÉVELOPPEUR — CONFIGURATION TECHNIQUE DYNAMIQUE ──────────────────
+// La base de données est la source de vérité à l'exécution ; le .env n'est
+// qu'une valeur de secours au premier démarrage (DEVELOPER_PANEL_SGM_CEM.md).
+// JAMAIS ici : JWT_SECRET, REFRESH_TOKEN_SECRET, CSRF_SECRET, DATABASE_URL.
+
+model SystemConfig {
+  id          String         @id @default(cuid())
+  key         String         @unique // ex: "YELII_WEBHOOK_URL"
+  value       String         @db.Text // la valeur actuelle
+  category    ConfigCategory // pour grouper dans l'interface
+  label       String // libellé humain affiché dans l'UI
+  description String?        @db.Text // aide contextuelle affichée dans l'UI
+  isSecret    Boolean        @default(false) // si true → masqué dans l'UI (••••), jamais en clair
+  isEditable  Boolean        @default(true) // certaines valeurs calculées ne sont pas éditables à la main
+  updatedAt   DateTime       @updatedAt
+  updatedBy   String? // userId du DEVELOPER qui a fait le changement
+
+  @@index([category])
+  @@map("system_configs")
+}
+
+// Historique des changements de configuration — traçabilité
+model SystemConfigHistory {
+  id            String   @id @default(cuid())
+  configKey     String // référence à SystemConfig.key
+  oldValue      String?  @db.Text
+  newValue      String   @db.Text
+  changedBy     String // userId du DEVELOPER
+  changedByName String // snapshot du nom au moment du changement
+  reason        String?  @db.Text // note optionnelle du développeur
+  createdAt     DateTime @default(now())
+
+  @@index([configKey])
+  @@index([createdAt])
+  @@map("system_config_history")
 }
 
 model AuditLog {

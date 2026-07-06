@@ -1,3 +1,4 @@
+import { getConfig } from '../services/config.service'
 import { Router } from 'express'
 import { z } from 'zod'
 import { PrismaClient } from '@prisma/client'
@@ -109,7 +110,7 @@ router.post('/photo', authenticate, upload.single('photo'), async (req, res) => 
   const user = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { photoUrl: true } })
   if (user?.photoUrl) {
     // Extract key from old URL if it contains our API URL pattern
-    const apiUrl = process.env.API_URL ?? 'http://localhost:3001'
+    const apiUrl = getConfig('API_URL') ?? 'http://localhost:3001'
     if (user.photoUrl.startsWith(`${apiUrl}/uploads/`)) {
       const oldKey = user.photoUrl.replace(`${apiUrl}/uploads/`, '')
       await deleteStoredFile(oldKey).catch(() => {})
@@ -129,7 +130,7 @@ router.post('/photo', authenticate, upload.single('photo'), async (req, res) => 
 router.delete('/photo', authenticate, async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { photoUrl: true } })
   if (user?.photoUrl) {
-    const apiUrl = process.env.API_URL ?? 'http://localhost:3001'
+    const apiUrl = getConfig('API_URL') ?? 'http://localhost:3001'
     if (user.photoUrl.startsWith(`${apiUrl}/uploads/`)) {
       const key = user.photoUrl.replace(`${apiUrl}/uploads/`, '')
       await deleteStoredFile(key).catch(() => {})
@@ -141,7 +142,7 @@ router.delete('/photo', authenticate, async (req, res) => {
 
 // ── ADMIN: upload photo pour n'importe quel utilisateur ──────────────
 router.post('/:userId/photo', authenticate, upload.single('photo'), async (req, res) => {
-  if (req.user!.role !== 'ADMIN') throw new AppError('ACCESS_DENIED', 'Réservé aux administrateurs', 403)
+  if (!['ADMIN', 'DEVELOPER'].includes(req.user!.role)) throw new AppError('ACCESS_DENIED', 'Réservé aux administrateurs', 403)
   if (!req.file) throw new AppError('VALIDATION_ERROR', 'Aucun fichier fourni', 400)
 
   const userId = String(req.params.userId)
@@ -153,7 +154,7 @@ router.post('/:userId/photo', authenticate, upload.single('photo'), async (req, 
   const result = await storeFile(key, req.file.buffer, req.file.mimetype)
 
   if (target.photoUrl) {
-    const apiUrl = process.env.API_URL ?? 'http://localhost:3001'
+    const apiUrl = getConfig('API_URL') ?? 'http://localhost:3001'
     if (target.photoUrl.startsWith(`${apiUrl}/uploads/`)) {
       const oldKey = target.photoUrl.replace(`${apiUrl}/uploads/`, '')
       await deleteStoredFile(oldKey).catch(() => {})

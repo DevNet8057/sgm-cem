@@ -1,7 +1,16 @@
 import crypto from 'crypto'
+import { getConfig } from './config.service'
 
-const YELII_BASE = process.env.YELII_BASE_URL ?? 'https://api.yelii.xyz/api/yelii-pro-pay/v1'
-const YELII_COLLECT_API_KEY = process.env.YELII_COLLECT_API_KEY
+// Configuration lue AU MOMENT DE L'APPEL (jamais de constante figée au
+// chargement du module) : un changement depuis le panneau développeur est
+// pris en compte immédiatement, sans redémarrage (DEVELOPER_PANEL §3).
+function getYeliiConfig() {
+  return {
+    baseUrl: getConfig('YELII_BASE_URL') ?? 'https://api.yelii.xyz/api/yelii-pro-pay/v1',
+    apiKey: getConfig('YELII_COLLECT_API_KEY'),
+    webhookUrl: getConfig('YELII_WEBHOOK_URL') ?? `${getConfig('API_URL')}/webhooks/yelii`,
+  }
+}
 
 export interface YeliiPaymentResult {
   success: boolean
@@ -27,8 +36,11 @@ export function verifyYeliiSignature(
   // Rejette les webhooks de plus de 5 minutes (anti-replay)
   if (Math.abs(Date.now() - Number(timestamp)) > 300_000) return false
 
+  const { apiKey } = getYeliiConfig()
+  if (!apiKey) return false
+
   const expected = crypto
-    .createHmac('sha512', YELII_COLLECT_API_KEY!)
+    .createHmac('sha512', apiKey)
     .update(timestamp + rawBody)
     .digest('hex')
 
@@ -51,7 +63,8 @@ export async function initiateYeliiPayment(params: {
   channel: 'orange_money' | 'mtn_money'
 }): Promise<YeliiPaymentResult> {
   try {
-    if (!YELII_COLLECT_API_KEY) {
+    const { baseUrl, apiKey, webhookUrl } = getYeliiConfig()
+    if (!apiKey) {
       return { success: false, transactionId: '', status: 'failed', message: 'Yelii non configuré' }
     }
 
@@ -59,17 +72,17 @@ export async function initiateYeliiPayment(params: {
       ? params.senderPhone.slice(4)
       : params.senderPhone.replace(/\D/g, '')
 
-    const response = await fetch(`${YELII_BASE}/collect/initiate`, {
+    const response = await fetch(`${baseUrl}/collect/initiate`, {
       method: 'POST',
       headers: {
-        'X-Collect-Api-Key': YELII_COLLECT_API_KEY,
+        'X-Collect-Api-Key': apiKey,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         amount: params.amount,
         senderPhone: phone,
         channel: params.channel,
-        callbackUrl: process.env.YELII_WEBHOOK_URL ?? `${process.env.API_URL}/webhooks/yelii`,
+        callbackUrl: webhookUrl,
       }),
     })
 
@@ -95,15 +108,35 @@ export async function initiateYeliiPayment(params: {
 }
 
 /**
+ * Consulte le solde du wallet Yelii — utilisé par le panneau développeur
+ * (« Tester la connexion ») pour vérifier que la clé API fonctionne.
+ */
+export async function getYeliiWalletBalance(): Promise<{ ok: boolean; balance?: number; message?: string }> {
+  const { baseUrl, apiKey } = getYeliiConfig()
+  if (!apiKey) return { ok: false, message: 'Clé API Yelii absente' }
+  try {
+    const response = await fetch(`${baseUrl}/wallet/balance`, {
+      headers: { 'X-Collect-Api-Key': apiKey },
+    })
+    if (!response.ok) return { ok: false, message: `Yelii a répondu HTTP ${response.status}` }
+    const payload = (await response.json().catch(() => ({}))) as { data?: { balance?: number }; balance?: number }
+    return { ok: true, balance: payload?.data?.balance ?? payload?.balance }
+  } catch {
+    return { ok: false, message: 'Connexion à Yelii impossible' }
+  }
+}
+
+/**
  * Rejoue le webhook d'une transaction Yelii (si le serveur était indisponible
  * lors de la notification initiale).
  */
 export async function retryYeliiCallback(transactionId: string): Promise<{ sent: boolean; status?: number }> {
-  if (!YELII_COLLECT_API_KEY) return { sent: false }
+  const { baseUrl, apiKey } = getYeliiConfig()
+  if (!apiKey) return { sent: false }
 
   const response = await fetch(
-    `${YELII_BASE}/collect/callback/retry/${transactionId}`,
-    { method: 'POST', headers: { 'X-Collect-Api-Key': YELII_COLLECT_API_KEY } }
+    `${baseUrl}/collect/callback/retry/${transactionId}`,
+    { method: 'POST', headers: { 'X-Collect-Api-Key': apiKey } }
   )
 
   const payload = (await response.json().catch(() => ({}))) as { callback?: { sent?: boolean; status?: number } }
@@ -116,11 +149,12 @@ export async function retryYeliiCallback(transactionId: string): Promise<{ sent:
  */
 export async function getYeliiStatus(transactionId: string): Promise<'processing' | 'success' | 'failed' | 'cancelled'> {
   try {
-    if (!YELII_COLLECT_API_KEY) return 'failed'
+    const { baseUrl, apiKey } = getYeliiConfig()
+    if (!apiKey) return 'failed'
 
     const response = await fetch(
-      `${YELII_BASE}/collect/status/${transactionId}`,
-      { headers: { 'X-Collect-Api-Key': YELII_COLLECT_API_KEY } }
+      `${baseUrl}/collect/status/${transactionId}`,
+      { headers: { 'X-Collect-Api-Key': apiKey } }
     )
 
     if (!response.ok) return 'failed'

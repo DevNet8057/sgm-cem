@@ -126,6 +126,7 @@ Devise                  : FCFA / XAF — Cameroun
 - RBAC vérifié **côté serveur** sur chaque endpoint API
 - Utiliser `formatAmount()` pour tous les montants (Intl.NumberFormat XAF)
 - Créer un `AuditLog` pour toutes les actions sensibles
+- **Toute configuration technique passe par `services/config.service.ts`** (`getConfig()` appelé AU MOMENT de l'usage, jamais de constante figée au chargement du module) — la table `SystemConfig` est la source de vérité à l'exécution, `.env` n'est qu'un secours au premier démarrage (voir `DEVELOPER_PANEL_SGM_CEM.md`)
 
 ### À ne jamais faire
 - Utiliser Arial, Inter, Roboto comme police principale
@@ -135,6 +136,29 @@ Devise                  : FCFA / XAF — Cameroun
 - Confirmer un paiement MoMo/Orange sans webhook (RB-02)
 - Oublier les animations et micro-interactions
 - Vérifier les permissions uniquement côté client
+- Lire `process.env.XXX` directement dans le code métier (→ `getConfig()`)
+- Mettre `JWT_SECRET`, `REFRESH_TOKEN_SECRET`, `CSRF_SECRET` ou `DATABASE_URL` dans `SystemConfig` — ces secrets restent EXCLUSIVEMENT dans `.env`, jamais en base, jamais affichés
+- Protéger une route du panneau développeur avec `requireLevel(5)` — toujours `requireDeveloper` (même ADMIN n'y accède pas)
+
+---
+
+## RÔLE DEVELOPER + CONFIGURATION DYNAMIQUE (2026-07-05)
+
+Hiérarchie : **DEVELOPER (6)** > ADMIN (5) > TRESORIER (4) > RESPONSABLE / ADJOINT_RESPONSABLE (3) > COLLECTEUR (2) > MEMBRE (1).
+
+- DEVELOPER = mainteneur technique. Il conserve tous les accès ADMIN (les checks `requireRole('ADMIN', 'DEVELOPER')` et les listes de rôles l'incluent) **plus** le panneau développeur (`/api/developer/*`, vue `Developer.tsx`, item sidebar « Développeur »).
+- Un ADMIN ne peut ni attribuer le rôle DEVELOPER (absent des `z.enum` de users.ts) ni modifier/désactiver/réinitialiser un compte DEVELOPER (`assertCanManageTarget`).
+- Élévation : `apps/api/prisma/seed-config.ts` (variable `DEVELOPER_EMAIL`, défaut `ADMIN_EMAIL`).
+
+**Modèles** : `SystemConfig` (clé-valeur, `category` ∈ 7 sections A-G, `isSecret` → masqué ••••, `isEditable`) + `SystemConfigHistory` (traçabilité) + `AuditAction.DEVELOPER_PANEL_CONFIG_CHANGED`.
+
+**Service** : `services/config.service.ts` — `loadConfigCache()` au démarrage (index.ts), `getConfig/getConfigBool/getConfigNumber` (cache → fallback .env), `updateConfig()` (base + historique + audit en transaction, invalidation immédiate du cache → **aucun redémarrage nécessaire**). Clients reconstruits sur changement de config : SMTP (email.ts), Twilio (notification.ts), S3 (storage.ts), Google OAuth (auth.ts).
+
+**Cas d'usage de référence** : `POST /api/developer/config/webhook/recalculate` — recalcule `YELII_WEBHOOK_URL` depuis une nouvelle base (tunnel/domaine) ; le prochain appel Yelii l'utilise immédiatement (prouvé par `scripts/proof-no-restart.cjs`).
+
+**Taux de commission Yelii** : clé `YELII_COMMISSION_RATE` (base) passée en paramètre à `calculateAmountWithCommission(due, rate)` — la formule reste UNIQUE dans `packages/shared`. Le frontend lit le taux effectif via `GET /api/payments/config`.
+
+**Impersonation** : le DEVELOPER peut se connecter à n'importe quel compte via le bouton « Connecter » de Gestion des utilisateurs. `POST /api/developer/impersonate/:userId` (requireDeveloper — cible active, jamais un DEVELOPER) pose un jeton 1 h marqué `impersonatedBy` ; bandeau permanent + `POST /api/auth/stop-impersonation` pour revenir. Chaque bascule est auditée (`AuditAction.IMPERSONATE`). En impersonation : `mustChangePassword` neutralisé, panneau développeur inaccessible (le rôle du jeton est celui de la cible).
 
 ---
 

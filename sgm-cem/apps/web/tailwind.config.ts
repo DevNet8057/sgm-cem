@@ -73,7 +73,10 @@ export default {
         'shimmer':       'shimmer 2s linear infinite',
       },
       keyframes: {
-        'page-enter':    { from: { opacity:'0', transform:'translateY(12px)' }, to: { opacity:'1', transform:'translateY(0)' } },
+        // `to` DOIT finir sur transform:'none' : avec fill-mode `both`, un
+        // transform persistant sur un ancêtre transforme le position:fixed
+        // des modals en positionnement relatif au conteneur (popup mal placé).
+        'page-enter':    { from: { opacity:'0', transform:'translateY(12px)' }, to: { opacity:'1', transform:'none' } },
         'slide-up':      { from: { opacity:'0', transform:'translateY(20px)' }, to: { opacity:'1', transform:'translateY(0)' } },
         'modal-in':      { from: { opacity:'0', transform:'translateY(40px) scale(0.97)' }, to: { opacity:'1', transform:'none' } },
         'toast-in':      { from: { opacity:'0', transform:'translateX(100%)' }, to: { opacity:'1', transform:'none' } },

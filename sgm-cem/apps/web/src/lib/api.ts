@@ -44,6 +44,21 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config
 
+    // Auto-guérison CSRF : si le jeton en mémoire ne correspond plus au cookie
+    // de session (refresh dans un autre onglet, impersonation, dérive quelconque),
+    // resynchroniser puis rejouer UNE fois. Le request interceptor réinjectera
+    // le jeton frais.
+    if (
+      error.response?.status === 403 &&
+      error.response?.data?.error?.code === 'CSRF_INVALID' &&
+      !originalRequest._csrfRetry &&
+      typeof window !== 'undefined'
+    ) {
+      originalRequest._csrfRetry = true
+      await initCsrf()
+      return api.request(originalRequest)
+    }
+
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
@@ -72,6 +87,12 @@ api.interceptors.response.use(
           withCredentials: true,
           headers: csrfToken ? { 'x-csrf-token': csrfToken } : {},
         })
+
+        // CRITIQUE : le refresh vient de poser un NOUVEAU cookie access_token,
+        // or le jeton CSRF est lié à ce cookie (double-submit). Sans cette
+        // resynchronisation, TOUTES les requêtes mutantes suivantes échouent
+        // en 403 « Jeton CSRF invalide » jusqu'au rechargement de la page.
+        await initCsrf()
 
         refreshQueue.forEach((resolve) => resolve())
         refreshQueue = []

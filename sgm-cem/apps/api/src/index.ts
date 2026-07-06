@@ -22,9 +22,13 @@ import { notificationsRouter } from './routes/notifications'
 import { profileRouter } from './routes/profile'
 import { fundsRouter } from './routes/funds'
 import { webhooksRouter } from './routes/webhooks'
+import { developerRouter } from './routes/developer'
+import { usersRouter } from './routes/users'
 import { errorHandler } from './middleware/errorHandler'
 import { paymentsRouter } from './routes/payments'
 import { schedulePaymentReconciliation } from './jobs/payment-reconciliation'
+import { scheduleMonthlyCron } from './services/cron'
+import { loadConfigCache, getConfig, getConfigBool } from './services/config.service'
 
 const app = express()
 const PORT = process.env.PORT ?? 3001
@@ -44,15 +48,16 @@ app.use(helmet({
   },
 }))
 
-const allowedOrigins = (process.env.APP_URL ?? 'http://localhost:3000')
-  .split(',')
-  .map(o => o.trim())
-  .filter(Boolean)
-
 const lanOriginPattern = /^http:\/\/(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)\d+\.\d+:\d+$/
 
 app.use(cors({
   origin: (origin, callback) => {
+    // Origines lues à CHAQUE requête via getConfig — modifiables depuis le
+    // panneau développeur (APP_URL, section D) sans redémarrage.
+    const allowedOrigins = (getConfig('APP_URL') ?? 'http://localhost:3000')
+      .split(',')
+      .map(o => o.trim())
+      .filter(Boolean)
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
     if (process.env.NODE_ENV !== 'production' && lanOriginPattern.test(origin)) return callback(null, true)
     callback(new Error('Not allowed by CORS'))
@@ -104,6 +109,25 @@ app.use('/api', (req: Request, res: Response, next: NextFunction) => {
   doubleCsrfProtection(req, res, next)
 })
 
+// Mode maintenance (panneau développeur, section D) — évalué à chaque requête.
+// Auth + panneau développeur + health restent accessibles pour pouvoir le désactiver.
+app.use('/api', (req: Request, res: Response, next: NextFunction) => {
+  if (!getConfigBool('MAINTENANCE_MODE', false)) return next()
+  if (
+    req.path.startsWith('/auth') ||
+    req.path.startsWith('/developer') ||
+    req.path === '/csrf-token' ||
+    req.path === '/health'
+  ) return next()
+  res.status(503).json({
+    success: false,
+    error: {
+      code: 'MAINTENANCE',
+      message: getConfig('MAINTENANCE_MESSAGE') ?? 'Maintenance en cours — merci de réessayer dans quelques minutes.',
+    },
+  })
+})
+
 app.use('/api/auth', authRouter)
 app.use('/api/membres', membresRouter)
 app.use('/api/rubriques', rubriquesRouter)
@@ -118,16 +142,23 @@ app.use('/api/notifications', notificationsRouter)
 app.use('/api/profile', profileRouter)
 app.use('/api/funds', fundsRouter)
 app.use('/api/webhooks', webhooksRouter)
+app.use('/api/developer', developerRouter) // panneau développeur — requireDeveloper strict
+app.use('/api/users', usersRouter) // gestion des comptes (ADMIN/DEVELOPER) — n'était jamais monté (fix 2026-07-05)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }))
 
 app.use(errorHandler)
 
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
-    console.log(`✅ SGM-CEM API running on port ${PORT}`)
+  // Charger la configuration technique depuis la base AVANT d'accepter du trafic
+  // (DEVELOPER_PANEL_SGM_CEM.md §3 — la DB est la source de vérité à l'exécution)
+  void loadConfigCache().finally(() => {
+    app.listen(PORT, () => {
+      console.log(`✅ SGM-CEM API running on port ${PORT}`)
+    })
+    schedulePaymentReconciliation()
+    scheduleMonthlyCron()
   })
-  schedulePaymentReconciliation()
 }
 
 export default app

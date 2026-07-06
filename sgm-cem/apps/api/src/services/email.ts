@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer'
+import { getConfig, getConfigBool } from './config.service'
 
 export interface EmailOptions {
   to: string
@@ -12,21 +13,26 @@ export interface EmailOptions {
   }>
 }
 
+// Transporter mis en cache par signature de config : si le DEVELOPER change
+// les paramètres SMTP depuis le panneau, le prochain envoi reconstruit le
+// client avec les nouvelles valeurs — sans redémarrage.
 let transporter: nodemailer.Transporter | null = null
+let transporterSignature = ''
 
 function getTransporter(): nodemailer.Transporter | null {
-  if (transporter) return transporter
-
-  const host = process.env.SMTP_HOST
-  const port = parseInt(process.env.SMTP_PORT ?? '587', 10)
-  const secure = process.env.SMTP_SECURE === 'true'
-  const user = process.env.SMTP_USER
-  const pass = process.env.SMTP_PASS
+  const host = getConfig('SMTP_HOST')
+  const port = parseInt(getConfig('SMTP_PORT') ?? '587', 10)
+  const secure = getConfig('SMTP_SECURE') === 'true'
+  const user = getConfig('SMTP_USER')
+  const pass = getConfig('SMTP_PASS')
 
   if (!host || !user || !pass) {
     console.warn('[Email] SMTP non configure (SMTP_HOST/SMTP_USER/SMTP_PASS manquants)')
     return null
   }
+
+  const signature = `${host}|${port}|${secure}|${user}|${pass}`
+  if (transporter && signature === transporterSignature) return transporter
 
   transporter = nodemailer.createTransport({
     host,
@@ -34,17 +40,24 @@ function getTransporter(): nodemailer.Transporter | null {
     secure,
     auth: { user, pass },
   })
+  transporterSignature = signature
 
   return transporter
 }
 
 export async function sendEmail(options: EmailOptions): Promise<boolean> {
   try {
+    // Interrupteur section F du panneau développeur
+    if (!getConfigBool('EMAIL_ENABLED', true)) {
+      console.log('[Email] Désactivé via EMAIL_ENABLED — envoi ignoré')
+      return false
+    }
+
     const client = getTransporter()
     if (!client) return false
 
     await client.sendMail({
-      from: `"CEM Melen" <${process.env.SMTP_FROM ?? process.env.SMTP_USER}>`,
+      from: `"CEM Melen" <${getConfig('SMTP_FROM') ?? getConfig('SMTP_USER')}>`,
       to: options.to,
       subject: options.subject,
       text: options.text,
