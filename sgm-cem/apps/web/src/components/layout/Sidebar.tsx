@@ -2,7 +2,7 @@
 import {
   LayoutDashboard, FolderOpen, CreditCard, Wallet, UserCheck, Shield,
   Users, Archive, Briefcase, AlertTriangle, BarChart3, FileText,
-  Bell, Settings, LogOut, X, UserCog, CreditCard as CardIcon, UserCircle, Terminal,
+  Bell, Settings, LogOut, X, UserCog, CreditCard as CardIcon, UserCircle, Terminal, History,
 } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { useAuthStore } from '@/store/authStore'
@@ -32,6 +32,8 @@ const NAV_ITEMS = [
   { id: 'statistiques',    label: 'Statistiques',        icon: BarChart3,       section: 'OUTILS',       minLevel: 3 },
   { id: 'rapports',        label: 'Rapports',            icon: FileText,        section: 'OUTILS',       minLevel: 3 },
   { id: 'notifications',   label: 'Notifications',       icon: Bell,            section: 'OUTILS',       minLevel: 1 },
+  // Journal d'audit : chacun voit au moins sa propre activité (périmètre élargi par rôle côté API)
+  { id: 'journal',         label: "Journal d'activité",  icon: History,         section: 'OUTILS',       minLevel: 1 },
   // ── Système ─────────────────────────────────────────────────────────
   { id: 'utilisateurs',    label: 'Utilisateurs',        icon: UserCog,         section: 'SYSTEME',      roles: ['ADMIN', 'DEVELOPER'] },
   { id: 'parametres',      label: 'Paramètres',          icon: Settings,        section: 'SYSTEME',      roles: ['ADMIN', 'DEVELOPER'] },

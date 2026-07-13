@@ -8,6 +8,7 @@ import { generateReceiptPDF } from '../services/receipt'
 import { calculateAmountWithCommission, YELII_COMMISSION_RATE } from '@sgm-cem/shared'
 import { getPrisma } from '../lib/prisma'
 import { getConfigBool, getConfigNumber } from '../services/config.service'
+import { audit } from '../services/audit.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -68,6 +69,12 @@ router.post('/initiate', authenticate, requireLevel(2), async (req, res) => {
       localisationFonds: data.modePaiement === 'ESPECES' ? 'CHEZ_COLLECTEUR' : 'EN_TRANSIT',
       mobileMoneyPhone: data.mobileMoneyPhone ?? null,
     },
+  })
+
+  await audit({
+    req, userId: req.user!.userId, userName: req.user!.email,
+    action: 'CREATE', entityType: 'Contribution', entityId: contribution.id,
+    details: { source: 'payment_initiate', montant: data.montant, modePaiement: storedMode },
   })
 
   // ── MODE MOBILE MONEY (Yelii) ─────────────────────────────────────────────

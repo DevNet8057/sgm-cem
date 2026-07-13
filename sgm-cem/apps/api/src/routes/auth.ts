@@ -10,6 +10,7 @@ import { authenticate } from '../middleware/auth'
 import { getJwtSecret, getRefreshTokenSecret } from '../lib/security'
 import { sendSMS, sendWhatsApp } from '../services/notification'
 import { getConfig } from '../services/config.service'
+import { audit } from '../services/audit.service'
 
 const router = Router()
 const prisma = new PrismaClient()
@@ -106,9 +107,24 @@ router.post('/login', authLimiter, async (req, res) => {
   if (!user || !user.isActive) throw new AppError('ACCESS_DENIED', 'Identifiants incorrects', 401)
 
   const valid = await bcrypt.compare(password, user.passwordHash)
-  if (!valid) throw new AppError('ACCESS_DENIED', 'Identifiants incorrects', 401)
+  if (!valid) {
+    // Tentative échouée sur un compte existant : tracée pour détecter les
+    // essais de mot de passe (le compte inexistant, lui, n'est pas traçable).
+    await audit({
+      req, userId: user.id, userName: user.fullName,
+      action: 'LOGIN', entityType: 'Session',
+      details: { method: 'email', success: false, reason: 'wrong_password' },
+    })
+    throw new AppError('ACCESS_DENIED', 'Identifiants incorrects', 401)
+  }
 
   const { accessToken, refreshToken } = await createSessionTokens(user, prisma)
+
+  await audit({
+    req, userId: user.id, userName: user.fullName,
+    action: 'LOGIN', entityType: 'Session',
+    details: { method: 'email', success: true, role: user.role },
+  })
 
   setAuthCookies(res, accessToken, refreshToken)
   res.json({ success: true, data: { user: buildUser(user) } })
@@ -251,6 +267,12 @@ router.post('/otp/verify', otpLimiter, async (req, res) => {
 
   const { accessToken, refreshToken } = await createSessionTokens(user, prisma)
 
+  await audit({
+    req, userId: user.id, userName: user.fullName,
+    action: 'LOGIN', entityType: 'Session',
+    details: { method: 'otp', success: true, role: user.role },
+  })
+
   setAuthCookies(res, accessToken, refreshToken)
   res.json({ success: true, data: { user: buildUser(user) } })
 })
@@ -291,6 +313,12 @@ router.post('/google', authLimiter, async (req, res) => {
   }
 
   const { accessToken, refreshToken } = await createSessionTokens(user, prisma)
+
+  await audit({
+    req, userId: user.id, userName: user.fullName,
+    action: 'LOGIN', entityType: 'Session',
+    details: { method: 'google', success: true, role: user.role },
+  })
 
   setAuthCookies(res, accessToken, refreshToken)
   res.json({ success: true, data: { user: buildUser(user) } })
@@ -371,6 +399,18 @@ router.post('/logout', authenticate, async (req, res) => {
   if (refreshToken) {
     await prisma.userSession.deleteMany({ where: { refreshToken } })
   }
+
+  const user = await prisma.user.findUnique({
+    where: { id: req.user!.userId },
+    select: { id: true, fullName: true },
+  })
+  if (user) {
+    await audit({
+      req, userId: user.id, userName: user.fullName,
+      action: 'LOGOUT', entityType: 'Session',
+    })
+  }
+
   clearAuthCookies(res)
   res.json({ success: true })
 })

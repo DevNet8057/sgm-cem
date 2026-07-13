@@ -22,6 +22,7 @@ import { GestionUtilisateurs }  from '@/components/views/GestionUtilisateurs'
 import { MesContributions }     from '@/components/views/MesContributions'
 import { MonProfil }            from '@/components/views/MonProfil'
 import { Developer }            from '@/components/views/Developer'
+import { Journal }              from '@/components/views/Journal'
 
 function AccessDenied() {
   return (
@@ -49,6 +50,7 @@ export default function AppPage() {
       case 'mes-contributions':
       case 'dashboard':     return <MesContributions />
       case 'notifications': return <Notifications />
+      case 'journal':       return <Journal />
       case 'mon-profil':    return <MonProfil />
       default:              return <MesContributions />
     }
@@ -61,6 +63,7 @@ export default function AppPage() {
       case 'contributions': return <Contributions />
       case 'collecteurs':   return <Collecteurs />
       case 'notifications': return <Notifications />
+      case 'journal':       return <Journal />
       case 'mon-profil':    return <MonProfil />
       default:              return <DashboardCollecteur />
     }
@@ -81,6 +84,7 @@ export default function AppPage() {
     case 'statistiques':         return level >= 3 ? <Statistiques /> : <AccessDenied />
     case 'rapports':             return level >= 3 ? <Rapports />   : <AccessDenied />
     case 'notifications':        return <Notifications />
+    case 'journal':              return <Journal />
     case 'parametres':           return level >= 5 ? <Parametres /> : <AccessDenied />
     case 'utilisateurs':         return isAdmin     ? <GestionUtilisateurs /> : <AccessDenied />
     // Panneau développeur — rôle DEVELOPER EXACT (jamais ADMIN, jamais level >= 5)

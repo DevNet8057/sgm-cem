@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express'
 import { AppError } from './errorHandler'
 
-const ROLE_LEVELS: Record<string, number> = {
+export const ROLE_LEVELS: Record<string, number> = {
   DEVELOPER: 6,
   ADMIN: 5,
   TRESORIER: 4,

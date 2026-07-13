@@ -24,6 +24,7 @@ import { fundsRouter } from './routes/funds'
 import { webhooksRouter } from './routes/webhooks'
 import { developerRouter } from './routes/developer'
 import { usersRouter } from './routes/users'
+import { auditRouter } from './routes/audit'
 import { errorHandler } from './middleware/errorHandler'
 import { paymentsRouter } from './routes/payments'
 import { schedulePaymentReconciliation } from './jobs/payment-reconciliation'
@@ -144,6 +145,7 @@ app.use('/api/funds', fundsRouter)
 app.use('/api/webhooks', webhooksRouter)
 app.use('/api/developer', developerRouter) // panneau développeur — requireDeveloper strict
 app.use('/api/users', usersRouter) // gestion des comptes (ADMIN/DEVELOPER) — n'était jamais monté (fix 2026-07-05)
+app.use('/api/audit', auditRouter) // journal « qui a fait quoi » — périmètre filtré par rôle dans la route
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }))
 
