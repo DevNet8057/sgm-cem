@@ -43,7 +43,7 @@ export function TransferValidations() {
   return (
     <div className="p-4 lg:p-6 pb-safe space-y-6 animate-page-enter">
       <div>
-        <h1 className="font-display text-2xl font-semibold text-gray-900">Validations en attente</h1>
+        <h1 className="font-display text-2xl font-semibold text-gray-900">Fonds à réceptionner</h1>
         <p className="text-gray-500 text-sm mt-1">Transferts de fonds qui vous sont adressés et nécessitent votre confirmation</p>
       </div>
 
