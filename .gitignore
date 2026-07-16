@@ -1,4 +1,10 @@
-.claude/
+# .claude/ est versionné (agents, commandes, hooks, instructions) —
+# seuls les fichiers propres à la machine restent locaux :
+.claude/settings.local.json
+**/.claude/launch.json
+sgm-cem/.claude/
+sgm-cem/packages/**/node_modules/
+sgm-cem/packages/**/dist/
 sgm-cem/node_modules/
 sgm-cem/apps/**/node_modules/
 sgm-cem/apps/**/.next/

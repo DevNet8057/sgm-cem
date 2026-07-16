@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"const {CsrfTokenMismatchError} = require\\('csrf-csrf'\\); console.log\\(typeof CsrfTokenMismatchError, new CsrfTokenMismatchError\\(\\).message\\)\")",
+      "Bash(node -e \"const csrfLib = require\\('csrf-csrf'\\); console.log\\(Object.keys\\(csrfLib\\)\\)\")",
+      "Bash(node -e \"const {CsrfTokenMismatchError} = require\\('csrf-csrf'\\); console.log\\(typeof CsrfTokenMismatchError, new CsrfTokenMismatchError\\(\\).message, new CsrfTokenMismatchError\\(\\).statusCode\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(npx vitest *)",
+      "Read(//tmp/**)",
+      "Bash(grep -v \"^$\")",
+      "Bash(pnpm --filter api add socket.io)",
+      "Bash(pnpm --filter web add socket.io-client)",
+      "Bash(pnpm type-check *)",
+      "Bash(pnpm exec *)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\devne\\.claude\\projects\\c--Users-devne-Documents-project-CF-MELEN\\memory"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/post-write-tsc.sh\"",
+            "timeout": 180
+          },
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/post-write-lint.sh\"",
+            "timeout": 90
+          }
+        ]
+      }
+    ]
+  }
+}

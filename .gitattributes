@@ -1,0 +1,7 @@
+# Fins de ligne LF obligatoires pour les fichiers exécutés sous Linux (Docker)
+# — un script sh avec des CRLF ne démarre pas dans un conteneur.
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+.dockerignore text eol=lf
