@@ -75,7 +75,18 @@ app.use('/webhooks', cinetpayWebhookRouter)
 
 // Fichiers stockés localement (avatars, etc.) quand aucun S3 n'est configuré —
 // voir services/storage.ts : storeFile() écrit ici et renvoie ${API_URL}/uploads/<key>.
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')))
+// Helmet pose Cross-Origin-Resource-Policy: same-origin par défaut, ce qui fait
+// bloquer par le navigateur les <img> du web (APP_URL:3000) vers l'API (:3001).
+// On relâche UNIQUEMENT ici : /uploads est déjà public et non authentifié,
+// le reste de l'API conserve le CORP same-origin de helmet.
+app.use(
+  '/uploads',
+  (_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
+    next()
+  },
+  express.static(path.join(process.cwd(), 'uploads'))
+)
 
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))

@@ -49,3 +49,16 @@ describe('Rate limiting', () => {
     expect(res.status).not.toBe(429)
   })
 })
+
+describe('Static /uploads — embarquable cross-origin (avatars)', () => {
+  it('GET /uploads/* renvoie Cross-Origin-Resource-Policy: cross-origin', async () => {
+    const res = await request(app).get('/uploads/avatars/inexistant.png')
+    // 404 attendu (fichier absent) — c'est l'en-tête qui compte, posé avant express.static
+    expect(res.headers['cross-origin-resource-policy']).toBe('cross-origin')
+  })
+
+  it('les routes /api conservent le CORP same-origin par défaut de helmet', async () => {
+    const res = await request(app).get('/api/health')
+    expect(res.headers['cross-origin-resource-policy']).toBe('same-origin')
+  })
+})
