@@ -69,7 +69,7 @@ function clearAuthCookies(res: Response): void {
 // ── Helper : build token payload ──────────────────────────────────────
 function buildUser(user: {
   id: string; firstName: string; lastName: string; fullName: string
-  email: string; role: string; mustChangePassword: boolean
+  email: string; role: string; mustChangePassword: boolean; photoUrl: string | null
 }) {
   return {
     id: user.id,
@@ -79,6 +79,7 @@ function buildUser(user: {
     email: user.email,
     role: user.role,
     mustChangePassword: user.mustChangePassword,
+    photoUrl: user.photoUrl,
   }
 }
 
@@ -422,6 +423,7 @@ router.get('/me', authenticate, async (req, res) => {
     select: {
       id: true, firstName: true, lastName: true, fullName: true,
       email: true, role: true, lastLoginAt: true, mustChangePassword: true,
+      photoUrl: true,
     },
   })
   if (!user) throw new AppError('NOT_FOUND', 'Utilisateur introuvable', 404)
