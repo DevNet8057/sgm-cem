@@ -1,7 +1,8 @@
 # Ignorer les dossiers de build et dépendances locales
-node_modules
-.next
-dist
+# (** = à TOUS les niveaux — « node_modules » seul ne matche que la racine)
+**/node_modules
+**/.next
+**/dist
 .git
 .github
 .env
@@ -10,15 +11,17 @@ dist
 
 # Fichiers de développement
 *.log
-coverage
+**/coverage
 .nyc_output
 .vscode
 .idea
 .claude
+**/tsc_*.txt
+**/tsconfig.tsbuildinfo
 
-# Fichiers volumineux générés
-uploads/*
-!uploads/.gitkeep
+# Fichiers volumineux générés (les uploads vivent dans un volume monté)
+**/uploads
+apps/api/tests
 
 # caches et OS
 .DS_Store

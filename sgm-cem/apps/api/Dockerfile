@@ -7,8 +7,10 @@
 
 FROM node:20-slim
 
-# ── Étape 1 : apt-get pour Puppeteer / Chromium ───────────────────────
-# Puppeteer a besoin de bibliothèques système pour lancer Chromium
+# ── Étape 1 : apt-get pour Puppeteer / Chromium + Prisma ───────────────
+# Puppeteer a besoin de bibliothèques système pour lancer Chromium.
+# openssl : requis par les moteurs Prisma sur Debian.
+# postgresql-client : pg_isready dans l'entrypoint.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     chromium \
@@ -30,6 +32,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxshmfence1 \
     libxss1 \
     lsb-release \
+    openssl \
     postgresql-client \
     wget \
     xdg-utils \
@@ -42,34 +45,41 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 # ── Étape 3 : Répertoire de travail ────────────────────────────────────
 WORKDIR /app
 
-# ── Étape 4 : Installer les dépendances AVANT copie des sources ────────
-# Pourquoi ? Le cache Docker garde ce layer si package.json ne change pas.
-# Copie uniquement les fichiers de dépendances du workspace racine + api.
+# ── Étape 4 : Manifestes du workspace + package shared ─────────────────
+# Le package @sgm-cem/shared (workspace:*) est une dépendance de l'API :
+# il DOIT être présent avant `pnpm install`, sinon la résolution échoue.
+# Son source est copié aussi car le postinstall racine lance `pnpm build:shared`.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/shared/package.json ./packages/shared/package.json
+COPY packages/shared/tsconfig.json ./packages/shared/tsconfig.json
+COPY packages/shared/src ./packages/shared/src
 COPY apps/api/package.json ./apps/api/package.json
-RUN corepack enable pnpm && pnpm install --filter api --frozen-lockfile
 
-# ── Étape 5 : Copier le code source ────────────────────────────────────
+# ── Étape 5 : Installer les dépendances (api + ses deps workspace) ─────
+# `--filter api...` = api ET ses dépendances workspace (@sgm-cem/shared).
+RUN corepack enable pnpm && pnpm install --filter api... --frozen-lockfile
+
+# ── Étape 6 : Copier le code source de l'API ───────────────────────────
 COPY apps/api/src ./apps/api/src
 COPY apps/api/prisma ./apps/api/prisma
-COPY apps/api/tests ./apps/api/tests
 COPY apps/api/tsconfig.json ./apps/api/tsconfig.json
-COPY apps/api/vitest.config.ts ./apps/api/vitest.config.ts
 
-# ── Étape 6 : Générer le client Prisma (créé les types TypeScript) ─────
-RUN cd /app/apps/api && pnpm prisma generate
+# ── Étape 7 : Générer le client Prisma (crée les types TypeScript) ─────
+RUN cd /app/apps/api && pnpm exec prisma generate
 
-# ── Étape 7 : Builder le TypeScript (autoriser les erreurs d'analyse existantes) ─
-RUN pnpm --filter api build || true
+# ── Étape 8 : Builder le TypeScript ─────────────────────────────────────
+# `|| true` : tsc émet dist/ même avec des erreurs de type connues.
+RUN pnpm --filter api build || true \
+  && test -f /app/apps/api/dist/index.js
 
-# ── Étape 8 : Copier le point d'entrée (migrations avant démarrage) ───
+# ── Étape 9 : Copier le point d'entrée (schéma DB + seed avant démarrage)
 COPY apps/api/docker-entrypoint.sh /app/docker-entrypoint.sh
-RUN chmod +x /app/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh
 
-# ── Étape 9 : Exposer le port ──────────────────────────────────────────
+# ── Étape 10 : Exposer le port ─────────────────────────────────────────
 EXPOSE 3001
 
-# ── Étape 10 : Point d'entrée (migrations puis start) ─────────────────
+# ── Étape 11 : Healthcheck + point d'entrée ────────────────────────────
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3001/health',(r)=>{process.exit(r.statusCode===200?0:1)})" || exit 1
+  CMD node -e "require('http').get('http://localhost:3001/api/health',(r)=>{process.exit(r.statusCode===200?0:1)})" || exit 1
 CMD ["/app/docker-entrypoint.sh"]

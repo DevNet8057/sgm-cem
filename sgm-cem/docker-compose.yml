@@ -97,6 +97,12 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        # Les NEXT_PUBLIC_* sont figées dans le bundle AU BUILD (pas à l'exécution).
+        # GOOGLE_CLIENT_ID est lu depuis le .env racine (interpolation compose).
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     restart: always
     depends_on:
       api:

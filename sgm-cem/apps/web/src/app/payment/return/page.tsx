@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
 import api from '@/lib/api'
@@ -7,7 +7,17 @@ import { cn } from '@/lib/utils'
 
 type Status = 'loading' | 'confirmed' | 'pending' | 'failed'
 
+// useSearchParams() exige une boundary <Suspense> au prérendu (next build) :
+// le contenu réel est dans PaymentReturnContent, la page ne fait que l'envelopper.
 export default function PaymentReturnPage() {
+  return (
+    <Suspense fallback={null}>
+      <PaymentReturnContent />
+    </Suspense>
+  )
+}
+
+function PaymentReturnContent() {
   const params = useSearchParams()
   const router = useRouter()
   const transactionId = params.get('transaction_id') ?? params.get('cpm_trans_id')
