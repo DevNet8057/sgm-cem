@@ -60,7 +60,10 @@ export default {
         'inner-cem':  'inset 0 2px 8px rgba(26,107,26,0.06)',
       },
       animation: {
-        'page-enter':    'page-enter 0.4s cubic-bezier(0.4,0,0.2,1) both',
+        // 'backwards' (PAS 'both') : avec 'both', la valeur animée de transform reste
+        // appliquée après l'animation (matrice identité ≠ none) → l'élément devient le
+        // référentiel des position:fixed descendants → modals poussées hors écran.
+        'page-enter':    'page-enter 0.4s cubic-bezier(0.4,0,0.2,1) backwards',
         'slide-up':      'slide-up 0.35s cubic-bezier(0.4,0,0.2,1) both',
         'modal-in':      'modal-in 0.3s cubic-bezier(0.34,1.56,0.64,1)',
         'toast-in':      'toast-in 0.35s cubic-bezier(0.34,1.56,0.64,1)',

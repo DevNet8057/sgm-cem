@@ -91,7 +91,9 @@
   }
 
   /* ── Staggered entry animation ──────────────────────────────────── */
-  .stagger-children > * { animation: page-enter 0.4s cubic-bezier(0.4,0,0.2,1) both; }
+  /* fill-mode 'backwards' (PAS 'both') : 'both' maintient la transform animée après
+     l'animation (matrice identité, pas none) → casse le position:fixed des modals. */
+  .stagger-children > * { animation: page-enter 0.4s cubic-bezier(0.4,0,0.2,1) backwards; }
   .stagger-children > *:nth-child(1) { animation-delay: 0ms; }
   .stagger-children > *:nth-child(2) { animation-delay: 60ms; }
   .stagger-children > *:nth-child(3) { animation-delay: 120ms; }
@@ -139,7 +141,7 @@
   .pb-safe { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
 
   /* ── Page transition wrapper (A4) ──────────────────────────────── */
-  .page-transition { animation: page-enter 0.25s cubic-bezier(0.4,0,0.2,1) both; }
+  .page-transition { animation: page-enter 0.25s cubic-bezier(0.4,0,0.2,1) backwards; }
 
   /* ── Mobile-first: table → card view ────────────────────────────── */
   @media (max-width: 767px) {
