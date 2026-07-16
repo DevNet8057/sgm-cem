@@ -58,6 +58,6 @@ Des hooks (`.claude/hooks/`) lancent automatiquement type-check et ESLint après
 
 Documentation complémentaire (index : `docs/README.md`) :
 - `docs/reference/` — guides vivants : `GUIDE_SGM_CEM.md`, `PAYMENT_FLOWS_SGM_CEM.md`,
-  `DEVELOPER_PANEL_SGM_CEM.md` (cité par le code via ses `§`), `TEST_PLAN.md`
+  `DEVELOPER_PANEL_SGM_CEM.md` (cité par le code via ses `§`), `TEST_PLAN.md`,
+  `CLAUDE_SGM_CEM.md` (conventions historiques détaillées), `README-DEMARRAGE.md` (dev hors Docker)
 - `docs/archives/` — rapports de chantiers terminés
-- `sgm-cem/CLAUDE_SGM_CEM.md` — conventions historiques détaillées

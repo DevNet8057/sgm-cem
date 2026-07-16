@@ -16,3 +16,5 @@ sgm-cem/*.log
 sgm-cem/api-direct-*.log
 *.log
 *.tsbuildinfo
+# artefacts de debug de compilation (sorties tsc redirigées)
+**/tsc_*.txt
