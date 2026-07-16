@@ -56,5 +56,8 @@ Des hooks (`.claude/hooks/`) lancent automatiquement type-check et ESLint après
 8. Messages utilisateur en français ; code commenté sobrement en français.
 9. Ne jamais exécuter `docker compose down -v` (détruit les données) sans accord explicite.
 
-Documentation historique complémentaire : `sgm-cem/CLAUDE_SGM_CEM.md`, `GUIDE_SGM_CEM.md`,
-`PAYMENT_FLOWS_SGM_CEM.md`, `DEVELOPER_PANEL_SGM_CEM.md`.
+Documentation complémentaire (index : `docs/README.md`) :
+- `docs/reference/` — guides vivants : `GUIDE_SGM_CEM.md`, `PAYMENT_FLOWS_SGM_CEM.md`,
+  `DEVELOPER_PANEL_SGM_CEM.md` (cité par le code via ses `§`), `TEST_PLAN.md`
+- `docs/archives/` — rapports de chantiers terminés
+- `sgm-cem/CLAUDE_SGM_CEM.md` — conventions historiques détaillées
