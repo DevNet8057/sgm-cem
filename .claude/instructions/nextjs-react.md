@@ -17,6 +17,10 @@
 4. **RBAC visuel cohérent** : les rôles d'une entrée Sidebar doivent correspondre au `requireRole` de l'endpoint. Piège récurrent : oublier `DEVELOPER` là où `ADMIN` passe.
 5. **Nouvelle `NEXT_PUBLIC_*`** = triple ajout obligatoire : `apps/web/Dockerfile` (ARG+ENV), `docker-compose.yml` (`build.args`), `.env` racine. Ces variables sont FIGÉES au build Docker.
 6. Types partagés avec l'API : `@sgm-cem/shared` — ne pas dupliquer dans `src/types/`.
+7. **Animations : jamais `animation-fill-mode: both`/`forwards` avec une `transform` sur un
+   conteneur de vue** — la transform animée reste appliquée après l'animation (matrice identité,
+   pas `none`) et le conteneur devient le référentiel des `position:fixed` : toutes les modales
+   se retrouvent hors écran. Utiliser `backwards` (bug corrigé le 2026-07-16, commit aa90c15).
 
 ## Design
 - Tailwind 4. Tokens du projet : verts `#052005`/`#0F4A0F`/`#1A6B1A`, jaune `#F5C400`, fond `#F8FAF8`, cartes blanches `rounded-[24px]` border gray-100, boutons `rounded-[10px]`.
