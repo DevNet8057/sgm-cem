@@ -70,7 +70,7 @@ export function Validations() {
         <div className="absolute inset-y-0 left-0 w-1.5 bg-yellow-400" />
         <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-yellow-600">File d'attente</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-yellow-600">File d&apos;attente</p>
             <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Validations</h2>
             <p className="text-gray-500 text-sm mt-0.5">{validations.length} paiement(s) en attente de confirmation</p>
           </div>

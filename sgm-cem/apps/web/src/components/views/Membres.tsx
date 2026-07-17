@@ -294,7 +294,7 @@ export function Membres() {
 
               {form.coupleMembreId && (
                 <div className="text-xs text-pink-700 bg-pink-100 rounded-[8px] px-3 py-2">
-                  Lors d'une contribution "Couple", le montant sera divisé automatiquement entre les deux membres (50/50).
+                  Lors d&apos;une contribution &quot;Couple&quot;, le montant sera divisé automatiquement entre les deux membres (50/50).
                 </div>
               )}
             </div>

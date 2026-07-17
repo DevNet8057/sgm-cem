@@ -14,6 +14,7 @@ import { membresRouter } from './routes/membres'
 import { rubriquesRouter } from './routes/rubriques'
 import { contributionsRouter } from './routes/contributions'
 import { collecteursRouter } from './routes/collecteurs'
+import { collectesRouter } from './routes/collectes'
 import { commissionsRouter } from './routes/commissions'
 import { prestationsRouter } from './routes/prestations'
 import { statsRouter } from './routes/stats'
@@ -146,6 +147,7 @@ app.use('/api/rubriques', rubriquesRouter)
 app.use('/api/contributions', contributionsRouter)
 app.use('/api/payments', paymentsRouter)
 app.use('/api/collecteurs', collecteursRouter)
+app.use('/api/collectes', collectesRouter)
 app.use('/api/commissions', commissionsRouter)
 app.use('/api/prestations', prestationsRouter)
 app.use('/api/stats', statsRouter)

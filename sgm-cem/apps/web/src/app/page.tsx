@@ -269,7 +269,7 @@ export default function LoginPage() {
             Système de Gestion<br />du Ministère
           </h1>
           <p className="text-white/60 text-sm leading-relaxed mb-10">
-            Culte d'Enfants de Melen · Église Évangélique du Cameroun, Yaoundé
+            Culte d&apos;Enfants de Melen · Église Évangélique du Cameroun, Yaoundé
           </p>
           <div className="grid grid-cols-3 gap-3 mb-10">
             {[{ v:'106+', l:'Membres' },{ v:'11', l:'Rubriques' },{ v:'100%', l:'Traçabilité' }].map(s => (
@@ -281,11 +281,11 @@ export default function LoginPage() {
           </div>
           <div className="rounded-[16px] p-4" style={{ background: 'rgba(245,196,0,0.10)' }}>
             <p className="text-white/80 text-sm leading-relaxed">
-              "La gestion transparente des ressources, au service de la communauté et de la gloire de Dieu."
+              &quot;La gestion transparente des ressources, au service de la communauté et de la gloire de Dieu.&quot;
             </p>
           </div>
         </div>
-        <p className="relative z-10 text-white/40 text-xs italic">"La Marche Ensemble dans l'Unité" · EEC Melen</p>
+        <p className="relative z-10 text-white/40 text-xs italic">&quot;La Marche Ensemble dans l&apos;Unité&quot; · EEC Melen</p>
       </div>
 
       {/* ── Formulaire droite — scrollable sur mobile, centré sur desktop ── */}
@@ -448,7 +448,7 @@ export default function LoginPage() {
             </button>
           )}
 
-          <p className="text-center text-xs text-gray-400 mt-6">SGM-CEM · Culte d'Enfants de Melen · EEC Yaoundé</p>
+          <p className="text-center text-xs text-gray-400 mt-6">SGM-CEM · Culte d&apos;Enfants de Melen · EEC Yaoundé</p>
         </div>
         </div>
       </div>

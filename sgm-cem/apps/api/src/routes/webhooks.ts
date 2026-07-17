@@ -60,20 +60,23 @@ router.post('/mtn', async (req, res) => {
       },
     })
 
-    // Notifier le membre
-    try {
-      const phone = contribution.membre?.user.whatsappPhone ?? contribution.membre?.user.phone
-      const email = contribution.membre?.user.email
-      await notifyMemberConfirmed({
-        userId:       contribution.membre!.user.id,
-        memberPhone:  phone,
-        memberEmail:  email,
-        memberName:   contribution.membre!.user.fullName,
-        montant:      contribution.montant,
-        rubriqueCode: contribution.rubrique?.code ?? '',
-        contributionId: contribution.id,
-      })
-    } catch (e) { console.error('[Webhook MTN notif]', e) }
+    // Notifier le membre — les contributions publiques (sans membre) n'ont pas de
+    // notification in-app ici : le contributeur externe est notifié par le flux Yelii.
+    if (contribution.membre) {
+      try {
+        const phone = contribution.membre.user.whatsappPhone ?? contribution.membre.user.phone
+        const email = contribution.membre.user.email
+        await notifyMemberConfirmed({
+          userId:       contribution.membre.user.id,
+          memberPhone:  phone,
+          memberEmail:  email,
+          memberName:   contribution.membre.user.fullName,
+          montant:      contribution.montant,
+          rubriqueCode: contribution.rubrique?.code ?? '',
+          contributionId: contribution.id,
+        })
+      } catch (e) { console.error('[Webhook MTN notif]', e) }
+    }
   }
 
   if (status === 'FAILED' && contribution.statut === 'EN_ATTENTE_CONFIRMATION') {
@@ -122,19 +125,23 @@ router.post('/orange', async (req, res) => {
       },
     })
 
-    try {
-      const phone = contribution.membre?.user.whatsappPhone ?? contribution.membre?.user.phone
-      const email = contribution.membre?.user.email
-      await notifyMemberConfirmed({
-        userId:       contribution.membre!.user.id,
-        memberPhone:  phone,
-        memberEmail:  email,
-        memberName:   contribution.membre!.user.fullName,
-        montant:      contribution.montant,
-        rubriqueCode: contribution.rubrique?.code ?? '',
-        contributionId: contribution.id,
-      })
-    } catch (e) { console.error('[Webhook Orange notif]', e) }
+    // Contributions publiques (sans membre) : pas de notification in-app ici,
+    // le contributeur externe est notifié par le flux Yelii.
+    if (contribution.membre) {
+      try {
+        const phone = contribution.membre.user.whatsappPhone ?? contribution.membre.user.phone
+        const email = contribution.membre.user.email
+        await notifyMemberConfirmed({
+          userId:       contribution.membre.user.id,
+          memberPhone:  phone,
+          memberEmail:  email,
+          memberName:   contribution.membre.user.fullName,
+          montant:      contribution.montant,
+          rubriqueCode: contribution.rubrique?.code ?? '',
+          contributionId: contribution.id,
+        })
+      } catch (e) { console.error('[Webhook Orange notif]', e) }
+    }
   }
 
   res.sendStatus(200)

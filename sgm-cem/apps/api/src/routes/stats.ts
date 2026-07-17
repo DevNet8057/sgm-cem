@@ -85,15 +85,20 @@ export async function computeDashboardStats(requestedYear?: number) {
   const rubriqueMap = new Map<string, { rubriqueId: string; code: string; title: string; targetAmount?: number; total: number; count: number }>()
 
   for (const contribution of confirmedContributions) {
-    const contributor = topContributorsMap.get(contribution.membreId) ?? {
-      membreId: contribution.membreId,
-      fullName: contribution.membre.user.fullName,
-      total: 0,
-      count: 0,
+    // Contributions publiques sans membre (contributeurs externes) : exclues du classement
+    // "top contributeurs" qui ne concerne que les membres — elles restent comptées dans
+    // les totaux par mode de paiement et par rubrique ci-dessous.
+    if (contribution.membre && contribution.membreId) {
+      const contributor = topContributorsMap.get(contribution.membreId) ?? {
+        membreId: contribution.membreId,
+        fullName: contribution.membre.user.fullName,
+        total: 0,
+        count: 0,
+      }
+      contributor.total += contribution.montant
+      contributor.count += 1
+      topContributorsMap.set(contribution.membreId, contributor)
     }
-    contributor.total += contribution.montant
-    contributor.count += 1
-    topContributorsMap.set(contribution.membreId, contributor)
 
     const mode = modeMap.get(contribution.modePaiement) ?? {
       modePaiement: contribution.modePaiement,

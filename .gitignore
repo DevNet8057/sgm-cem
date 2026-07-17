@@ -18,3 +18,5 @@ sgm-cem/api-direct-*.log
 *.tsbuildinfo
 # artefacts de debug de compilation (sorties tsc redirigées)
 **/tsc_*.txt
+# sauvegardes de base de données locales
+sgm-cem/backup_*.sql

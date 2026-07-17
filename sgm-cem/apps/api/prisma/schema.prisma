@@ -73,11 +73,11 @@ enum ContributionStatut {
 }
 
 enum PaymentStatus {
-  PENDING       // Contribution créée, paiement pas encore initié
-  PROCESSING    // Demande envoyée à Yelii/CinetPay, en attente PIN/validation
-  SUCCESS       // Paiement confirmé par le prestataire (webhook reçu)
-  FAILED        // Paiement refusé ou expiré
-  CANCELLED     // Annulé manuellement avant confirmation
+  PENDING // Contribution créée, paiement pas encore initié
+  PROCESSING // Demande envoyée à Yelii/CinetPay, en attente PIN/validation
+  SUCCESS // Paiement confirmé par le prestataire (webhook reçu)
+  FAILED // Paiement refusé ou expiré
+  CANCELLED // Annulé manuellement avant confirmation
 }
 
 enum ModePaiement {
@@ -154,13 +154,18 @@ enum AuditAction {
 
 // Catégories du panneau développeur (DEVELOPER_PANEL_SGM_CEM.md §2)
 enum ConfigCategory {
-  WEBHOOKS          // URLs de callback
-  INTEGRATION_KEYS  // clés API externes
-  FINANCIAL         // taux, commissions
-  INFRASTRUCTURE    // URLs de base, CORS
-  SYSTEM_BEHAVIOR   // délais, fréquences
-  NOTIFICATIONS     // sons, templates
-  FEATURE_FLAGS     // interrupteurs on/off
+  WEBHOOKS // URLs de callback
+  INTEGRATION_KEYS // clés API externes
+  FINANCIAL // taux, commissions
+  INFRASTRUCTURE // URLs de base, CORS
+  SYSTEM_BEHAVIOR // délais, fréquences
+  NOTIFICATIONS // sons, templates
+  FEATURE_FLAGS // interrupteurs on/off
+}
+
+enum DraftStatut {
+  ACTIF
+  CONVERTI
 }
 
 // ─── MODELS ───────────────────────────────────────────────────────────────────
@@ -192,9 +197,9 @@ model User {
   documents        Document[]
   sessions         UserSession[]
 
-  sentTransfers     FundsTransfer[] @relation("FundsTransferSender")
-  receivedTransfers FundsTransfer[] @relation("FundsTransferReceiver")
-  bankDeposits      BankDeposit[]   @relation("BankDepositDepositor")
+  sentTransfers     FundsTransfer[]    @relation("FundsTransferSender")
+  receivedTransfers FundsTransfer[]    @relation("FundsTransferReceiver")
+  bankDeposits      BankDeposit[]      @relation("BankDepositDepositor")
   pushSubscriptions PushSubscription[]
 
   @@index([email])
@@ -272,15 +277,75 @@ model Rubrique {
   creator       User?          @relation(fields: [createdById], references: [id])
   contributions Contribution[]
 
+  collectePublique CollectePublique?
+
   @@index([status])
   @@index([fiscalYear])
   @@index([priority])
   @@map("rubriques")
 }
 
+// ─── COLLECTE PUBLIQUE — lien de contribution ouvert sans compte ──────────────
+model CollectePublique {
+  id                  String   @id @default(cuid())
+  rubriqueId          String   @unique // 1-1 : la Rubrique reste l'unité comptable
+  publicSlug          String   @unique // ex: "collecte-toiture-2026"
+  titre               String
+  description         String?  @db.Text
+  champsPersonnalises Json
+  montantMin          Int?
+  montantsSuggeres    Int[]    @default([])
+  isActive            Boolean  @default(true) // contrôle l'exposition du lien public uniquement
+  createdById         String
+  createdByName       String // snapshot (pattern Rubrique)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  rubrique Rubrique        @relation(fields: [rubriqueId], references: [id])
+  drafts   CollecteDraft[]
+
+  @@index([isActive])
+  @@map("collectes_publiques")
+}
+
+model ContributeurExterne {
+  id        String   @id @default(cuid())
+  nom       String
+  phone     String // E.164 normalisé (+237…)
+  email     String?
+  createdAt DateTime @default(now())
+
+  contributions Contribution[]
+
+  @@index([phone])
+  @@map("contributeurs_externes")
+}
+
+model CollecteDraft {
+  id             String      @id @default(cuid())
+  collecteId     String
+  tokenHash      String      @unique // sha256(token 32 octets) — jamais le token en clair
+  nom            String?
+  phone          String?
+  email          String?
+  montant        Int?
+  valeursChamps  Json?
+  statut         DraftStatut @default(ACTIF)
+  contributionId String?     @unique // posé à la conversion en Contribution — sert d'anti double-clic
+  expiresAt      DateTime // now + 7 j, prolongé à chaque sauvegarde
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  collecte CollectePublique @relation(fields: [collecteId], references: [id])
+
+  @@index([phone])
+  @@index([expiresAt])
+  @@map("collecte_drafts")
+}
+
 model Contribution {
   id                String             @id @default(cuid())
-  membreId          String
+  membreId          String?
   rubriqueId        String
   collecteurId      String?
   montant           Int
@@ -293,8 +358,12 @@ model Contribution {
   mobileMoneyPhone  String?
   momoTransactionId String?
 
+  // ── Collecte publique — contributeur externe sans compte ────────────────────
+  contributeurExterneId String? // XOR avec membreId — exactement l'un des deux, validé applicativement
+  valeursChamps         Json? // réponses aux champs personnalisés d'une collecte publique
+
   // ── Champs pour les paiements en ligne (Yelii / CinetPay) ──────────────────
-  externalTransactionId String?       @unique
+  externalTransactionId String?        @unique
   paymentStatus         PaymentStatus? @default(PENDING)
   netAmount             Int?
   paymentUrl            String?
@@ -314,8 +383,8 @@ model Contribution {
   receiptSentAt   DateTime?
   proofUrl        String?
   proofUploadedAt DateTime?
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   // Transfer reference
   transferId    String?
@@ -325,13 +394,15 @@ model Contribution {
   bankDepositId String?
   bankDeposit   BankDeposit? @relation("ContributionBankDeposit", fields: [bankDepositId], references: [id])
 
-  membre     Membre   @relation(fields: [membreId], references: [id])
-  rubrique   Rubrique @relation(fields: [rubriqueId], references: [id])
-  collecteur User?    @relation("CollecteurContributions", fields: [collecteurId], references: [id])
+  membre              Membre?              @relation(fields: [membreId], references: [id])
+  rubrique            Rubrique             @relation(fields: [rubriqueId], references: [id])
+  collecteur          User?                @relation("CollecteurContributions", fields: [collecteurId], references: [id])
+  contributeurExterne ContributeurExterne? @relation(fields: [contributeurExterneId], references: [id])
 
   @@index([statut])
   @@index([membreId])
   @@index([rubriqueId])
+  @@index([contributeurExterneId])
   @@index([externalTransactionId])
   @@index([paymentStatus])
   @@index([createdAt])
@@ -548,6 +619,7 @@ model OtpCode {
   id        String   @id @default(cuid())
   phone     String
   code      String
+  purpose   String   @default("LOGIN") // LOGIN | DRAFT_RECOVERY — empêche le rejeu d'un code entre flux
   attempts  Int      @default(0)
   used      Boolean  @default(false)
   expiresAt DateTime

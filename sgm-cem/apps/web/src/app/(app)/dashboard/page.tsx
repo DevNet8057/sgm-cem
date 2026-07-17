@@ -11,6 +11,7 @@ import { Collecteurs }          from '@/components/views/Collecteurs'
 import { Membres }              from '@/components/views/Membres'
 import { Validations }          from '@/components/views/Validations'
 import { TransferValidations }  from '@/components/views/TransferValidations'
+import { CollectesPubliques }   from '@/components/views/CollectesPubliques'
 import { Litiges }              from '@/components/views/Litiges'
 import { Statistiques }         from '@/components/views/Statistiques'
 import { Rapports }             from '@/components/views/Rapports'
@@ -30,8 +31,8 @@ function AccessDenied() {
       <div className="w-20 h-20 bg-red-50 rounded-[20px] flex items-center justify-center text-3xl">🔒</div>
       <h2 className="font-display font-semibold text-[#0F4A0F] text-xl">Accès restreint</h2>
       <p className="text-gray-400 text-sm max-w-xs">
-        Vous n'avez pas les droits nécessaires pour accéder à cette section.
-        Contactez votre administrateur si vous pensez que c'est une erreur.
+        Vous n&apos;avez pas les droits nécessaires pour accéder à cette section.
+        Contactez votre administrateur si vous pensez que c&apos;est une erreur.
       </p>
     </div>
   )
@@ -78,6 +79,8 @@ export default function AppPage() {
     case 'collecteurs':          return level >= 3 ? <Collecteurs /> : <AccessDenied />
     case 'validations':          return level >= 2 ? <Validations /> : <AccessDenied />
     case 'transfer-validations': return level >= 2 ? <TransferValidations /> : <AccessDenied />
+    // Collectes publiques : création/gestion Admin + Trésorier (+ Développeur) — rôles exacts, pas de niveau
+    case 'collectes-publiques':  return isAdmin || user?.role === 'TRESORIER' ? <CollectesPubliques /> : <AccessDenied />
     case 'ged':                  return level >= 2 ? <Ged />        : <AccessDenied />
     case 'prestations':          return level >= 2 ? <Prestations /> : <AccessDenied />
     case 'litiges':              return level >= 3 ? <Litiges />    : <AccessDenied />

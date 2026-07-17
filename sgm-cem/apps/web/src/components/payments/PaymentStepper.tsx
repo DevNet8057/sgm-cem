@@ -460,7 +460,7 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
                     <span className="font-mono font-bold text-[#8A6D00] text-base">{formatAmount(mmBreakdown.totalToPay)}</span>
                   </div>
                   <p className="text-[11px] text-[#8A6D00]/80 pt-1">
-                    ℹ Les frais de transaction Mobile Money sont à la charge du contributeur, conformément à la politique de l'organisation.
+                    ℹ Les frais de transaction Mobile Money sont à la charge du contributeur, conformément à la politique de l&apos;organisation.
                   </p>
                 </div>
               )}
@@ -538,7 +538,7 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
                   <div>
                     <h3 className="font-display font-semibold text-[#0F4A0F] text-xl mb-1">Redirigé vers CinetPay</h3>
                     <p className="text-sm text-gray-500">
-                      Finalisez votre paiement dans l'onglet CinetPay.<br />
+                      Finalisez votre paiement dans l&apos;onglet CinetPay.<br />
                       Cette page se mettra à jour automatiquement.
                     </p>
                   </div>

@@ -49,7 +49,7 @@ function WelcomeBanner({ user, stats, isLoading }: {
             Bonjour, {user?.firstName ?? '...'}
           </h1>
           <p className="text-white/60 text-sm mt-1">
-            Culte d'Enfants de Melen · Tableau de bord financier
+            Culte d&apos;Enfants de Melen · Tableau de bord financier
           </p>
         </div>
         {canSeeFinancials && (

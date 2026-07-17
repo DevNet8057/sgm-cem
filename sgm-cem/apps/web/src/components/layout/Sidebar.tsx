@@ -2,7 +2,7 @@
 import {
   LayoutDashboard, FolderOpen, CreditCard, Wallet, UserCheck, Shield,
   Users, Archive, Briefcase, AlertTriangle, BarChart3, FileText,
-  Bell, Settings, LogOut, X, UserCog, CreditCard as CardIcon, UserCircle, Terminal, History,
+  Bell, Settings, LogOut, X, UserCog, CreditCard as CardIcon, UserCircle, Terminal, History, Globe,
 } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { useAuthStore } from '@/store/authStore'
@@ -20,6 +20,8 @@ const NAV_ITEMS = [
   { id: 'collecteurs',     label: 'Fonds Collecteurs',   icon: Wallet,          section: 'FINANCES',     minLevel: 2 },
   { id: 'validations',     label: 'Validations',         icon: UserCheck,      section: 'FINANCES',     minLevel: 2, excludeRoles: ['MEMBRE'] },
   { id: 'transfer-validations', label: 'Fonds à réceptionner', icon: Shield,          section: 'FINANCES',     minLevel: 2, excludeRoles: ['MEMBRE'] },
+  // Collectes ouvertes au public via lien — création/gestion Admin + Trésorier (+ Développeur)
+  { id: 'collectes-publiques', label: 'Collectes publiques', icon: Globe,           section: 'FINANCES',     roles: ['ADMIN', 'TRESORIER', 'DEVELOPER'] },
   // ── Membres ─────────────────────────────────────────────────────────
   { id: 'membres',         label: 'Membres',             icon: Users,           section: 'MEMBRES',      minLevel: 2, excludeRoles: ['COLLECTEUR', 'MEMBRE'] },
   // ── Membre : vue perso ───────────────────────────────────────────────
@@ -103,7 +105,7 @@ export function Sidebar() {
               <img src="/icon-192.png" alt="Logo CEM" className="w-full h-full object-contain" />
             </div>
             <div>
-              <p className="text-white font-semibold text-sm leading-tight font-display">Culte d'Enfants</p>
+              <p className="text-white font-semibold text-sm leading-tight font-display">Culte d&apos;Enfants</p>
               <p className="text-white/50 text-xs">EEC Melen · SGM</p>
             </div>
           </div>

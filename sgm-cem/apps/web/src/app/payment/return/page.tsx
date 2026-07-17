@@ -142,7 +142,7 @@ function PaymentReturnContent() {
               <div>
                 <h2 className="font-display font-semibold text-amber-700 text-xl mb-1">Paiement en cours</h2>
                 <p className="text-sm text-gray-500">
-                  La confirmation n'est pas encore reçue. Vérifiez votre historique dans quelques instants.
+                  La confirmation n&apos;est pas encore reçue. Vérifiez votre historique dans quelques instants.
                 </p>
               </div>
               <button
@@ -182,7 +182,7 @@ function PaymentReturnContent() {
 
         <div className="px-6 pb-5 text-center">
           <p className="text-[10px] text-gray-400">
-            SGM-CEM · Culte d'Enfants de Melen · EEC Yaoundé
+            SGM-CEM · Culte d&apos;Enfants de Melen · EEC Yaoundé
           </p>
         </div>
       </div>

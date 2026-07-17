@@ -289,9 +289,9 @@ export function Parametres() {
             <div className="flex items-start gap-2">
               <Info size={14} className="text-gray-400 mt-0.5 shrink-0" />
               <div>
-                <p className="text-xs font-semibold text-gray-600 mb-1">Contrôle d'accès</p>
+                <p className="text-xs font-semibold text-gray-600 mb-1">Contrôle d&apos;accès</p>
                 <p className="text-xs leading-relaxed text-gray-500">
-                  Page réservée aux trésoriers et administrateurs. Chaque modification est inscrite dans les journaux d'audit.
+                  Page réservée aux trésoriers et administrateurs. Chaque modification est inscrite dans les journaux d&apos;audit.
                 </p>
               </div>
             </div>

@@ -196,15 +196,16 @@ router.post('/otp/request', otpLimiter, async (req, res) => {
     return
   }
 
-  // Invalider les anciens codes non expirés
+  // Invalider les anciens codes de CONNEXION non expirés (purpose scoping :
+  // un code DRAFT_RECOVERY du même numéro n'est pas touché — anti-rejeu inter-flux)
   await prisma.otpCode.updateMany({
-    where: { phone: full, used: false, expiresAt: { gt: new Date() } },
+    where: { phone: full, used: false, purpose: 'LOGIN', expiresAt: { gt: new Date() } },
     data: { used: true },
   })
 
   const code = String(Math.floor(100000 + Math.random() * 900000))
   await prisma.otpCode.create({
-    data: { phone: full, code, expiresAt: new Date(Date.now() + 5 * 60 * 1000) },
+    data: { phone: full, code, purpose: 'LOGIN', expiresAt: new Date(Date.now() + 5 * 60 * 1000) },
   })
 
   const msg = `*SGM-CEM* — Code de connexion : *${code}*\n⏱ Valable 5 minutes.\n🔒 Ne le partagez pas.`
@@ -232,6 +233,9 @@ router.post('/otp/verify', otpLimiter, async (req, res) => {
     where: {
       phone: full,
       used: false,
+      // Un code émis pour la reprise de brouillon (DRAFT_RECOVERY) ne doit
+      // JAMAIS permettre une connexion — filtrage strict par purpose.
+      purpose: 'LOGIN',
       expiresAt: { gt: new Date() },
     },
     orderBy: { createdAt: 'desc' },

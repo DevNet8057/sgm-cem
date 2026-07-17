@@ -58,7 +58,7 @@ export function Notifications() {
         <div className="absolute inset-y-0 left-0 w-1.5 bg-[#1A6B1A]" />
         <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-[#1A6B1A]">Centre d'alertes</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-[#1A6B1A]">Centre d&apos;alertes</p>
             <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Notifications</h2>
             <p className="text-gray-500 text-sm mt-0.5">
               {unreadCount > 0

@@ -264,7 +264,7 @@ function RubriqueEditor({ mode, form, setForm, error, loading, onCancel, onSubmi
               <AlertTriangle size={14} className={form.priority === 'URGENT' ? 'text-red-500' : 'text-gray-400'} />
               Rubrique urgente
             </p>
-            <p className="text-xs text-gray-500">Active l'alerte prioritaire et notifie tous les membres</p>
+            <p className="text-xs text-gray-500">Active l&apos;alerte prioritaire et notifie tous les membres</p>
           </div>
         </label>
         {form.priority === 'URGENT' && (

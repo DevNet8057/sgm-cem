@@ -347,7 +347,7 @@ export function GestionUtilisateurs() {
           />
           <div className="flex items-start gap-2 rounded-[10px] bg-amber-50 border border-amber-200 px-3 py-2.5 text-xs text-amber-800">
             <RefreshCw size={13} className="mt-0.5 shrink-0" />
-            L'utilisateur devra changer son mot de passe à la prochaine connexion.
+            L&apos;utilisateur devra changer son mot de passe à la prochaine connexion.
           </div>
           {error && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-[10px] px-3 py-2">{error}</p>}
           <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">

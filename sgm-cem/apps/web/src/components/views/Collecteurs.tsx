@@ -490,7 +490,7 @@ function MoneyFlow({ flow, selectedTotal, destination }: {
     <div className="mb-5 rounded-[18px] border border-gray-100 bg-white p-4 overflow-hidden">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 mb-5">
         <div>
-          <h3 className="font-display font-semibold text-[#0F4A0F] text-lg">Trajet de l'argent</h3>
+          <h3 className="font-display font-semibold text-[#0F4A0F] text-lg">Trajet de l&apos;argent</h3>
           <p className="text-xs text-gray-500">
             Espèces : contributeur → collecteur → trésorier. Mobile Money / Carte : crédité directement chez le trésorier, aucun collecteur ne le détient.
           </p>
