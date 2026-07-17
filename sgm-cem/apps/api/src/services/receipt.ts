@@ -32,6 +32,7 @@ export async function generateReceiptHtml(contributionId: string): Promise<strin
     where: { id: contributionId },
     include: {
       membre: { include: { user: { select: { fullName: true, phone: true, memberId: true } } } },
+      contributeurExterne: { select: { nom: true, phone: true } },
       rubrique: { select: { code: true, title: true } },
       collecteur: { select: { fullName: true } },
     },
@@ -132,9 +133,9 @@ export async function generateReceiptHtml(contributionId: string): Promise<strin
     </div>
     <div class="party">
       <div class="ptitle">Reçu de</div>
-      <div class="pname">${contribution.membre?.user.fullName ?? 'Membre'}</div>
-      <div class="pline">Matricule : ${contribution.membre?.memberId ?? '—'}</div>
-      ${contribution.membre?.user.phone ? `<div class="pline">${contribution.membre.user.phone}</div>` : ''}
+      <div class="pname">${contribution.membre?.user.fullName ?? contribution.contributeurExterne?.nom ?? 'Contributeur'}</div>
+      <div class="pline">Matricule : ${contribution.membre?.memberId ?? 'Contributeur externe'}</div>
+      ${(contribution.membre?.user.phone ?? contribution.contributeurExterne?.phone) ? `<div class="pline">${contribution.membre?.user.phone ?? contribution.contributeurExterne?.phone}</div>` : ''}
     </div>
   </div>
 

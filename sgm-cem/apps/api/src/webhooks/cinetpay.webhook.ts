@@ -39,6 +39,8 @@ async function processCinetpayWebhook(body: Record<string, string>) {
           user: { select: { phone: true, whatsappPhone: true, fullName: true } },
         },
       },
+      // contribution publique : pas de membre, notifier le contributeur externe
+      contributeurExterne: { select: { phone: true, nom: true } },
       rubrique: { select: { title: true, code: true } },
     },
   })
@@ -59,8 +61,9 @@ async function processCinetpayWebhook(body: Record<string, string>) {
     return
   }
 
-  const memberPhone = contribution.membre?.user.whatsappPhone ?? contribution.membre?.user.phone
-  const memberName = contribution.membre?.user.fullName ?? 'Membre'
+  // contribution publique : pas de membre, notifier le contributeur externe
+  const memberPhone = contribution.membre?.user.whatsappPhone ?? contribution.membre?.user.phone ?? contribution.contributeurExterne?.phone
+  const memberName = contribution.membre?.user.fullName ?? contribution.contributeurExterne?.nom ?? 'Contributeur'
   const montantNum = Number(cpm_amount ?? contribution.montant)
   const montantStr = montantNum.toLocaleString('fr-FR')
 

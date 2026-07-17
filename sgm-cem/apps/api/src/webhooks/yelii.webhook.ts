@@ -72,6 +72,8 @@ async function processYeliiWebhook(envelope: YeliiEnvelope) {
           user: { select: { id: true, phone: true, whatsappPhone: true, fullName: true } },
         },
       },
+      // contribution publique : pas de membre, notifier le contributeur externe
+      contributeurExterne: { select: { phone: true, nom: true } },
       rubrique: { select: { title: true, code: true } },
     },
   })
@@ -92,8 +94,9 @@ async function processYeliiWebhook(envelope: YeliiEnvelope) {
     return
   }
 
-  const memberPhone = contribution.membre?.user.whatsappPhone ?? contribution.membre?.user.phone
-  const memberName = contribution.membre?.user.fullName ?? 'Membre'
+  // contribution publique : pas de membre, notifier le contributeur externe
+  const memberPhone = contribution.membre?.user.whatsappPhone ?? contribution.membre?.user.phone ?? contribution.contributeurExterne?.phone
+  const memberName = contribution.membre?.user.fullName ?? contribution.contributeurExterne?.nom ?? 'Contributeur'
   // Notifications et reçu affichent le montant DÛ à la rubrique (§1bis), pas le montant majoré.
   const montantStr = contribution.montant.toLocaleString('fr-FR')
 

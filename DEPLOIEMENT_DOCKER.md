@@ -76,6 +76,17 @@ de réconciliation repasse toutes les 10 min. Pour du temps réel : VPS + domain
 (ou tunnel Cloudflare **nommé** — les tunnels `trycloudflare.com` sont éphémères,
 celui utilisé en dev est mort).
 
+### 8bis. DEUX PostgreSQL sur cette machine — piège majeur (découvert le 2026-07-17)
+Un PostgreSQL **natif Windows** (service `postgresql-x64-18`) tourne sur le port 5432
+EN PLUS du conteneur. Depuis l'hôte, `localhost:5432` = le **natif** (base de dev
+historique — c'est là qu'écrivent les tests vitest et tout `prisma db push` lancé
+depuis l'hôte) ; les conteneurs, eux, se parlent par le réseau Docker interne
+(`postgres:5432` = le conteneur). Les deux bases s'appellent `sgm_cem` et **divergent**.
+- Vérifier la base du CONTENEUR : `docker exec sgm-cem-postgres-1 psql -U postgres -d sgm_cem …`
+- Le schéma du conteneur est resynchronisé par l'entrypoint (`db push`) à chaque
+  redémarrage de l'api — un `db push` hôte ne suffit PAS pour le conteneur.
+- Ne jamais comparer des comptages entre les deux sans savoir lequel on interroge.
+
 ### 8. Divers appris à la dure
 - `.dockerignore` : motifs avec `**/` (`**/node_modules`) — sans ça, seuls ceux de la racine sont exclus.
 - `useSearchParams()` sans `<Suspense>` casse `next build` (prod uniquement, jamais en dev) — corrigé sur `/payment/return`, à respecter sur toute nouvelle page.

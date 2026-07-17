@@ -26,6 +26,7 @@ import { webhooksRouter } from './routes/webhooks'
 import { developerRouter } from './routes/developer'
 import { usersRouter } from './routes/users'
 import { auditRouter } from './routes/audit'
+import { publicRouter } from './routes/public'
 import { errorHandler } from './middleware/errorHandler'
 import { paymentsRouter } from './routes/payments'
 import { schedulePaymentReconciliation } from './jobs/payment-reconciliation'
@@ -92,8 +93,12 @@ app.use(
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 
+// Protection d'infrastructure — désactivée sous vitest : la suite partage une
+// seule instance Express (isolate:false) et son cumul de requêtes dépasserait
+// le budget, faisant échouer des tests sans rapport. Les limiteurs MÉTIER
+// (otpLimiter, publicLimiter…) restent actifs partout, tests compris.
 const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true })
-app.use('/api/', limiter)
+if (process.env.NODE_ENV !== 'test') app.use('/api/', limiter)
 
 // CSRF — double-submit cookie pattern
 const csrfSecret = process.env.CSRF_SECRET ?? 'csrf-dev-secret-change-in-prod'
@@ -159,6 +164,7 @@ app.use('/api/webhooks', webhooksRouter)
 app.use('/api/developer', developerRouter) // panneau développeur — requireDeveloper strict
 app.use('/api/users', usersRouter) // gestion des comptes (ADMIN/DEVELOPER) — n'était jamais monté (fix 2026-07-05)
 app.use('/api/audit', auditRouter) // journal « qui a fait quoi » — périmètre filtré par rôle dans la route
+app.use('/api/public', publicRouter) // collecte publique — AUCUNE authentification, limiteurs par-route dans le fichier
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }))
 
