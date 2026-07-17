@@ -97,7 +97,13 @@ app.use(express.urlencoded({ extended: true }))
 // seule instance Express (isolate:false) et son cumul de requêtes dépasserait
 // le budget, faisant échouer des tests sans rapport. Les limiteurs MÉTIER
 // (otpLimiter, publicLimiter…) restent actifs partout, tests compris.
-const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true })
+// 600/15min : l'app est bavarde par conception (polling statut paiement 5 s,
+// autosave brouillons, dashboard) — à 100, un utilisateur actif + la page
+// publique épuisaient le budget IP et TOUT passait en 429 (y compris /login,
+// vécu comme « déconnecté, impossible de se reconnecter »). Les routes
+// sensibles gardent leurs limiteurs stricts (authLimiter 10/h, otpLimiter
+// 5/10min, publicLimiter 30/15min).
+const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 600, standardHeaders: true })
 if (process.env.NODE_ENV !== 'test') app.use('/api/', limiter)
 
 // CSRF — double-submit cookie pattern

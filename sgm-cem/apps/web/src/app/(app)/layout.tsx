@@ -150,8 +150,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
 
     let cancelled = false
-    fetchMe().catch(() => {
-      if (!cancelled) {
+    fetchMe().catch((err: { response?: { status?: number } }) => {
+      // Ne déconnecter que sur une VRAIE erreur d'authentification (401/403).
+      // Un 429 (rate-limit), un 5xx ou une coupure réseau ne doivent jamais
+      // détruire la session — c'était la cause des déconnexions intempestives
+      // quand le trafic (polling, page publique) dépassait le budget du limiteur.
+      const status = err?.response?.status
+      if (!cancelled && (status === 401 || status === 403)) {
         logout()
         router.replace('/')
       }
