@@ -36,6 +36,9 @@ import { loadConfigCache, getConfig, getConfigBool } from './services/config.ser
 import { initSocketIO } from './lib/socket'
 
 const app = express()
+// Trust first proxy (Render, Heroku, etc.) — requis pour que
+// express-rate-limit utilise X-Forwarded-For et non l'IP du proxy.
+app.set('trust proxy', 1)
 const PORT = process.env.PORT ?? 3001
 
 // CSP étendu pour autoriser Google Identity Services (OAuth)
