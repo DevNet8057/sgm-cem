@@ -29,7 +29,7 @@ function getGoogleClient(): OAuth2Client | null {
   return googleClient
 }
 
-const authLimiter  = rateLimit({ windowMs: 60 * 60 * 1000, max: 30,
+const authLimiter  = rateLimit({ windowMs: 60 * 60 * 1000, max: 15,
   message: { success: false, error: { code: 'RATE_LIMITED', message: 'Trop de tentatives. Réessayez dans quelques minutes.' } },
 })
 const otpLimiter   = rateLimit({ windowMs: 10 * 60 * 1000, max: 5, message: { success: false, error: { code: 'RATE_LIMITED', message: 'Trop de tentatives. Attendez 10 minutes.' } } })
