@@ -43,18 +43,19 @@ const IS_PROD = process.env.NODE_ENV === 'production'
 // Exporté pour routes/developer.ts (impersonation) — accessMaxAgeMs permet
 // une durée de cookie alignée sur le jeton d'impersonation (1 h).
 export function setAuthCookies(res: Response, accessToken: string, refreshToken?: string, accessMaxAgeMs = 15 * 60 * 1000): void {
+  const isProd = process.env.NODE_ENV === 'production'
   res.cookie('access_token', accessToken, {
     httpOnly: true,
-    secure: false,
-    sameSite: 'lax',
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
     maxAge: accessMaxAgeMs,
     path: '/',
   })
   if (refreshToken) {
     res.cookie('refresh_token', refreshToken, {
       httpOnly: true,
-      secure: false,
-      sameSite: 'lax',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/',
     })
