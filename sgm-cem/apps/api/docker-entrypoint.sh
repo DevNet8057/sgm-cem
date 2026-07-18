@@ -47,6 +47,7 @@ else
     sleep 2
   done
 fi
+
 echo ">>> [API] ✅ PostgreSQL prêt"
 
 # Le projet n'a pas de dossier prisma/migrations (schéma appliqué via db push
