@@ -4,6 +4,7 @@ import { verifyYeliiSignature } from '../services/yelii.service'
 import { getPrisma } from '../lib/prisma'
 import { generateReceiptPDF } from '../services/receipt'
 import { sendWhatsAppDocument, sendWhatsApp, alertTresoriers } from '../services/notification'
+import { broadcastToAll } from '../lib/socket'
 
 const router = Router()
 const prisma = getPrisma()
@@ -136,6 +137,9 @@ async function processYeliiWebhook(envelope: YeliiEnvelope) {
       if (receiptUrl) sent = await sendWhatsAppDocument(memberPhone, receiptUrl, msg)
       if (!sent) await sendWhatsApp(memberPhone, msg)
     }
+
+    // Temps réel — rafraîchit les tableaux de bord connectés (données minimales)
+    broadcastToAll('contribution:confirmed', { contributionId: contribution.id, rubriqueId: contribution.rubriqueId })
 
     console.info(`[Yelii] ✅ ${transactionId} — confirmé (net: ${netCredited} FCFA)`)
   } else if (FAILED_STATUSES.has(status)) {

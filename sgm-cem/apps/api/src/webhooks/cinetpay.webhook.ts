@@ -4,6 +4,7 @@ import { verifyCinetpaySignature } from '../services/cinetpay.service'
 import { getPrisma } from '../lib/prisma'
 import { generateReceiptPDF } from '../services/receipt'
 import { sendWhatsAppDocument, sendWhatsApp, alertTresoriers } from '../services/notification'
+import { broadcastToAll } from '../lib/socket'
 
 const router = Router()
 const prisma = getPrisma()
@@ -101,6 +102,9 @@ async function processCinetpayWebhook(body: Record<string, string>) {
       if (receiptUrl) sent = await sendWhatsAppDocument(memberPhone, receiptUrl, msg)
       if (!sent) await sendWhatsApp(memberPhone, msg)
     }
+
+    // Temps réel — rafraîchit les tableaux de bord connectés (données minimales)
+    broadcastToAll('contribution:confirmed', { contributionId: contribution.id, rubriqueId: contribution.rubriqueId })
 
     console.info(`[CinetPay] ✅ Paiement confirmé — ${cpm_trans_id}`)
   } else {

@@ -1,15 +1,41 @@
 'use client'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Copy, Edit3, Megaphone, Plus, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Copy, CreditCard, Download, Edit3, List, Megaphone, Plus, Trash2, X } from 'lucide-react'
 import api from '@/lib/api'
-import { cn, formatAmount, progressGradient } from '@/lib/utils'
+import { cn, formatAmount, formatDateTime, MODE_PAIEMENT_LABELS, progressGradient } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { SkeletonCard } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { useAppStore } from '@/store/appStore'
+import { downloadXlsx } from '@/lib/exportXlsx'
 import type { ChampPersonnalise, ChampPersonnaliseType } from '@sgm-cem/shared'
+
+/** Ligne renvoyée par GET /collectes/:id/contributions — vue trésorier détaillée. */
+interface ContributionRow {
+  id: string
+  date: string
+  nom: string
+  type: 'MEMBRE' | 'EXTERNE'
+  phone: string | null
+  montant: number
+  statut: 'CONFIRME' | 'EN_ATTENTE_CONFIRMATION'
+  modePaiement: string
+  valeursChamps: Record<string, unknown> | null
+}
+
+interface ContributionsResponse {
+  data: ContributionRow[]
+  pagination: { page: number; limit: number; total: number; totalPages: number }
+  totaux: { montantConfirme: number; nbConfirmees: number }
+}
+
+const STATUT_LABELS: Record<string, string> = {
+  CONFIRME: 'Confirmé',
+  EN_ATTENTE_CONFIRMATION: 'En attente',
+}
 
 /** Ligne renvoyée par GET /collectes — vue admin/trésorier, distincte de CollectePubliqueDef (partagé). */
 interface CollectePublique {
@@ -56,6 +82,7 @@ export function CollectesPubliques() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<CollecteForm>(emptyForm)
   const [error, setError] = useState('')
+  const [detail, setDetail] = useState<CollectePublique | null>(null)
 
   const { data, isLoading, isError } = useQuery<CollectePublique[]>({
     queryKey: ['collectes'],
@@ -161,6 +188,12 @@ export function CollectesPubliques() {
         onSubmit={submit}
       />
 
+      <CollecteContributionsDrawer
+        collecte={detail}
+        open={!!detail}
+        onClose={() => setDetail(null)}
+      />
+
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
@@ -185,6 +218,7 @@ export function CollectesPubliques() {
               onEdit={() => startEdit(c)}
               onToggleActive={next => toggleActive.mutate({ id: c.id, isActive: next })}
               onCopyLink={() => copyLink(c)}
+              onDetail={() => setDetail(c)}
             />
           ))}
         </div>
@@ -193,12 +227,13 @@ export function CollectesPubliques() {
   )
 }
 
-function CollecteCard({ collecte: c, toggleLoading, onEdit, onToggleActive, onCopyLink }: {
+function CollecteCard({ collecte: c, toggleLoading, onEdit, onToggleActive, onCopyLink, onDetail }: {
   collecte: CollectePublique
   toggleLoading: boolean
   onEdit: () => void
   onToggleActive: (next: boolean) => void
   onCopyLink: () => void
+  onDetail: () => void
 }) {
   const target = c.rubrique.targetAmount
   const ratio = target ? (c.totalCollecte ?? 0) / target : 0
@@ -247,6 +282,7 @@ function CollecteCard({ collecte: c, toggleLoading, onEdit, onToggleActive, onCo
 
         <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">
           <Button size="sm" variant="outline" onClick={onEdit}><Edit3 size={13} />Modifier</Button>
+          <Button size="sm" variant="ghost" onClick={onDetail}><List size={13} />Voir les contributions</Button>
           <Button size="sm" variant="ghost" onClick={onCopyLink}><Copy size={13} />Copier le lien</Button>
           <div className="ml-auto flex items-center gap-2">
             <span className="text-[11px] text-gray-400">{c.isActive ? 'Activée' : 'Désactivée'}</span>
@@ -269,6 +305,154 @@ function CollecteCard({ collecte: c, toggleLoading, onEdit, onToggleActive, onCo
       </div>
     </div>
   )
+}
+
+function CollecteContributionsDrawer({ collecte, open, onClose }: {
+  collecte: CollectePublique | null
+  open: boolean
+  onClose: () => void
+}) {
+  const { addToast } = useAppStore()
+  const [exporting, setExporting] = useState(false)
+  const collecteId = collecte?.id ?? ''
+  const champs = collecte?.champsPersonnalises ?? []
+
+  const { data, isLoading, isError } = useQuery<ContributionsResponse>({
+    queryKey: ['collecte-contributions', collecteId],
+    queryFn: async () => (await api.get(`/collectes/${collecteId}/contributions`, { params: { limit: 100 } })).data,
+    enabled: open && !!collecteId,
+    refetchInterval: 15000,
+  })
+
+  const rows = data?.data ?? []
+
+  async function exportExcel() {
+    if (!collecte) return
+    setExporting(true)
+    try {
+      const allRows = await fetchAllContributions(collecte.id)
+      await downloadXlsx({
+        filename: `collecte-${collecte.publicSlug}-${slugDate()}.xlsx`,
+        sheetName: 'Contributions',
+        title: `Contributions — ${collecte.titre}`,
+        columns: [
+          { header: 'Date', key: 'date', width: 18 },
+          { header: 'Nom', key: 'nom', width: 26 },
+          { header: 'Type', key: 'type', width: 12 },
+          { header: 'Téléphone', key: 'phone', width: 16 },
+          { header: 'Montant', key: 'montant', width: 16, type: 'number' },
+          { header: 'Statut', key: 'statut', width: 16 },
+          { header: 'Mode', key: 'mode', width: 16 },
+          ...champs.map(champ => ({ header: champ.label, key: champ.key, width: 18 })),
+        ],
+        rows: allRows.map(r => ({
+          date: formatDateTime(r.date),
+          nom: r.nom,
+          type: r.type === 'MEMBRE' ? 'Membre' : 'Externe',
+          phone: r.phone ?? '',
+          montant: r.montant,
+          statut: STATUT_LABELS[r.statut] ?? r.statut,
+          mode: MODE_PAIEMENT_LABELS[r.modePaiement] ?? r.modePaiement,
+          ...Object.fromEntries(champs.map(champ => [champ.key, formatChampValue(r.valeursChamps?.[champ.key])])),
+        })),
+      })
+      addToast({ title: 'Export généré', variant: 'success' })
+    } catch {
+      addToast({ title: 'Erreur', message: 'Export impossible pour le moment', variant: 'error' })
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="lg"
+      title={collecte?.titre ?? 'Contributions'}
+      description={data ? `${formatAmount(data.totaux.montantConfirme)} collectés · ${data.totaux.nbConfirmees} contribution(s) confirmée(s)` : undefined}
+    >
+      <div className="flex justify-end mb-3">
+        <Button size="sm" variant="outline" onClick={exportExcel} loading={exporting} disabled={!collecte}>
+          <Download size={13} />Exporter en Excel
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => <div key={i} className="skeleton h-10 w-full rounded-[10px]" />)}
+        </div>
+      ) : isError ? (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-[10px] px-3 py-2">
+          Impossible de récupérer les contributions. Réessayez dans quelques instants.
+        </p>
+      ) : rows.length === 0 ? (
+        <EmptyState icon={CreditCard} title="Aucune contribution" description="Aucune contribution pour l'instant." className="py-10" />
+      ) : (
+        <div className="overflow-x-auto border border-gray-100 rounded-[12px]">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50/50">
+                {['Date', 'Nom', 'Type', 'Téléphone', 'Montant', 'Statut', 'Mode', ...champs.map(c => c.label)].map(col => (
+                  <th key={col} className="px-3 py-2 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{col}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id} className="border-b border-gray-50 hover:bg-[#1A6B1A]/4 transition-colors">
+                  <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{formatDateTime(r.date)}</td>
+                  <td className="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{r.nom}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    <span className={cn(
+                      'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border',
+                      r.type === 'MEMBRE' ? 'bg-[#EFF6FF] text-[#1E40AF] border-[#BFDBFE]' : 'bg-[#FEF9C3] text-[#713F12] border-[#FDE68A]'
+                    )}>
+                      {r.type === 'MEMBRE' ? 'Membre' : 'Externe'}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{r.type === 'EXTERNE' ? (r.phone ?? '—') : '—'}</td>
+                  <td className="px-3 py-2 font-mono font-bold text-[#1A6B1A] whitespace-nowrap">{formatAmount(r.montant)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap"><StatusBadge status={r.statut} /></td>
+                  <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{MODE_PAIEMENT_LABELS[r.modePaiement] ?? r.modePaiement}</td>
+                  {champs.map(champ => (
+                    <td key={champ.key} className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">{formatChampValue(r.valeursChamps?.[champ.key])}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+/** Récupère toutes les pages (l'API plafonne `limit` à 100) pour un export exhaustif. */
+async function fetchAllContributions(collecteId: string): Promise<ContributionRow[]> {
+  const limit = 100
+  let page = 1
+  let all: ContributionRow[] = []
+  while (true) {
+    const res = (await api.get(`/collectes/${collecteId}/contributions`, { params: { page, limit } })).data as ContributionsResponse
+    all = all.concat(res.data)
+    if (page >= res.pagination.totalPages || res.data.length === 0) break
+    page += 1
+  }
+  return all
+}
+
+/** Formate une valeur de champ personnalisé pour affichage/export (booléens -> Oui/Non). */
+function formatChampValue(value: unknown): string | number {
+  if (value == null || value === '') return ''
+  if (typeof value === 'boolean') return value ? 'Oui' : 'Non'
+  if (typeof value === 'number' || typeof value === 'string') return value
+  return String(value)
+}
+
+function slugDate(): string {
+  const d = new Date()
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
 }
 
 function CollecteEditor({ open, mode, form, setForm, error, loading, onClose, onSubmit }: {

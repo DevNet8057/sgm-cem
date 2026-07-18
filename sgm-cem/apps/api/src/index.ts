@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import 'express-async-errors'
 import path from 'path'
+import http from 'http'
 import express, { type Request, type Response, type NextFunction } from 'express'
 import helmet from 'helmet'
 import cors from 'cors'
@@ -32,6 +33,7 @@ import { paymentsRouter } from './routes/payments'
 import { schedulePaymentReconciliation } from './jobs/payment-reconciliation'
 import { scheduleMonthlyCron } from './services/cron'
 import { loadConfigCache, getConfig, getConfigBool } from './services/config.service'
+import { initSocketIO } from './lib/socket'
 
 const app = express()
 const PORT = process.env.PORT ?? 3001
@@ -177,10 +179,16 @@ app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Da
 app.use(errorHandler)
 
 if (process.env.NODE_ENV !== 'test') {
+  // Serveur HTTP explicite pour porter Socket.IO (temps réel — voir lib/socket.ts)
+  // en plus d'Express. En test, aucun serveur ni socket n'est démarré (handles
+  // ouverts, EADDRINUSE) — la suite supertest s'appuie uniquement sur `app`.
+  const server = http.createServer(app)
+  initSocketIO(server)
+
   // Charger la configuration technique depuis la base AVANT d'accepter du trafic
   // (DEVELOPER_PANEL_SGM_CEM.md §3 — la DB est la source de vérité à l'exécution)
   void loadConfigCache().finally(() => {
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`✅ SGM-CEM API running on port ${PORT}`)
     })
     schedulePaymentReconciliation()

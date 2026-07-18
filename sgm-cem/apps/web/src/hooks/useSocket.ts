@@ -35,6 +35,7 @@ export function useSocket(): void {
       void queryClient.invalidateQueries({ queryKey: ['validations'] })
       void queryClient.invalidateQueries({ queryKey: ['litiges'] })
       void queryClient.invalidateQueries({ queryKey: ['stats'] })
+      void queryClient.invalidateQueries({ queryKey: ['collecte-contributions'] })
     }
 
     socket.on('contribution:confirmed', invalidateContributions)
