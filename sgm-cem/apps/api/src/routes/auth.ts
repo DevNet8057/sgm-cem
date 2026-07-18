@@ -45,16 +45,16 @@ const IS_PROD = process.env.NODE_ENV === 'production'
 export function setAuthCookies(res: Response, accessToken: string, refreshToken?: string, accessMaxAgeMs = 15 * 60 * 1000): void {
   res.cookie('access_token', accessToken, {
     httpOnly: true,
-    secure: IS_PROD,
-    sameSite: 'strict',
+    secure: false,
+    sameSite: 'lax',
     maxAge: accessMaxAgeMs,
     path: '/',
   })
   if (refreshToken) {
     res.cookie('refresh_token', refreshToken, {
       httpOnly: true,
-      secure: IS_PROD,
-      sameSite: 'strict',
+      secure: false,
+      sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/',
     })

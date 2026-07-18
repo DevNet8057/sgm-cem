@@ -6,10 +6,15 @@ import axios from 'axios'
 // l'environnement sa valeur contient ou non le suffixe /api (bug des boutons
 // reçu/bordereau/rapport/GED en déploiement Docker).
 export function getBaseURL() {
-  if (typeof window !== 'undefined') {
-    return `http://${window.location.hostname}:3001/api`
-  }
-  const raw = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'
+  // NEXT_PUBLIC_API_URL est défini AU BUILD par Next.js (ARG Docker ou
+  // variable d'environnement Render). En production, il est TOUJOURS fourni
+  // par le Dockerfile ARG. Le fallback hostname:3001 n'est JAMAIS atteint
+  // en prod — il est réservé au dev local où API et Web tournent sur la
+  // même machine (Docker Compose ou scripts/dev.mjs).
+  const raw = process.env.NEXT_PUBLIC_API_URL
+    ?? (typeof window !== 'undefined'
+      ? `http://${window.location.hostname}:3001/api`
+      : 'http://localhost:3001/api')
   return raw.endsWith('/api') ? raw : `${raw.replace(/\/$/, '')}/api`
 }
 

@@ -11,7 +11,7 @@ FROM node:20-slim
 # Puppeteer a besoin de bibliothèques système pour lancer Chromium.
 # openssl : requis par les moteurs Prisma sur Debian.
 # postgresql-client : pg_isready dans l'entrypoint.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get -o Acquire::Check-Valid-Until=false update && apt-get install -y --no-install-recommends \
     ca-certificates \
     chromium \
     fonts-liberation \
@@ -73,6 +73,8 @@ RUN pnpm --filter api build || true \
   && test -f /app/apps/api/dist/index.js
 
 # ── Étape 9 : Copier le point d'entrée (schéma DB + seed avant démarrage)
+# Le script détecte automatiquement le contexte (Docker local vs Render managed)
+# et adapte l'attente PostgreSQL + le db push en conséquence.
 COPY apps/api/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh
 

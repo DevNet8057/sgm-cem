@@ -54,6 +54,9 @@ app.use(helmet({
 }))
 
 const lanOriginPattern = /^http:\/\/(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)\d+\.\d+:\d+$/
+// En dev, le lanceur (scripts/dev.mjs) peut placer le web sur un port ≠ 3000 :
+// on accepte donc toute origine localhost hors production.
+const localOriginPattern = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -64,7 +67,7 @@ app.use(cors({
       .map(o => o.trim())
       .filter(Boolean)
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
-    if (process.env.NODE_ENV !== 'production' && lanOriginPattern.test(origin)) return callback(null, true)
+    if (process.env.NODE_ENV !== 'production' && (lanOriginPattern.test(origin) || localOriginPattern.test(origin))) return callback(null, true)
     callback(new Error('Not allowed by CORS'))
   },
   credentials: true,
@@ -116,7 +119,7 @@ const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
   cookieName: 'csrf_token',
   cookieOptions: {
     httpOnly: false,
-    secure: process.env.NODE_ENV === 'production',
+    secure: false,
     sameSite: 'strict',
     path: '/',
   },

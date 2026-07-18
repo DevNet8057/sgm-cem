@@ -18,8 +18,18 @@ export function initSocketIO(server: HttpServer): SocketIOServer {
     .map(o => o.trim())
     .filter(Boolean)
 
+  // Même règle que le CORS Express (index.ts) : origines APP_URL, plus
+  // toute origine localhost hors production (lanceur dev sur port variable).
+  const localOriginPattern = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/
   io = new SocketIOServer(server, {
-    cors: { origin: allowedOrigins, credentials: true },
+    cors: {
+      origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
+        if (process.env.NODE_ENV !== 'production' && localOriginPattern.test(origin)) return callback(null, true)
+        callback(new Error('Not allowed by CORS'))
+      },
+      credentials: true,
+    },
     path: '/socket.io',
   })
 

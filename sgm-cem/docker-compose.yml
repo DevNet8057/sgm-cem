@@ -24,7 +24,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: sgm_cem
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       # Volume nommé = persiste les données entre redémarrages
       - pgdata:/var/lib/postgresql/data
@@ -73,8 +73,8 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/sgm_cem
       REDIS_URL: redis://redis:6379
       PORT: 3001
-      APP_URL: http://localhost:3000
-      API_URL: http://localhost:3001
+      APP_URL: http://172.21.253.77:3000
+      API_URL: http://172.21.253.77:3001
       YELII_API_KEY: ${YELII_API_KEY}
       YELII_WEBHOOK_SECRET: ${YELII_WEBHOOK_SECRET}
       YELII_BASE_URL: ${YELII_BASE_URL}
@@ -82,7 +82,7 @@ services:
       - .env
     # Monter le dossier uploads pour que les fichiers persistents (S3 hors prod)
     volumes:
-      - ./apps/api/uploads:/app/apps/api/uploads
+      - uploads:/app/apps/api/uploads
     networks:
       - sgm-net
     healthcheck:
@@ -99,9 +99,9 @@ services:
       dockerfile: apps/web/Dockerfile
       args:
         # Les NEXT_PUBLIC_* sont figées dans le bundle AU BUILD (pas à l'exécution).
-        # GOOGLE_CLIENT_ID est lu depuis le .env racine (interpolation compose).
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
-        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+        # DOIVENT pointer vers l'IP du serveur pour que le frontend fonctionne depuis un navigateur distant.
+        NEXT_PUBLIC_API_URL: http://172.21.253.77:3001
+        NEXT_PUBLIC_APP_URL: http://172.21.253.77:3000
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     restart: always
     depends_on:
@@ -111,8 +111,8 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: http://localhost:3001
-      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_API_URL: http://172.21.253.77:3001
+      NEXT_PUBLIC_APP_URL: http://172.21.253.77:3000
     networks:
       - sgm-net
     healthcheck:
@@ -128,6 +128,8 @@ volumes:
     # Stocke toutes les tables PostgreSQL
   redisdata:
     # Stocke le cache Redis
+  uploads:
+    # Stocke les fichiers uploadés par l'API
 
   # ── Réseau privé ────────────────────────────────────────────────────
   # Les conteneurs peuvent se parler par leur nom de service
