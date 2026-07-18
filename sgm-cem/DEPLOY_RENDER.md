@@ -213,7 +213,40 @@ Service → onglet **Events** → cliquer sur un déploiement antérieur → **R
 | CORS errors | Vérifier `APP_URL` dans les env vars API |
 | WebSocket déconnecte | `NEXT_PUBLIC_API_URL` doit être l'URL API sans `/api` (le hook `useSocket` retire le suffixe) |
 | Cold start lent | Passer au plan **Starter** (Always On) |
-| Uploads perdus | Voir §3.5 ci-dessous (S3/R2 obligatoire) |
+| Uploads perdus | Configurer Cloudflare R2 (voir §5.1 ci-dessous) |
+
+---
+
+## 📦 §5.1 — Stockage persistant avec Cloudflare R2
+
+Sur Render, le filesystem est **éphémérique** : chaque redéploy détruit les uploads
+(reçus, avatars, docs GED). **Cloudflare R2** (compatible S3) résout ce problème
+avec un tier gratuit généreux (10 Go, 10 millions de lectures/mois).
+
+### Configuration
+
+1. Créer un compte Cloudflare → **R2** → **Create bucket** → nom : `sgm-cem-uploads`
+2. **Manage R2 API Tokens** → **Create API Token** → permissions *Object Read & Write*
+3. Copier immédiatement : **Access Key ID**, **Secret Access Key**
+4. Noter l'**Account ID** (visible dans l'URL du dashboard ou la page R2 Overview)
+
+### Variables d'environnement (service API sur Render)
+
+```
+S3_ACCESS_KEY_ID=<votre Access Key ID>
+S3_SECRET_ACCESS_KEY=<votre Secret Access Key>
+S3_BUCKET_NAME=sgm-cem-uploads
+S3_REGION=auto
+S3_ENDPOINT=https://<votre_account_id>.r2.cloudflarestorage.com
+```
+
+> ⚠️ **`forcePathStyle` est déjà activé** dans `storage.ts` quand un endpoint
+> personnalisé est fourni — aucune modification de code n'est nécessaire.
+
+### Vérification
+
+Après le redéploy, vérifier via les logs API : le mode de stockage doit passer
+de `local` à `S3` au démarrage.
 
 ---
 
