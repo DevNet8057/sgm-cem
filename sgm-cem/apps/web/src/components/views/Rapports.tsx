@@ -1,13 +1,13 @@
 'use client'
 import { useState } from 'react'
 import { Download, Eye, FileText, Printer } from 'lucide-react'
-import api from '@/lib/api'
+import api, { getBaseURL } from '@/lib/api'
 import { Button } from '@/components/ui/Button'
 import { formatDate } from '@/lib/utils'
 import { downloadXlsx } from '@/lib/exportXlsx'
 import type { Contribution, Membre, Rubrique } from '@/types'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'
+// getBaseURL() garantit le suffixe /api quel que soit l'environnement
 
 type ReportKey = 'membres' | 'rubriques' | 'contributions'
 
@@ -109,7 +109,7 @@ export function Rapports() {
     setLoading(mode === 'view' ? 'pdf-view' : 'pdf-download')
     setError('')
     try {
-      const url = `${API_URL}/stats/financial-report.pdf${mode === 'download' ? '?download=1' : ''}`
+      const url = `${getBaseURL()}/stats/financial-report.pdf${mode === 'download' ? '?download=1' : ''}`
       window.open(url, '_blank')
     } catch {
       setError("Impossible d'ouvrir le rapport PDF.")

@@ -2,13 +2,13 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle, Clock, XCircle, Loader2, ChevronDown } from 'lucide-react'
-import api from '@/lib/api'
+import api, { getBaseURL } from '@/lib/api'
 import { formatAmount, formatDateTime, TRANSFER_TYPE_EMOJI, TRANSFER_TYPE_LABELS } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import type { FundsTransfer } from '@/types'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'
+// getBaseURL() garantit le suffixe /api quel que soit l'environnement
 
 export function TransferValidations() {
   const queryClient = useQueryClient()
@@ -26,7 +26,7 @@ export function TransferValidations() {
     onSuccess: (_res, id) => {
       queryClient.invalidateQueries({ queryKey: ['pending-my-approval', 'collecteurs'] })
       // Le bordereau de remise vient d'être généré — on l'ouvre immédiatement.
-      window.open(`${API_URL}/funds/transfers/${id}/borderau`, '_blank')
+      window.open(`${getBaseURL()}/funds/transfers/${id}/borderau`, '_blank')
     },
   })
 

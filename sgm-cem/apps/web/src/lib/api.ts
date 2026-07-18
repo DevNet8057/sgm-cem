@@ -1,10 +1,16 @@
 import axios from 'axios'
 
-function getBaseURL() {
+// Base URL de l'API, TOUJOURS terminée par /api — export canonique : toute vue
+// qui construit une URL manuellement (window.open, <a href>) DOIT passer par là.
+// Ne jamais concaténer process.env.NEXT_PUBLIC_API_URL directement : selon
+// l'environnement sa valeur contient ou non le suffixe /api (bug des boutons
+// reçu/bordereau/rapport/GED en déploiement Docker).
+export function getBaseURL() {
   if (typeof window !== 'undefined') {
     return `http://${window.location.hostname}:3001/api`
   }
-  return process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'
+  const raw = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'
+  return raw.endsWith('/api') ? raw : `${raw.replace(/\/$/, '')}/api`
 }
 
 const api = axios.create({

@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Archive, Check, Download, FileText, FolderKanban, Plus, Search, Send, Upload, X } from 'lucide-react'
-import api from '@/lib/api'
+import api, { getBaseURL } from '@/lib/api'
 import { cn, formatDate } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -98,7 +98,7 @@ export function Ged() {
 
   function downloadDocument(id: string, fileName: string) {
     const link = document.createElement('a')
-    link.href = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'}/commissions/documents/${id}/download`
+    link.href = `${getBaseURL()}/commissions/documents/${id}/download`
     link.download = fileName
     link.target = '_blank'
     link.rel = 'noopener'
