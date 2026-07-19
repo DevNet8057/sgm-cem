@@ -170,4 +170,28 @@ router.post('/:userId/photo', authenticate, upload.single('photo'), async (req, 
   res.json({ success: true, data: updated, storageMode: result.mode })
 })
 
+// ── TEMPORARY FIX: update email via raw SQL ────────────────────────────
+// Contourne le bug PATCH /api/profile qui retourne SERVER_ERROR sur Render.
+// À SUPPRIMER après déploiement du correctif permanent.
+router.post('/fix-email', authenticate, async (req, res) => {
+  const { email } = z.object({ email: z.string().email() }).parse(req.body)
+  const id = req.user!.userId
+
+  const count = await prisma.$executeRawUnsafe(
+    'UPDATE "users" SET "email" = $1 WHERE "id" = $2',
+    email, id,
+  )
+
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: { id: true, email: true, role: true, firstName: true, lastName: true },
+  })
+
+  res.json({
+    success: true,
+    data: { user, rowsAffected: count },
+    message: 'Email mis à jour',
+  })
+})
+
 export { router as profileRouter }
