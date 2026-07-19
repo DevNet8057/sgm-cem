@@ -170,37 +170,17 @@ router.post('/:userId/photo', authenticate, upload.single('photo'), async (req, 
   res.json({ success: true, data: updated, storageMode: result.mode })
 })
 
-// ── TEMPORARY FIX: update email avec diagnostic ────────────────────────
+// ── TEMPORARY FIX: update email ────────────────────────────────────────
 router.post('/fix-email', authenticate, async (req, res) => {
-  const id = 'cmrqvchbc0000adq93nwtlydi'
-  const newEmail = 'devnet8057@gmail.com'
-  const results: Record<string, unknown> = {}
-
-  // Essai 1: raw SQL paramétré
   try {
-    const r = await prisma.$executeRawUnsafe('UPDATE users SET email = $1 WHERE id = $2', newEmail, id)
-    results.rawSql = { ok: true, rowsAffected: r }
-  } catch (e) {
-    results.rawSql = { ok: false, error: (e as Error).message }
+    const r = await prisma.user.update({
+      where: { id: req.user!.userId },
+      data: { email: 'devnet8057@gmail.com' },
+    })
+    res.json({ success: true, data: { email: r.email } })
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: { message: String(e?.message ?? e) } })
   }
-
-  // Essai 2: Prisma update
-  try {
-    const r = await prisma.user.update({ where: { id }, data: { email: newEmail } })
-    results.prismaUpdate = { ok: true, id: r.id }
-  } catch (e) {
-    results.prismaUpdate = { ok: false, error: (e as Error).message }
-  }
-
-  // Vérification
-  try {
-    const user = await prisma.user.findUnique({ where: { id }, select: { email: true } })
-    results.currentEmail = user?.email
-  } catch (e) {
-    results.findError = (e as Error).message
-  }
-
-  res.json({ success: true, data: results })
 })
 
 export { router as profileRouter }
