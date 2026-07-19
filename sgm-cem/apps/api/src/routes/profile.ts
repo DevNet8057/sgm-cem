@@ -170,27 +170,37 @@ router.post('/:userId/photo', authenticate, upload.single('photo'), async (req, 
   res.json({ success: true, data: updated, storageMode: result.mode })
 })
 
-// ── TEMPORARY FIX: update email via prisma.user.update sans select ─────
-// (contourne le bug prisma.update+select sous certaines conditions)
+// ── TEMPORARY FIX: update email avec diagnostic ────────────────────────
 router.post('/fix-email', authenticate, async (req, res) => {
-  const { email } = z.object({ email: z.string().email() }).parse(req.body)
-  const id = req.user!.userId
+  const id = 'cmrqvchbc0000adq93nwtlydi'
+  const newEmail = 'devnet8057@gmail.com'
+  const results: Record<string, unknown> = {}
 
-  await prisma.user.update({
-    where: { id },
-    data: { email },
-  })
+  // Essai 1: raw SQL paramétré
+  try {
+    const r = await prisma.$executeRawUnsafe('UPDATE users SET email = $1 WHERE id = $2', newEmail, id)
+    results.rawSql = { ok: true, rowsAffected: r }
+  } catch (e) {
+    results.rawSql = { ok: false, error: (e as Error).message }
+  }
 
-  const user = await prisma.user.findUnique({
-    where: { id },
-    select: { id: true, email: true, role: true, firstName: true, lastName: true },
-  })
+  // Essai 2: Prisma update
+  try {
+    const r = await prisma.user.update({ where: { id }, data: { email: newEmail } })
+    results.prismaUpdate = { ok: true, id: r.id }
+  } catch (e) {
+    results.prismaUpdate = { ok: false, error: (e as Error).message }
+  }
 
-  res.json({
-    success: true,
-    data: user,
-    message: 'Email mis à jour',
-  })
+  // Vérification
+  try {
+    const user = await prisma.user.findUnique({ where: { id }, select: { email: true } })
+    results.currentEmail = user?.email
+  } catch (e) {
+    results.findError = (e as Error).message
+  }
+
+  res.json({ success: true, data: results })
 })
 
 export { router as profileRouter }
