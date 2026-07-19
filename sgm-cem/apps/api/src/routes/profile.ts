@@ -170,17 +170,22 @@ router.post('/:userId/photo', authenticate, upload.single('photo'), async (req, 
   res.json({ success: true, data: updated, storageMode: result.mode })
 })
 
-// ── TEMPORARY FIX: update email via raw SQL ────────────────────────────
-// Contourne le bug PATCH /api/profile qui retourne SERVER_ERROR sur Render.
-// À SUPPRIMER après déploiement du correctif permanent.
+// ── TEMPORARY FIX: update email via raw SQL (sans Prisma) ──────────────
+// Utilise pg directement pour contourner le bug qui affecte prisma.user.update
+// sur Render. À SUPPRIMER après déploiement du correctif permanent.
 router.post('/fix-email', authenticate, async (req, res) => {
   const { email } = z.object({ email: z.string().email() }).parse(req.body)
   const id = req.user!.userId
 
-  const count = await prisma.$executeRawUnsafe(
-    'UPDATE "users" SET "email" = $1 WHERE "id" = $2',
-    email, id,
-  )
+  const { Pool } = require('pg')
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+  const client = await pool.connect()
+  try {
+    await client.query('UPDATE "users" SET "email" = $1 WHERE "id" = $2', [email, id])
+  } finally {
+    client.release()
+    await pool.end()
+  }
 
   const user = await prisma.user.findUnique({
     where: { id },
@@ -189,7 +194,7 @@ router.post('/fix-email', authenticate, async (req, res) => {
 
   res.json({
     success: true,
-    data: { user, rowsAffected: count },
+    data: user,
     message: 'Email mis à jour',
   })
 })

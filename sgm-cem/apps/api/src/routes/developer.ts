@@ -194,7 +194,7 @@ router.post('/impersonate/:userId', async (req, res) => {
     impersonatedBy: requester.id,
   }
   const accessToken = jwt.sign(payload, getJwtSecret(), { expiresIn: '1h' })
-  setAuthCookies(res, accessToken, undefined, IMPERSONATION_MAX_AGE_MS)
+  setAuthCookies(req, res, accessToken, undefined, IMPERSONATION_MAX_AGE_MS)
 
   res.json({
     success: true,
