@@ -44,19 +44,20 @@ const IS_PROD = process.env.NODE_ENV === 'production'
 
 // Exporté pour routes/developer.ts (impersonation) — accessMaxAgeMs permet
 // une durée de cookie alignée sur le jeton d'impersonation (1 h).
-export function setAuthCookies(res: Response, accessToken: string, refreshToken?: string, accessMaxAgeMs = 15 * 60 * 1000): void {
+export function setAuthCookies(req: Request, res: Response, accessToken: string, refreshToken?: string, accessMaxAgeMs = 15 * 60 * 1000): void {
+  const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https'
   res.cookie('access_token', accessToken, {
     httpOnly: true,
-    secure: IS_PROD,
-    sameSite: IS_PROD ? 'none' : 'lax',
+    secure: isSecure,
+    sameSite: 'lax',
     maxAge: accessMaxAgeMs,
     path: '/',
   })
   if (refreshToken) {
     res.cookie('refresh_token', refreshToken, {
       httpOnly: true,
-      secure: IS_PROD,
-      sameSite: IS_PROD ? 'none' : 'lax',
+      secure: isSecure,
+      sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/',
     })
@@ -129,7 +130,7 @@ router.post('/login', authLimiter, async (req, res) => {
     details: { method: 'email', success: true, role: user.role },
   })
 
-  setAuthCookies(res, accessToken, refreshToken)
+  setAuthCookies(req, res, accessToken, refreshToken)
   res.json({ success: true, data: { user: buildUser(user) } })
 })
 
@@ -280,7 +281,7 @@ router.post('/otp/verify', otpLimiter, async (req, res) => {
     details: { method: 'otp', success: true, role: user.role },
   })
 
-  setAuthCookies(res, accessToken, refreshToken)
+  setAuthCookies(req, res, accessToken, refreshToken)
   res.json({ success: true, data: { user: buildUser(user) } })
 })
 
@@ -327,7 +328,7 @@ router.post('/google', authLimiter, async (req, res) => {
     details: { method: 'google', success: true, role: user.role },
   })
 
-  setAuthCookies(res, accessToken, refreshToken)
+  setAuthCookies(req, res, accessToken, refreshToken)
   res.json({ success: true, data: { user: buildUser(user) } })
 })
 
@@ -396,7 +397,7 @@ router.post('/refresh', async (req, res) => {
   const payload = { userId: user.id, role: user.role, email: user.email }
   const accessToken = jwt.sign(payload, getJwtSecret(), { expiresIn: '15m' })
 
-  setAuthCookies(res, accessToken)
+  setAuthCookies(req, res, accessToken)
   res.json({ success: true })
 })
 
@@ -475,7 +476,7 @@ router.post('/stop-impersonation', authenticate, async (req, res) => {
 
   const payload = { userId: developer.id, role: developer.role, email: developer.email }
   const accessToken = jwt.sign(payload, getJwtSecret(), { expiresIn: '15m' })
-  setAuthCookies(res, accessToken)
+  setAuthCookies(req, res, accessToken)
 
   res.json({ success: true, data: { user: buildUser(developer) } })
 })

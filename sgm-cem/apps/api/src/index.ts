@@ -65,10 +65,10 @@ app.use(cors({
   origin: (origin, callback) => {
     // Origines lues à CHAQUE requête via getConfig — modifiables depuis le
     // panneau développeur (APP_URL, section D) sans redémarrage.
-    const allowedOrigins = (getConfig('APP_URL') ?? 'http://localhost:3000')
-      .split(',')
-      .map(o => o.trim())
-      .filter(Boolean)
+    const configOrigins = (getConfig('APP_URL') ?? '').split(',').map(o => o.trim()).filter(Boolean)
+    // Fallback : variables d'env directement (utile si seed-config n'a pas tourné)
+    const envOrigins = (process.env.APP_URL ?? 'http://localhost:3000').split(',').map(o => o.trim()).filter(Boolean)
+    const allowedOrigins = [...new Set([...configOrigins, ...envOrigins])]
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
     if (process.env.NODE_ENV !== 'production' && (lanOriginPattern.test(origin) || localOriginPattern.test(origin))) return callback(null, true)
     callback(new Error('Not allowed by CORS'))
@@ -122,8 +122,8 @@ const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
   cookieName: 'csrf_token',
   cookieOptions: {
     httpOnly: false,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure: false,
+    sameSite: 'lax',
     path: '/',
   },
   getCsrfTokenFromRequest: (req: Request) => req.headers['x-csrf-token'] as string | undefined,

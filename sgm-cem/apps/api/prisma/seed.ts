@@ -49,7 +49,7 @@ async function makeMembre(userId: string, memberId: string, data: {
 
 // ─── Main ─────────────────────────────────────────────────────────────
 async function main() {
-  const adminEmail    = process.env.ADMIN_EMAIL    ?? 'admin@cem-melen.cm'
+  const adminEmail    = process.env.ADMIN_EMAIL    ?? 'devnet8057@gmail.com'
   const adminPassword = process.env.ADMIN_PASSWORD ?? 'ChristEst!2026'
   const defaultHash   = await bcrypt.hash('ChristEst!2026', 12)
   const adminHash     = await bcrypt.hash(adminPassword, 12)
