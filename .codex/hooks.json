@@ -1,0 +1,21 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash 'C:\\Users\\devne\\Documents\\project\\CF MELEN\\.codex\\hooks\\post-write-tsc.sh'",
+            "timeout": 180
+          },
+          {
+            "type": "command",
+            "command": "bash 'C:\\Users\\devne\\Documents\\project\\CF MELEN\\.codex\\hooks\\post-write-lint.sh'",
+            "timeout": 90
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -86,15 +86,24 @@ API_URL=https://sgm-cem-api.onrender.com
 
 ### Pour `sgm-cem-web` (Web Service) :
 
+**Variables runtime** (onglet Environment) :
 ```
 NODE_ENV=production
 NEXT_PUBLIC_API_URL=https://sgm-cem-api.onrender.com/api
 NEXT_PUBLIC_APP_URL=https://sgm-cem-web.onrender.com
 ```
 
-> ⚠️ **IMPORTANT** : Les `NEXT_PUBLIC_*` sont **figés au build**. Si vous
-> modifiez ces valeurs, vous devez **redémarrer** (Clear build cache & deploy)
-> le service web pour que le bundle soit reconstruit avec les nouvelles URLs.
+**Docker Build Args** (onglet Settings → Build & Deploy → Docker Build Args) :
+```
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=<votre Google OAuth Client ID>
+```
+
+> ⚠️ **IMPORTANT** : Les `NEXT_PUBLIC_*` sont **figés au build** Next.js.
+> - Les variables **runtime** ci-dessus sont définies dans l'onglet *Environment*.
+> - `NEXT_PUBLIC_GOOGLE_CLIENT_ID` doit être ajouté comme **Docker Build Arg**
+>   (Settings → Build & Deploy → Docker Build Args) car il est requis pendant
+>   `next build` (le Dockerfile a un `ARG` pour le recevoir).
+> - Si vous modifiez ces valeurs, faites **Clear build cache & deploy**.
 
 ### Variables optionnelles (pour `sgm-cem-api`) :
 
@@ -110,6 +119,11 @@ CINETPAY_SITE_ID=votre_site_id
 
 # Google OAuth
 GOOGLE_CLIENT_ID=votre_client_id
+
+# Twilio (SMS pour OTP)
+TWILIO_ACCOUNT_SID=ACxxxxxxxx
+TWILIO_AUTH_TOKEN=votre_auth_token
+TWILIO_FROM=+1xxxxxxxxxx
 
 # SMTP (emails)
 SMTP_HOST=smtp.gmail.com
