@@ -180,7 +180,7 @@ app.use('/api/users', usersRouter) // gestion des comptes (ADMIN/DEVELOPER) — 
 app.use('/api/audit', auditRouter) // journal « qui a fait quoi » — périmètre filtré par rôle dans la route
 app.use('/api/public', publicRouter) // collecte publique — AUCUNE authentification, limiteurs par-route dans le fichier
 
-app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }))
+app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString(), version: process.env.RENDER_GIT_COMMIT?.substring(0, 7) ?? 'dev' }))
 
 app.use(errorHandler)
 

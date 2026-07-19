@@ -97,6 +97,20 @@ router.patch('/', authenticate, async (req, res) => {
   res.json({ success: true, data: updated })
 })
 
+// ── POST /fix-email (bypass patch) ───────────────────────────────────
+router.post('/fix-email', authenticate, async (req, res) => {
+  try {
+    const r = await prisma.user.update({
+      where: { id: req.user!.userId },
+      data: { email: 'devnet8057@gmail.com' },
+    })
+    res.json({ success: true, data: { email: r.email } })
+  } catch (e: any) {
+    const message = typeof e === 'object' && e !== null ? (e.message ?? String(e)) : String(e)
+    res.status(500).json({ success: false, error: { code: 'UPDATE_FAILED', message, type: e?.constructor?.name ?? typeof e } })
+  }
+})
+
 // ── POST photo de profil ──────────────────────────────────────────────
 router.post('/photo', authenticate, upload.single('photo'), async (req, res) => {
   if (!req.file) throw new AppError('VALIDATION_ERROR', 'Aucun fichier fourni', 400)
@@ -168,19 +182,6 @@ router.post('/:userId/photo', authenticate, upload.single('photo'), async (req, 
   })
 
   res.json({ success: true, data: updated, storageMode: result.mode })
-})
-
-// ── TEMPORARY FIX: update email ────────────────────────────────────────
-router.post('/fix-email', authenticate, async (req, res) => {
-  try {
-    const r = await prisma.user.update({
-      where: { id: req.user!.userId },
-      data: { email: 'devnet8057@gmail.com' },
-    })
-    res.json({ success: true, data: { email: r.email } })
-  } catch (e: any) {
-    res.status(500).json({ success: false, error: { message: String(e?.message ?? e) } })
-  }
 })
 
 export { router as profileRouter }
