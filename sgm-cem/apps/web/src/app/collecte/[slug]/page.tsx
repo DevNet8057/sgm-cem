@@ -7,6 +7,7 @@ import { Alert, Card, Result, Skeleton, Typography } from 'antd'
 import { motion, useReducedMotion } from 'framer-motion'
 import api from '@/lib/api'
 import { PublicCollecteStepper } from '@/components/public/PublicCollecteStepper'
+import { BrandMark } from '@/components/ui/BrandMark'
 import type { CollectePubliqueDef } from '@sgm-cem/shared'
 
 // Page publique accessible sans authentification, hors du groupe (app).
@@ -61,13 +62,11 @@ export default function CollectePubliquePage() {
   }
 
   return (
-    <motion.div
-      initial={reduceMotion ? undefined : { opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: reduceMotion ? 0 : 0.25 }}
-    >
-      <PublicCollecteStepper collecte={data} slug={slug} />
-    </motion.div>
+    <PublicShell animation={animation}>
+      <div className="[&>div]:!min-h-0 [&>div]:!bg-transparent [&>div]:!p-0 [&>div>div]:!max-w-none [&>div>div]:!overflow-visible [&>div>div]:!rounded-none [&>div>div]:!border-0 [&>div>div]:!shadow-none">
+        <PublicCollecteStepper collecte={data} slug={slug} />
+      </div>
+    </PublicShell>
   )
 }
 
@@ -81,7 +80,7 @@ type PublicShellProps = {
 
 function PublicShell({ children, animation }: PublicShellProps) {
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f4f7f4] px-4 py-8 sm:px-6">
+    <main className="auth-public-background relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-8 sm:px-6">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-[#0f4a0f]/10 to-transparent" />
       <motion.div
         initial={animation?.initial}
@@ -91,14 +90,12 @@ function PublicShell({ children, animation }: PublicShellProps) {
       >
         <Card
           variant="borderless"
-          className="overflow-hidden shadow-[0_20px_60px_rgba(15,74,15,0.12)]"
+          className="!overflow-hidden !rounded-[24px] shadow-[0_20px_60px_rgba(15,74,15,0.12)]"
           styles={{ body: { padding: 0 } }}
         >
           <header className="bg-gradient-to-br from-[#073507] via-[#0f4a0f] to-[#1a6b1a] px-5 py-5 sm:px-7">
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#f5c400] shadow-sm">
-                <span className="font-display text-sm font-black text-[#0f4a0f]">CEM</span>
-              </div>
+              <BrandMark size={56} variant="compact" alt="Logo CEM" />
               <div>
                 <Typography.Text strong className="block !text-base !text-white">
                   SGM-CEM

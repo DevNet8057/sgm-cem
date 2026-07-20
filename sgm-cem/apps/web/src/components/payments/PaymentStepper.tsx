@@ -4,12 +4,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button as AntButton, Form, Input, Modal, Progress, Result, Steps } from 'antd'
 import { motion, useReducedMotion } from 'framer-motion'
 import {
-  AlertCircle, Check, CheckCircle2, CreditCard, ExternalLink,
+  AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, CreditCard, ExternalLink,
   FileText, Heart, Loader2, Printer, RefreshCw, Share2, X,
 } from 'lucide-react'
 import api from '@/lib/api'
-import { cn, formatAmount, MODE_PAIEMENT_LABELS } from '@/lib/utils'
-import { Button } from '@/components/ui/Button'
+import { cn, formatAmount } from '@/lib/utils'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { calculateAmountWithCommission, YELII_COMMISSION_RATE } from '@sgm-cem/shared'
 import { PaymentMethodSelector, OperatorSelector, type PayMode, type MobileOperator } from './PaymentMethodSelector'
@@ -247,15 +246,52 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
   return (
     <Modal
       open
-      title={null}
-      footer={null}
+      title={(
+        <div>
+          <h2 className="font-display text-xl font-semibold text-[#0F4A0F]">Enregistrer un paiement</h2>
+          <p className="mt-1 text-xs font-normal text-gray-400">Étape {step + 1} sur {STEPS.length}</p>
+        </div>
+      )}
+      footer={(
+        <div className="flex items-center justify-between gap-3">
+          {step < 3 ? (
+            <AntButton
+              type="text"
+              icon={step === 0 ? undefined : <ArrowLeft size={14} />}
+              onClick={step === 0 ? onClose : goPrev}
+            >
+              {step === 0 ? 'Annuler' : 'Retour'}
+            </AntButton>
+          ) : <span />}
+          {step < 2 && (
+            <AntButton type="primary" icon={<ArrowRight size={14} />} iconPosition="end" onClick={goNext}>
+              Suivant
+            </AntButton>
+          )}
+          {step === 2 && (
+            <AntButton type="primary" loading={pay.isPending} icon={<CreditCard size={14} />} onClick={() => pay.mutate()}>
+              {mode === 'ESPECES' ? 'Confirmer le paiement' : 'Payer maintenant'}
+            </AntButton>
+          )}
+          {step === 3 && (payStatus === 'confirmed' || payStatus === 'failed' || payStatus === 'timeout') && (
+            <AntButton type="primary" onClick={onClose}>Fermer</AntButton>
+          )}
+        </div>
+      )}
       width={576}
       centered
-      closable={false}
+      closable={canClose}
+      closeIcon={<X size={18} />}
       keyboard={canClose}
       maskClosable={canClose}
-      onCancel={canClose ? onClose : undefined}
-      styles={{ container: { padding: 0, overflow: 'hidden', borderRadius: 24 } }}
+      onCancel={onClose}
+      className="max-sm:!m-0 max-sm:!top-0 max-sm:!w-full max-sm:!max-w-none [&_.ant-modal-content]:flex [&_.ant-modal-content]:max-h-[calc(100dvh-32px)] [&_.ant-modal-content]:flex-col [&_.ant-modal-content]:overflow-hidden max-sm:[&_.ant-modal-content]:h-[100dvh] max-sm:[&_.ant-modal-content]:max-h-none max-sm:[&_.ant-modal-content]:rounded-none [&_.ant-modal-body]:min-h-0 [&_.ant-modal-body]:flex-1 [&_.ant-modal-body]:overflow-y-auto"
+      styles={{
+        content: { padding: 0, overflow: 'hidden', borderRadius: 16 },
+        header: { margin: 0, padding: '20px 48px 16px 24px', borderBottom: '1px solid #f3f4f6' },
+        body: { padding: 0 },
+        footer: { margin: 0, padding: '16px 24px max(16px, env(safe-area-inset-bottom))', borderTop: '1px solid #f3f4f6', background: 'rgba(249, 250, 251, 0.5)' },
+      }}
       modalRender={modal => (
         <motion.div
           initial={reduceMotion ? false : { opacity: 0, y: 24, scale: 0.98 }}
@@ -267,18 +303,30 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
       )}
     >
 
-        {/* ── En-tête ── */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
-          <div>
-            <h2 className="font-display font-semibold text-[#0F4A0F] text-xl">Enregistrer un paiement</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Étape {step + 1} sur {STEPS.length}</p>
-          </div>
-          <AntButton type="text" shape="circle" aria-label="Fermer" icon={<X size={16} />} disabled={!canClose} onClick={onClose} />
-        </div>
-
         {/* ── Barre de progression ── */}
-        <div className="border-b border-gray-50 px-4 py-4 sm:px-6">
-          <Steps current={step} responsive={false} size="small" items={STEPS.map(title => ({ title }))} />
+        <div className="border-b border-gray-50 px-4 py-3 sm:px-6 sm:py-4">
+          <div
+            className="flex items-center justify-center gap-2 sm:hidden"
+            role="progressbar"
+            aria-label={`Étape ${step + 1} sur ${STEPS.length} : ${STEPS[step]}`}
+            aria-valuemin={1}
+            aria-valuemax={STEPS.length}
+            aria-valuenow={step + 1}
+          >
+            {STEPS.map((title, index) => (
+              <span
+                key={title}
+                aria-hidden="true"
+                className={cn(
+                  'h-2 rounded-full transition-all',
+                  index === step ? 'w-6 bg-[#1A6B1A]' : index < step ? 'w-2 bg-[#1A6B1A]/50' : 'w-2 bg-gray-200'
+                )}
+              />
+            ))}
+          </div>
+          <div className="hidden sm:block">
+            <Steps current={step} responsive={false} size="small" items={STEPS.map(title => ({ title }))} />
+          </div>
         </div>
 
         {/* ── Contenu des étapes ── */}
@@ -287,7 +335,7 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
           initial={reduceMotion ? false : { opacity: 0, x: 12 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: reduceMotion ? 0 : 0.18 }}
-          className="max-h-[62dvh] overflow-y-auto px-4 py-5 scrollbar-thin sm:px-6"
+          className="px-4 py-5 sm:px-6"
         >
 
           {/* ── Étape 1 : Sélection ── */}
@@ -531,9 +579,7 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
                       Si vous avez validé votre PIN, le paiement sera confirmé automatiquement dans votre historique.
                     </p>
                   </div>
-                  <button onClick={retry} className="flex items-center gap-2 mx-auto text-sm text-[#1A6B1A] hover:underline">
-                    <RefreshCw size={13} /> Réessayer
-                  </button>
+                  <AntButton type="link" icon={<RefreshCw size={13} />} onClick={retry}>Réessayer</AntButton>
                 </div>
               )}
 
@@ -551,12 +597,13 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
                     </p>
                   </div>
                   {cinetpayUrl && (
-                    <button
+                    <AntButton
+                      type="link"
+                      icon={<ExternalLink size={13} />}
                       onClick={() => window.open(cinetpayUrl, '_blank', 'noopener,noreferrer')}
-                      className="flex items-center gap-2 mx-auto text-sm text-blue-600 hover:underline"
                     >
-                      <ExternalLink size={13} /> Rouvrir CinetPay
-                    </button>
+                      Rouvrir CinetPay
+                    </AntButton>
                   )}
                   <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
                     <Loader2 size={13} className="animate-spin" />
@@ -579,26 +626,28 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
                   </div>
                   {receiptUrl ? (
                     <div className="flex flex-wrap items-center justify-center gap-2">
-                      <a
+                      <AntButton
+                        type="primary"
+                        icon={<FileText size={14} />}
                         href={receiptUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-[10px] bg-[#1A6B1A] text-white text-sm font-semibold hover:bg-[#0F4A0F] transition-colors"
                       >
-                        <FileText size={14} /> Voir le reçu
-                      </a>
-                      <button
+                        Voir le reçu
+                      </AntButton>
+                      <AntButton
+                        icon={<Printer size={14} />}
                         onClick={() => {
                           const w = window.open(receiptUrl, '_blank', 'noopener,noreferrer')
                           // PDF cross-origin : si print() est bloqué, le lecteur PDF
                           // du navigateur permet d'imprimer (Ctrl+P)
                           try { w?.addEventListener('load', () => { try { w.print() } catch { /* viewer */ } }) } catch { /* cross-origin */ }
                         }}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-[10px] border-2 border-[#1A6B1A] text-[#1A6B1A] text-sm font-semibold hover:bg-[#E8F5E8] transition-colors"
                       >
-                        <Printer size={14} /> Imprimer
-                      </button>
-                      <button
+                        Imprimer
+                      </AntButton>
+                      <AntButton
+                        icon={<Share2 size={14} />}
                         onClick={async () => {
                           const text = 'Reçu de contribution — CEM Melen'
                           if (navigator.share) {
@@ -607,10 +656,9 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
                           // Fallback : partage WhatsApp choisi PAR l'utilisateur (pas automatique)
                           window.open(`https://wa.me/?text=${encodeURIComponent(`${text} : ${receiptUrl}`)}`, '_blank', 'noopener,noreferrer')
                         }}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-[10px] border-2 border-[#1A6B1A] text-[#1A6B1A] text-sm font-semibold hover:bg-[#E8F5E8] transition-colors"
                       >
-                        <Share2 size={14} /> Partager
-                      </button>
+                        Partager
+                      </AntButton>
                     </div>
                   ) : (
                     <div className="flex items-center justify-center gap-2 text-xs text-gray-400">
@@ -632,9 +680,7 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
                       {failReason || "La demande n'a pas abouti. Vérifiez votre solde ou essayez un autre mode."}
                     </p>
                   </div>
-                  <button onClick={retry} className="flex items-center gap-2 mx-auto text-sm text-[#1A6B1A] hover:underline">
-                    <RefreshCw size={13} /> Réessayer
-                  </button>
+                  <AntButton type="link" icon={<RefreshCw size={13} />} onClick={retry}>Réessayer</AntButton>
                 </div>
               )}
             </div>
@@ -646,30 +692,6 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
           )}
         </motion.div>
 
-        {/* ── Footer ── */}
-        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50">
-          {/* Bouton gauche */}
-          {step < 3 ? (
-            <Button variant="ghost" onClick={step === 0 ? onClose : goPrev}>
-              {step === 0 ? 'Annuler' : '← Retour'}
-            </Button>
-          ) : (
-            <div />
-          )}
-
-          {/* Bouton droit */}
-          {step === 0 && <Button onClick={goNext}>Suivant →</Button>}
-          {step === 1 && <Button onClick={goNext}>Suivant →</Button>}
-          {step === 2 && (
-            <Button loading={pay.isPending} onClick={() => pay.mutate()}>
-              <CreditCard size={14} />
-              {mode === 'ESPECES' ? 'Confirmer le paiement' : 'Payer maintenant'}
-            </Button>
-          )}
-          {step === 3 && (payStatus === 'confirmed' || payStatus === 'failed' || payStatus === 'timeout') && (
-            <Button onClick={onClose}>Fermer</Button>
-          )}
-        </div>
     </Modal>
   )
 }

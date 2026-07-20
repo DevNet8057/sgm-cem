@@ -1,6 +1,6 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation'
 import { Alert, Button, Card, Form, Input, Modal, Tabs, Typography } from 'antd'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useAuthStore } from '@/store/authStore'
+import { BrandMark } from '@/components/ui/BrandMark'
 import { cn } from '@/lib/utils'
 import api from '@/lib/api'
 
@@ -114,7 +115,7 @@ export default function LoginPage() {
   const { login, loginWithGoogle, loginWithPhone } = useAuthStore()
   const router = useRouter()
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<EmailForm>({
+  const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm<EmailForm>({
     resolver: zodResolver(emailSchema),
   })
 
@@ -253,7 +254,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-[100dvh] bg-[#f3f7f3] lg:grid lg:grid-cols-[minmax(380px,40%)_1fr]">
+    <main className="auth-public-background min-h-[100dvh] bg-[#f3f7f3] lg:grid lg:grid-cols-[minmax(380px,40%)_1fr]">
       {/* ── Panneau gauche (desktop) ── */}
       <aside
         className="hidden lg:flex flex-col justify-center px-12 py-8 relative overflow-hidden cross-bg"
@@ -263,9 +264,7 @@ export default function LoginPage() {
           style={{ background: 'radial-gradient(circle,#F5C400,transparent)', opacity: 0.08 }} />
 
         <div className="relative z-10 w-full max-w-[520px]">
-          <div className="w-12 h-12 rounded-[12px] bg-white flex items-center justify-center mb-6 shadow-cem-yellow overflow-hidden p-1.5">
-            <img src="/icon-192.png" alt="Logo CEM" className="w-full h-full object-contain" />
-          </div>
+          <BrandMark size={48} variant="compact" alt="Logo CEM" className="mb-6" />
           <h1 className="font-display text-white text-[clamp(32px,3vw,36px)] font-semibold leading-tight mb-4">
             Système de Gestion<br />du Ministère
           </h1>
@@ -294,9 +293,7 @@ export default function LoginPage() {
         <Card className="!rounded-3xl !border-white/80 shadow-[0_24px_70px_rgba(15,74,15,0.12)]" styles={{ body: { padding: 'clamp(20px, 5vw, 36px)' } }}>
           {/* Logo mobile */}
           <div className="lg:hidden flex justify-center mb-8">
-            <div className="w-14 h-14 rounded-[14px] bg-white flex items-center justify-center shadow-cem-yellow overflow-hidden p-2">
-              <img src="/icon-192.png" alt="Logo CEM" className="w-full h-full object-contain" />
-            </div>
+            <BrandMark size={56} variant="compact" alt="Logo CEM" />
           </div>
 
           <Typography.Title level={2} className="!mb-1 !text-[#0F4A0F]">Connexion</Typography.Title>
@@ -316,19 +313,31 @@ export default function LoginPage() {
                 validateStatus={errors.email ? 'error' : undefined}
                 help={errors.email?.message}
               >
-                <Input {...register('email')} type="email" placeholder="admin@cem-melen.cm" size="large" prefix={<Mail size={16} />} autoComplete="email"
-                  suppressHydrationWarning
-                  />
+                <Controller
+                  name="email"
+                  control={control}
+                  render={({ field }) => (
+                    <Input {...field} type="email" placeholder="admin@cem-melen.cm" size="large" prefix={<Mail size={16} />} autoComplete="email"
+                      suppressHydrationWarning
+                    />
+                  )}
+                />
               </Form.Item>
               <Form.Item
                 label="Mot de passe"
                 validateStatus={errors.password ? 'error' : undefined}
                 help={errors.password?.message}
               >
-                  <Input.Password {...register('password')} placeholder="••••••••" size="large" prefix={<Lock size={16} />} autoComplete="current-password"
-                    visibilityToggle={{ visible: showPwd, onVisibleChange: setShowPwd }}
-                    suppressHydrationWarning
+                <Controller
+                  name="password"
+                  control={control}
+                  render={({ field }) => (
+                    <Input.Password {...field} placeholder="••••••••" size="large" prefix={<Lock size={16} />} autoComplete="current-password"
+                      visibilityToggle={{ visible: showPwd, onVisibleChange: setShowPwd }}
+                      suppressHydrationWarning
                     />
+                  )}
+                />
               </Form.Item>
                 <div className="flex justify-end mt-1.5">
                   <button type="button" onClick={openForgotModal} suppressHydrationWarning

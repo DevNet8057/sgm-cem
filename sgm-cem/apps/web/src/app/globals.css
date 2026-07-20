@@ -20,11 +20,18 @@
     --cem-text-muted: #64748B;
     --cem-focus: #1A6B1A;
     --cem-shadow-sm: 0 1px 2px rgba(5, 32, 5, 0.05);
-    --cem-shadow-md: 0 12px 32px rgba(5, 32, 5, 0.08);
+    --cem-shadow-md: 0 8px 24px rgba(5, 32, 5, 0.10);
+    --cem-shadow-lg: 0 20px 48px rgba(5, 32, 5, 0.16);
     --cem-radius-card: 24px;
     --cem-radius-control: 10px;
     --cem-transition-fast: 150ms ease;
     --cem-transition-base: 220ms cubic-bezier(0.4, 0, 0.2, 1);
+    /* Cadence d'espacement : 4 / 8 / 16 / 24 / 32 px. */
+    --cem-space-1: 4px;
+    --cem-space-2: 8px;
+    --cem-space-4: 16px;
+    --cem-space-6: 24px;
+    --cem-space-8: 32px;
     color-scheme: light;
   }
   *, *::before, *::after { box-sizing: border-box; }
@@ -38,10 +45,7 @@
   }
   body {
     font-family: 'Montserrat', system-ui, sans-serif;
-    background:
-      radial-gradient(circle at 12% 0%, rgba(245, 196, 0, 0.06), transparent 28rem),
-      radial-gradient(circle at 100% 16%, rgba(26, 107, 26, 0.06), transparent 34rem),
-      var(--cem-background);
+    background: var(--cem-background);
     color: var(--cem-text);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -53,7 +57,7 @@
     -webkit-tap-highlight-color: transparent;
   }
   :where(a, button, input, textarea, select, [tabindex]):focus-visible {
-    outline: 3px solid color-mix(in srgb, var(--cem-focus) 35%, transparent);
+    outline: 2px solid color-mix(in srgb, var(--cem-focus) 55%, transparent);
     outline-offset: 2px;
   }
   ::selection {
@@ -70,10 +74,18 @@
   }
   *::-webkit-scrollbar-thumb:hover { background-color: var(--cem-text-muted); }
 
-  /* Harmonisation des surfaces Ant Design avec le socle CEM. */
-  :where(.ant-card, .ant-modal-content, .ant-drawer-content, .ant-popover-inner, .ant-dropdown-menu) {
+  /* Hiérarchie d'élévation des surfaces Ant Design. */
+  .ant-card {
+    border-color: var(--cem-border);
+    box-shadow: var(--cem-shadow-sm);
+  }
+  :where(.ant-popover-inner, .ant-dropdown-menu) {
     border-color: var(--cem-border);
     box-shadow: var(--cem-shadow-md);
+  }
+  :where(.ant-modal-content, .ant-drawer-content) {
+    border-color: var(--cem-border);
+    box-shadow: var(--cem-shadow-lg);
   }
 }
 
@@ -107,6 +119,13 @@
 }
 
 @layer utilities {
+  .auth-public-background {
+    background:
+      radial-gradient(circle at 12% 0%, rgba(245, 196, 0, 0.06), transparent 28rem),
+      radial-gradient(circle at 100% 16%, rgba(26, 107, 26, 0.06), transparent 34rem),
+      var(--cem-background);
+  }
+
   /* Surfaces sémantiques réutilisables par les vues métier. */
   .surface {
     background: var(--cem-surface);

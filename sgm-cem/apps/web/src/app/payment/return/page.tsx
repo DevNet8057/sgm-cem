@@ -3,6 +3,7 @@ import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
 import api from '@/lib/api'
+import { BrandMark } from '@/components/ui/BrandMark'
 import { cn } from '@/lib/utils'
 
 type Status = 'loading' | 'confirmed' | 'pending' | 'failed'
@@ -72,13 +73,11 @@ function PaymentReturnContent() {
   }, [transactionId])
 
   return (
-    <div className="min-h-screen bg-[#F8FAF8] flex items-center justify-center p-6">
+    <div className="auth-public-background min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-sm bg-white rounded-[24px] shadow-sm border border-gray-100 overflow-hidden">
         {/* Logo */}
         <div className="bg-gradient-to-br from-[#052005] to-[#1A6B1A] px-6 py-5 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-[10px] bg-[#F5C400] flex items-center justify-center">
-            <span className="text-[#0F4A0F] font-black text-sm font-display">CEM</span>
-          </div>
+          <BrandMark size={40} variant="compact" alt="Logo CEM" />
           <div>
             <p className="text-white font-semibold text-sm">SGM-CEM</p>
             <p className="text-white/60 text-xs">Retour de paiement CinetPay</p>

@@ -8,7 +8,8 @@ import { Avatar, Badge, Drawer, Layout, Menu, type MenuProps } from 'antd'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useAppStore } from '@/store/appStore'
 import { useAuthStore } from '@/store/authStore'
-import { cn, getInitials, ROLE_LABELS, ROLE_LEVELS } from '@/lib/utils'
+import { BrandMark } from '@/components/ui/BrandMark'
+import { getInitials, ROLE_LABELS, ROLE_LEVELS } from '@/lib/utils'
 
 // ─── Navigation par rôle ─────────────────────────────────────────────
 // minLevel : niveau minimum pour voir l'item
@@ -53,18 +54,6 @@ const SECTION_LABELS: Record<string, string> = {
   MON_ESPACE: 'Mon espace', GESTION: 'Gestion', OUTILS: 'Outils',
   SYSTEME: 'Système', MON_COMPTE: 'Mon compte',
 }
-// Icon color by domain (visible on dark sidebar, A3)
-const SECTION_ICON_COLOR: Record<string, string> = {
-  NAVIGATION: 'text-white',
-  FINANCES:   'text-emerald-400',
-  MEMBRES:    'text-blue-400',
-  MON_ESPACE: 'text-blue-400',
-  GESTION:    'text-purple-400',
-  OUTILS:     'text-amber-400',
-  SYSTEME:    'text-slate-400',
-  MON_COMPTE: 'text-slate-400',
-}
-
 export function Sidebar() {
   const { activeView, setActiveView, sidebarOpen, setSidebarOpen, unreadCount, pendingTransfersCount } = useAppStore()
   const { user, logout } = useAuthStore()
@@ -87,6 +76,48 @@ export function Sidebar() {
     setSidebarOpen(false)
   }
 
+  const menuItems: MenuProps['items'] = SECTIONS.flatMap(section => {
+    const items = filteredNav.filter(item => item.section === section)
+    if (!items.length) return []
+
+    return [{
+      type: 'group' as const,
+      key: section,
+      label: SECTION_LABELS[section] || undefined,
+      children: items.map(item => {
+        const Icon = item.icon
+        const count = item.id === 'transfer-validations' ? pendingTransfersCount : item.id === 'notifications' ? unreadCount : 0
+
+        return {
+          key: item.id,
+          icon: <Icon size={17} className="shrink-0 text-white/65" />,
+          label: (
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="flex-1 truncate text-xs font-medium">{item.label}</span>
+              {count > 0 && (
+                <Badge
+                  count={count > 9 ? '9+' : count}
+                  overflowCount={9}
+                  styles={{ indicator: { backgroundColor: '#ef4444', color: '#fff', boxShadow: 'none' } }}
+                />
+              )}
+            </span>
+          ),
+          style: {
+            height: 40,
+            lineHeight: '40px',
+            marginInline: 0,
+            width: '100%',
+            borderRadius: 10,
+            color: activeView === item.id ? '#0F4A0F' : undefined,
+            background: activeView === item.id ? '#F5C400' : undefined,
+            boxShadow: activeView === item.id ? '0 6px 20px rgba(245,196,0,0.22)' : undefined,
+          },
+        }
+      }),
+    }]
+  })
+
   const sidebarContent = (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[linear-gradient(180deg,#041b0a_0%,#0b3d18_48%,#0f5721_100%)] text-white">
       <div className="flex min-h-[76px] items-center justify-between border-b border-white/10 px-5 py-4">
@@ -95,9 +126,9 @@ export function Sidebar() {
             initial={reduceMotion ? false : { opacity: 0, scale: 0.92 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: reduceMotion ? 0 : 0.25 }}
-            className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-1 shadow-[0_8px_24px_rgba(245,196,0,0.18)]"
+            className="shrink-0"
           >
-            <img src="/icon-192.png" alt="Logo CEM" className="h-full w-full object-contain" />
+            <BrandMark size={40} variant="compact" alt="Logo CEM" />
           </motion.div>
           <div className="min-w-0">
             <p className="truncate font-display text-sm font-semibold leading-tight text-white">Culte d&apos;Enfants</p>
@@ -121,57 +152,15 @@ export function Sidebar() {
       )}
 
       <nav className="scrollbar-thin flex-1 overflow-y-auto px-2 py-3" aria-label="Navigation principale">
-        {SECTIONS.map(section => {
-          const items = filteredNav.filter(item => item.section === section)
-          if (!items.length) return null
-
-          return (
-            <div key={section} className="mb-2">
-              {SECTION_LABELS[section] && (
-                <p className="px-3 pb-1 pt-3 text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">
-                  {SECTION_LABELS[section]}
-                </p>
-              )}
-              <Menu
-                mode="inline"
-                theme="dark"
-                selectable
-                selectedKeys={[activeView]}
-                onClick={handleMenuClick}
-                className="border-0 bg-transparent!"
-                items={items.map(item => {
-                  const Icon = item.icon
-                  const count = item.id === 'transfer-validations' ? pendingTransfersCount : item.id === 'notifications' ? unreadCount : 0
-
-                  return {
-                    key: item.id,
-                    icon: <Icon size={17} className={cn('shrink-0', activeView !== item.id && SECTION_ICON_COLOR[section])} />,
-                    label: (
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="flex-1 truncate text-xs font-medium">{item.label}</span>
-                        {count > 0 && (
-                          <Badge
-                            count={count > 9 ? '9+' : count}
-                            overflowCount={9}
-                            styles={{ indicator: { backgroundColor: activeView === item.id ? '#0F4A0F' : '#ef4444', color: '#fff', boxShadow: 'none' } }}
-                          />
-                        )}
-                      </span>
-                    ),
-                    style: {
-                      marginInline: 0,
-                      width: '100%',
-                      borderRadius: 10,
-                      color: activeView === item.id ? '#0F4A0F' : undefined,
-                      background: activeView === item.id ? '#F5C400' : undefined,
-                      boxShadow: activeView === item.id ? '0 6px 20px rgba(245,196,0,0.22)' : undefined,
-                    },
-                  }
-                })}
-              />
-            </div>
-          )
-        })}
+        <Menu
+          mode="inline"
+          theme="dark"
+          selectable
+          selectedKeys={[activeView]}
+          onClick={handleMenuClick}
+          className="border-0 bg-transparent! [&_.ant-menu-item-group]:mb-2! [&_.ant-menu-item-group-title]:px-3! [&_.ant-menu-item-group-title]:pb-1! [&_.ant-menu-item-group-title]:pt-2! [&_.ant-menu-item-group-title]:text-[10px]! [&_.ant-menu-item-group-title]:font-bold! [&_.ant-menu-item-group-title]:uppercase [&_.ant-menu-item-group-title]:tracking-[0.18em]! [&_.ant-menu-item-group-title]:text-white/35! [&_.ant-menu-item-selected_.ant-menu-item-icon]:text-[#0F4A0F]!"
+          items={menuItems}
+        />
       </nav>
 
       {user && (

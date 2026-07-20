@@ -1,13 +1,13 @@
 'use client'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Button } from 'antd'
 import {
-  AlertCircle, Check, CheckCircle2, CreditCard, ExternalLink,
-  FileText, Loader2, RefreshCw, Smartphone,
+  AlertCircle, ArrowLeft, ArrowRight, Check, CheckCircle2, CreditCard, ExternalLink, FileText, Loader2,
+  RefreshCw, Smartphone,
 } from 'lucide-react'
 import api from '@/lib/api'
 import { cn, formatAmount } from '@/lib/utils'
-import { Button } from '@/components/ui/Button'
 import { PendingScreen, USSD_TIMEOUT } from '@/components/payments/PendingScreen'
 import { calculateAmountWithCommission, YELII_COMMISSION_RATE } from '@sgm-cem/shared'
 import type { ChampPersonnalise, CollectePubliqueDef } from '@sgm-cem/shared'
@@ -330,19 +330,7 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
 
   // ── Rendu ─────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#F8FAF8] flex items-center justify-center p-4 sm:p-6">
-      <div className="w-full max-w-md bg-white rounded-[24px] shadow-sm border border-gray-100 overflow-hidden">
-
-        {/* ── En-tête ── */}
-        <div className="bg-gradient-to-br from-[#052005] to-[#1A6B1A] px-6 py-5 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-[10px] bg-[#F5C400] flex items-center justify-center shrink-0">
-            <span className="text-[#0F4A0F] font-black text-sm font-display">CEM</span>
-          </div>
-          <div className="min-w-0">
-            <p className="text-white font-semibold text-sm truncate">{collecte.titre}</p>
-            <p className="text-white/60 text-xs">SGM-CEM · Collecte publique</p>
-          </div>
-        </div>
+    <div className="w-full overflow-hidden">
 
         {/* ── Bannière de reprise de brouillon ── */}
         {resumeBanner && (
@@ -350,8 +338,8 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
             <p className="text-sm text-amber-800 font-semibold">Reprendre où vous vous étiez arrêté ?</p>
             <p className="text-xs text-amber-700">Une saisie précédente a été retrouvée pour cette collecte.</p>
             <div className="flex gap-2">
-              <Button size="sm" onClick={acceptResume}>Reprendre</Button>
-              <Button size="sm" variant="ghost" onClick={dismissResume}>Recommencer</Button>
+              <Button size="small" onClick={acceptResume}>Reprendre</Button>
+              <Button size="small" type="default" onClick={dismissResume}>Recommencer</Button>
             </div>
           </div>
         )}
@@ -723,14 +711,14 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
           )}
         </div>
 
-        {/* ── Footer ── */}
+        {/* ── Navigation ── */}
         <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50">
           {step > 0 && step < 3 ? (
-            <Button variant="ghost" onClick={goPrev}>← Retour</Button>
+            <Button type="default" onClick={goPrev}><ArrowLeft size={14} /> Retour</Button>
           ) : <div />}
 
-          {step === 0 && <Button onClick={goNext}>Suivant →</Button>}
-          {step === 1 && <Button onClick={goNext}>Suivant →</Button>}
+          {step === 0 && <Button onClick={goNext}>Suivant <ArrowRight size={14} /></Button>}
+          {step === 1 && <Button onClick={goNext}>Suivant <ArrowRight size={14} /></Button>}
           {step === 2 && (
             <Button loading={payStatus === 'submitting'} onClick={submitPayment}>
               <CreditCard size={14} />
@@ -739,12 +727,6 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
           )}
         </div>
 
-        <div className="px-6 pb-5 text-center">
-          <p className="text-[10px] text-gray-400">
-            SGM-CEM · Culte d&apos;Enfants de Melen · EEC Yaoundé
-          </p>
-        </div>
-      </div>
     </div>
   )
 }

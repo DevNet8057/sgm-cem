@@ -132,7 +132,6 @@ export function TopBar() {
   return (
     <header
       className="sticky top-0 z-[200] flex h-16 items-center gap-2 border-b border-slate-200/80 bg-white/85 px-3 shadow-[0_1px_0_rgba(15,74,15,0.03)] backdrop-blur-xl sm:gap-3 sm:px-5"
-      style={{ height: 'var(--topbar-h)' }}
     >
       <Tooltip title="Ouvrir le menu" placement="bottom">
         <Button
@@ -140,7 +139,7 @@ export function TopBar() {
           shape="circle"
           icon={<MenuIcon size={20} />}
           onClick={() => setSidebarOpen(true)}
-          className="shrink-0 text-slate-600! hover:bg-emerald-50! hover:text-[#0F4A0F]! lg:hidden!"
+          className="h-11! w-11! shrink-0 text-slate-600! hover:bg-emerald-50! hover:text-[#0F4A0F]! lg:hidden!"
           aria-label="Ouvrir le menu de navigation"
         />
       </Tooltip>
@@ -153,9 +152,9 @@ export function TopBar() {
         className="min-w-0 flex-1"
       >
         <p className="hidden text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 sm:block">SGM-CEM</p>
-        <h1 className="truncate font-display text-base font-semibold leading-tight text-[#0F4A0F] sm:text-lg">
+        <p className="truncate font-display text-base font-semibold leading-tight text-[#0F4A0F]">
           {VIEW_TITLES[activeView] ?? 'SGM-CEM'}
-        </h1>
+        </p>
       </motion.div>
 
       <Tooltip title="Notifications" placement="bottom">
@@ -165,7 +164,7 @@ export function TopBar() {
             shape="circle"
             icon={<Bell size={18} />}
             onClick={() => setActiveView('notifications')}
-            className="text-slate-600! hover:bg-emerald-50! hover:text-[#0F4A0F]!"
+            className="h-11! w-11! text-slate-600! hover:bg-emerald-50! hover:text-[#0F4A0F]!"
             aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} non lue${unreadCount > 1 ? 's' : ''}` : 'Notifications'}
           />
         </Badge>
