@@ -1,0 +1,169 @@
+databases:
+  - name: sgm-cem-db
+    plan: basic-256mb        # ~6 $/mois — le plan free est SUPPRIMÉ après 30 jours (données perdues)
+    region: frankfurt        # région la plus proche du Cameroun
+    postgresMajorVersion: "15"
+
+services:
+  # Redis (BullMQ exige une politique noeviction)
+  - type: keyvalue
+    name: sgm-cem-redis
+    plan: free               # 25 Mo — suffisant pour BullMQ
+    region: frankfurt
+    maxmemoryPolicy: noeviction
+    ipAllowList: []          # accès interne uniquement
+
+  # API Express + Prisma + Puppeteer
+  - type: web
+    name: sgm-cem-api
+    runtime: docker
+    plan: starter            # 512 Mo — voir DEPLOIEMENT_RENDER.md si Puppeteer manque de RAM
+    region: frankfurt
+    dockerfilePath: ./sgm-cem/apps/api/Dockerfile
+    dockerContext: ./sgm-cem
+    healthCheckPath: /api/health
+    disk:
+      name: sgm-cem-uploads
+      # process.cwd() = /app/apps/api au démarrage (docker-entrypoint.sh fait
+      # `cd /app/apps/api` avant `exec node dist/index.js`) — storage.ts calcule
+      # LOCAL_DIR = path.join(process.cwd(), 'uploads'). Doit correspondre au
+      # volume `uploads:/app/apps/api/uploads` du docker-compose.yml local.
+      mountPath: /app/apps/api/uploads
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sgm-cem-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: sgm-cem-redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: REFRESH_TOKEN_SECRET
+        generateValue: true
+      - key: CSRF_SECRET
+        generateValue: true
+      - key: APP_URL
+        sync: false          # URL publique du web (connue après création — voir guide)
+      - key: API_URL
+        sync: false          # URL publique de l'API
+      - key: ADMIN_EMAIL
+        value: devnet8057@gmail.com
+      - key: ADMIN_PASSWORD
+        sync: false
+      # ── Google OAuth ─────────────────────────────────────────────────────
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      # ── G1 : MTN Mobile Money ────────────────────────────────────────────
+      - key: MTN_SUBSCRIPTION_KEY
+        value: ""
+      - key: MTN_API_USER
+        value: ""
+      - key: MTN_API_KEY
+        value: ""
+      - key: MTN_ENVIRONMENT
+        value: ""
+      - key: MTN_MOMO_BASE_URL
+        value: ""
+      - key: MTN_WEBHOOK_SECRET
+        value: ""
+      # ── G2 : Orange Money ────────────────────────────────────────────────
+      - key: ORANGE_CLIENT_ID
+        value: ""
+      - key: ORANGE_CLIENT_SECRET
+        value: ""
+      - key: ORANGE_MERCHANT_KEY
+        value: ""
+      # ── G3 : Email (SMTP) ────────────────────────────────────────────────
+      - key: SMTP_HOST
+        value: ""
+      - key: SMTP_PORT
+        value: ""
+      - key: SMTP_SECURE
+        value: ""
+      - key: SMTP_USER
+        value: ""
+      - key: SMTP_PASS
+        value: ""
+      - key: SMTP_FROM
+        value: ""
+      # ── G4 : WhatsApp (360dialog) + SMS (Twilio) ───────────────────────────
+      - key: DIALOG360_API_KEY
+        value: ""
+      - key: TWILIO_ACCOUNT_SID
+        value: ""
+      - key: TWILIO_AUTH_TOKEN
+        value: ""
+      - key: TWILIO_FROM
+        value: ""
+      # ── G5 : Stockage fichiers S3-compatible (sinon fallback disque local) ─
+      - key: S3_BUCKET_NAME
+        value: ""
+      - key: S3_ACCESS_KEY_ID
+        value: ""
+      - key: S3_SECRET_ACCESS_KEY
+        value: ""
+      - key: S3_REGION
+        value: ""
+      - key: S3_ENDPOINT
+        value: ""
+      # ── H4 : Cron relevé mensuel ─────────────────────────────────────────
+      - key: CRON_SECRET
+        value: ""
+      # ── H5 : Yelii (MTN + Orange Money unifiés) ─────────────────────────
+      - key: YELII_COLLECT_API_KEY
+        value: ""
+      - key: YELII_API_KEY
+        value: ""
+      - key: YELII_WEBHOOK_SECRET
+        value: ""
+      - key: YELII_BASE_URL
+        value: ""
+      - key: YELII_WEBHOOK_URL
+        value: ""
+      # ── CinetPay ──────────────────────────────────────────────────────────
+      - key: CINETPAY_API_KEY
+        value: ""
+      - key: CINETPAY_SITE_ID
+        value: ""
+      # ── Notifications push web (VAPID) ──────────────────────────────────
+      - key: VAPID_PUBLIC_KEY
+        value: ""
+      - key: VAPID_PRIVATE_KEY
+        value: ""
+      - key: VAPID_SUBJECT
+        value: ""
+
+  # Web Next.js 15
+  - type: web
+    name: sgm-cem-web
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    dockerfilePath: ./sgm-cem/apps/web/Dockerfile
+    dockerContext: ./sgm-cem
+    envVars:
+      # Cible interne du proxy /api, /socket.io, /uploads (rewrites next.config.ts)
+      - key: API_PROXY_HOST
+        fromService:
+          type: web
+          name: sgm-cem-api
+          property: host
+      - key: API_PROXY_PORT
+        fromService:
+          type: web
+          name: sgm-cem-api
+          property: port
+      # Figées AU BUILD (piège n°5 de DEPLOIEMENT_DOCKER.md) : pointer vers l'URL
+      # PUBLIQUE DU WEB (le proxy fait suivre), ex. https://sgm-cem-web-xxxx.onrender.com/api
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      - key: NEXT_PUBLIC_GOOGLE_CLIENT_ID
+        sync: false

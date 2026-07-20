@@ -91,47 +91,59 @@ async function createSessionTokens(user: { id: string; role: string; email: stri
   const accessToken = jwt.sign(payload, getJwtSecret(), { expiresIn: '15m' })
   const refreshToken = jwt.sign(payload, getRefreshTokenSecret(), { expiresIn: '7d' })
 
-  await prismaClient.userSession.create({
-    data: {
-      userId: user.id,
-      refreshToken,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    },
-  })
-  await prismaClient.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
+  try {
+    await prismaClient.userSession.create({
+      data: {
+        userId: user.id,
+        refreshToken,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    })
+  } catch (err: any) {
+    throw new Error(`SESSION_CREATE: ${err?.message ?? err}`)
+  }
+  try {
+    await prismaClient.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
+  } catch (err: any) {
+    throw new Error(`USER_UPDATE: ${err?.message ?? err}`)
+  }
   return { accessToken, refreshToken }
 }
 
 // ── Email / password login ────────────────────────────────────────────
 router.post('/login', authLimiter, async (req, res) => {
-  const { email, password } = loginSchema.parse(req.body)
-  const normalizedEmail = email.toLowerCase().trim()
+  try {
+    const { email, password } = loginSchema.parse(req.body)
+    const normalizedEmail = email.toLowerCase().trim()
 
-  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } })
-  if (!user || !user.isActive) throw new AppError('ACCESS_DENIED', 'Identifiants incorrects', 401)
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } })
+    if (!user || !user.isActive) throw new AppError('ACCESS_DENIED', 'Identifiants incorrects', 401)
 
-  const valid = await bcrypt.compare(password, user.passwordHash)
-  if (!valid) {
-    // Tentative échouée sur un compte existant : tracée pour détecter les
-    // essais de mot de passe (le compte inexistant, lui, n'est pas traçable).
+    const valid = await bcrypt.compare(password, user.passwordHash)
+    if (!valid) {
+      await audit({
+        req, userId: user.id, userName: user.fullName,
+        action: 'LOGIN', entityType: 'Session',
+        details: { method: 'email', success: false, reason: 'wrong_password' },
+      })
+      throw new AppError('ACCESS_DENIED', 'Identifiants incorrects', 401)
+    }
+
+    const { accessToken, refreshToken } = await createSessionTokens(user, prisma)
+
     await audit({
       req, userId: user.id, userName: user.fullName,
       action: 'LOGIN', entityType: 'Session',
-      details: { method: 'email', success: false, reason: 'wrong_password' },
+      details: { method: 'email', success: true, role: user.role },
     })
-    throw new AppError('ACCESS_DENIED', 'Identifiants incorrects', 401)
+
+    setAuthCookies(req, res, accessToken, refreshToken)
+    res.json({ success: true, data: { user: buildUser(user) } })
+  } catch (e: any) {
+    console.error('LOGIN ERROR:', e?.message ?? e)
+    const msg = typeof e === 'object' && e !== null ? (e.message ?? String(e)) : String(e)
+    res.status(500).json({ success: false, error: { code: 'LOGIN_FAILED', message: msg, type: e?.constructor?.name } })
   }
-
-  const { accessToken, refreshToken } = await createSessionTokens(user, prisma)
-
-  await audit({
-    req, userId: user.id, userName: user.fullName,
-    action: 'LOGIN', entityType: 'Session',
-    details: { method: 'email', success: true, role: user.role },
-  })
-
-  setAuthCookies(req, res, accessToken, refreshToken)
-  res.json({ success: true, data: { user: buildUser(user) } })
 })
 
 // ── Mot de passe oublié ────────────────────────────────────────────────

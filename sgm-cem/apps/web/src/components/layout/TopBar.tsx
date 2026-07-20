@@ -1,6 +1,8 @@
 'use client'
 import { useRef } from 'react'
-import { Menu, Bell, Search } from 'lucide-react'
+import { Bell, ChevronDown, LogOut, Menu as MenuIcon, UserCircle } from 'lucide-react'
+import { Avatar, Badge, Button, Dropdown, Tooltip, type MenuProps } from 'antd'
+import { motion, useReducedMotion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { useAppStore } from '@/store/appStore'
@@ -9,20 +11,26 @@ import { getInitials, ROLE_LABELS } from '@/lib/utils'
 import type { ApiResponse, Notification } from '@/types'
 
 const VIEW_TITLES: Record<string, string> = {
-  dashboard: 'Tableau de Bord',
+  dashboard: 'Tableau de bord',
   rubriques: 'Rubriques',
   contributions: 'Contributions',
-  collecteurs: 'Fonds Collecteurs',
+  collecteurs: 'Fonds collecteurs',
   validations: 'Validations en attente',
-  membres: 'Gestion des Membres',
+  'transfer-validations': 'Fonds à réceptionner',
+  'collectes-publiques': 'Collectes publiques',
+  membres: 'Gestion des membres',
+  'mes-contributions': 'Mes contributions',
   ged: 'GED Commissions',
-  prestations: 'Prestations de Génie',
-  litiges: 'Gestion des Litiges',
-  statistiques: 'Statistiques & Analyses',
+  prestations: 'Prestations de génie',
+  litiges: 'Gestion des litiges',
+  statistiques: 'Statistiques et analyses',
   rapports: 'Rapports',
   notifications: 'Notifications',
-  parametres: 'Paramètres Système',
-  'mon-profil': 'Mon Profil',
+  journal: "Journal d'activité",
+  utilisateurs: 'Utilisateurs',
+  parametres: 'Paramètres système',
+  developer: 'Espace développeur',
+  'mon-profil': 'Mon profil',
 }
 
 function playNotifSound() {
@@ -62,7 +70,6 @@ function playNotifSound() {
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4)
       osc.start(); osc.stop(ctx.currentTime + 0.4)
     } else {
-      // 'bip' (default)
       osc.type = 'sine'
       osc.frequency.setValueAtTime(880, ctx.currentTime)
       osc.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.25)
@@ -76,7 +83,8 @@ function playNotifSound() {
 
 export function TopBar() {
   const { setSidebarOpen, setActiveView, setNotifications, addToast, activeView, unreadCount } = useAppStore()
-  const { user } = useAuthStore()
+  const { user, logout } = useAuthStore()
+  const reduceMotion = useReducedMotion()
   const seenIds = useRef<Set<string>>(new Set())
   const firstLoad = useRef(true)
 
@@ -88,7 +96,6 @@ export function TopBar() {
       const notifications = res.data.data ?? []
       setNotifications(notifications)
 
-      // Detect new unread notifications since last poll
       const newOnes = notifications.filter(n => !n.isRead && !seenIds.current.has(n.id))
       if (newOnes.length > 0 && !firstLoad.current) {
         newOnes.forEach(n => {
@@ -97,7 +104,6 @@ export function TopBar() {
         playNotifSound()
       }
 
-      // Update seen set
       notifications.forEach(n => seenIds.current.add(n.id))
       firstLoad.current = false
 
@@ -106,61 +112,86 @@ export function TopBar() {
     refetchInterval: 30000,
   })
 
+  const profileItems: MenuProps['items'] = [
+    {
+      key: 'profile',
+      icon: <UserCircle size={16} />,
+      label: 'Mon profil',
+      onClick: () => setActiveView('mon-profil'),
+    },
+    { type: 'divider' },
+    {
+      key: 'logout',
+      icon: <LogOut size={16} />,
+      label: 'Déconnexion',
+      danger: true,
+      onClick: () => void logout(),
+    },
+  ]
+
   return (
     <header
-      className="sticky top-0 z-[200] h-16 bg-white/90 backdrop-blur-md border-b border-gray-100/80 flex items-center px-4 gap-3"
+      className="sticky top-0 z-[200] flex h-16 items-center gap-2 border-b border-slate-200/80 bg-white/85 px-3 shadow-[0_1px_0_rgba(15,74,15,0.03)] backdrop-blur-xl sm:gap-3 sm:px-5"
       style={{ height: 'var(--topbar-h)' }}
     >
-      <button
-        onClick={() => setSidebarOpen(true)}
-        className="lg:hidden w-9 h-9 flex items-center justify-center rounded-[10px] text-gray-600 hover:bg-gray-100 transition-colors"
-      >
-        <Menu size={20} />
-      </button>
+      <Tooltip title="Ouvrir le menu" placement="bottom">
+        <Button
+          type="text"
+          shape="circle"
+          icon={<MenuIcon size={20} />}
+          onClick={() => setSidebarOpen(true)}
+          className="shrink-0 text-slate-600! hover:bg-emerald-50! hover:text-[#0F4A0F]! lg:hidden!"
+          aria-label="Ouvrir le menu de navigation"
+        />
+      </Tooltip>
 
-      <div className="flex-1">
-        <h1 className="font-display font-semibold text-[#0F4A0F] text-lg leading-tight">
+      <motion.div
+        key={activeView}
+        initial={reduceMotion ? false : { opacity: 0, y: -4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: reduceMotion ? 0 : 0.2 }}
+        className="min-w-0 flex-1"
+      >
+        <p className="hidden text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 sm:block">SGM-CEM</p>
+        <h1 className="truncate font-display text-base font-semibold leading-tight text-[#0F4A0F] sm:text-lg">
           {VIEW_TITLES[activeView] ?? 'SGM-CEM'}
         </h1>
-      </div>
+      </motion.div>
 
-      <div className="hidden md:flex items-center gap-1.5 px-3 py-2 bg-gray-100 rounded-[10px] text-gray-400 text-sm w-52 cursor-pointer hover:bg-gray-200 transition-colors">
-        <Search size={14} />
-        <span className="text-xs">Rechercher...</span>
-        <span className="ml-auto text-[10px] bg-gray-200 px-1.5 py-0.5 rounded text-gray-500">⌘K</span>
-      </div>
-
-      <button
-        onClick={() => setActiveView('notifications')}
-        className="relative w-9 h-9 flex items-center justify-center rounded-[10px] text-gray-600 hover:bg-gray-100 transition-colors"
-        title="Notifications"
-      >
-        <Bell size={18} />
-        {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-            {unreadCount > 9 ? '9+' : unreadCount}
-          </span>
-        )}
-      </button>
+      <Tooltip title="Notifications" placement="bottom">
+        <Badge count={unreadCount > 9 ? '9+' : unreadCount} overflowCount={9} size="small" offset={[-2, 3]}>
+          <Button
+            type="text"
+            shape="circle"
+            icon={<Bell size={18} />}
+            onClick={() => setActiveView('notifications')}
+            className="text-slate-600! hover:bg-emerald-50! hover:text-[#0F4A0F]!"
+            aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} non lue${unreadCount > 1 ? 's' : ''}` : 'Notifications'}
+          />
+        </Badge>
+      </Tooltip>
 
       {user && (
-        <button
-          onClick={() => setActiveView('mon-profil')}
-          className="flex items-center gap-2 cursor-pointer group hover:opacity-80 transition-opacity"
-          title="Mon profil"
-        >
-          <div className="w-8 h-8 rounded-[8px] bg-[#F5C400] flex items-center justify-center overflow-hidden flex-shrink-0">
-            {user.photoUrl ? (
-              <img src={user.photoUrl} alt={user.firstName} className="w-full h-full object-cover" />
-            ) : (
-              <span className="text-[#0F4A0F] font-bold text-xs">{getInitials(user.fullName)}</span>
-            )}
-          </div>
-          <div className="hidden md:block text-right">
-            <p className="text-xs font-semibold text-gray-800 leading-tight">{user.firstName}</p>
-            <p className="text-[10px] text-gray-400">{ROLE_LABELS[user.role]}</p>
-          </div>
-        </button>
+        <Dropdown menu={{ items: profileItems }} placement="bottomRight" trigger={['click']}>
+          <Button
+            type="text"
+            className="flex! h-11! items-center! gap-2! rounded-xl! px-1.5! text-left hover:bg-slate-100! sm:px-2!"
+            aria-label="Ouvrir le menu du profil"
+          >
+            <Avatar
+              size={34}
+              src={user.photoUrl}
+              className="shrink-0 bg-[#F5C400]! font-bold text-[#0F4A0F]!"
+            >
+              {getInitials(user.fullName)}
+            </Avatar>
+            <span className="hidden min-w-0 md:block">
+              <span className="block max-w-32 truncate text-xs font-semibold leading-tight text-slate-800">{user.firstName}</span>
+              <span className="mt-0.5 block max-w-32 truncate text-[10px] leading-tight text-slate-400">{ROLE_LABELS[user.role] ?? user.role}</span>
+            </span>
+            <ChevronDown size={14} className="hidden shrink-0 text-slate-400 md:block" />
+          </Button>
+        </Dropdown>
       )}
     </header>
   )

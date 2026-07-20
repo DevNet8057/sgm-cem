@@ -4,14 +4,15 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
-  AlertCircle, ArrowLeft, Eye, EyeOff, Loader2,
+  AlertCircle, ArrowLeft, Loader2,
   Lock, Mail, Phone, RefreshCw, HelpCircle, MessageCircle, ShieldCheck,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { Alert, Button, Card, Form, Input, Modal, Tabs, Typography } from 'antd'
+import { motion, useReducedMotion } from 'framer-motion'
 import { useAuthStore } from '@/store/authStore'
 import { cn } from '@/lib/utils'
 import api from '@/lib/api'
-import { Modal } from '@/components/ui/Modal'
 
 /* ── Types Google GSI ────────────────────────────────────────────── */
 declare global {
@@ -54,7 +55,7 @@ function OtpInput({ value, onChange, disabled }: {
   }
 
   return (
-    <div className="flex gap-2 justify-center" onPaste={onPaste}>
+    <div className="grid w-full grid-cols-6 gap-2" onPaste={onPaste} role="group" aria-label="Code de vérification à 6 chiffres">
       {Array.from({ length: 6 }).map((_, i) => (
         <input
           key={i}
@@ -64,9 +65,10 @@ function OtpInput({ value, onChange, disabled }: {
           onChange={e => handle(i, e.target.value)}
           onKeyDown={e => onKey(i, e)}
           disabled={disabled}
+          aria-label={`Chiffre ${i + 1} sur 6`}
           suppressHydrationWarning
           className={cn(
-            'w-11 h-12 text-center text-lg font-bold border-2 rounded-[10px] transition-all focus:outline-none',
+            'h-12 min-w-0 w-full text-center text-lg font-bold border-2 rounded-[10px] transition-all focus:outline-none',
             digits[i] ? 'bg-[#E8F5E8] text-[#1A6B1A] border-[#1A6B1A]'
                       : 'bg-white text-gray-800 border-gray-200 focus:border-[#1A6B1A]',
             disabled && 'opacity-50'
@@ -79,6 +81,7 @@ function OtpInput({ value, onChange, disabled }: {
 
 /* ── Page Login ──────────────────────────────────────────────────── */
 export default function LoginPage() {
+  const reduceMotion = useReducedMotion()
   const [tab, setTab] = useState<'email' | 'phone'>('email')
   const [showPwd, setShowPwd]  = useState(false)
   const [apiError, setApiError] = useState('')
@@ -174,9 +177,7 @@ export default function LoginPage() {
         } else if (attempts < 20) {
           setTimeout(tryInit, 250)
         }
-      } catch (e) {
-        console.warn('[Google] initialization failed:', e)
-      }
+      } catch {}
     }
     tryInit()
     return () => {
@@ -252,30 +253,30 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="h-[100dvh] flex flex-col lg:flex-row overflow-hidden">
+    <main className="min-h-[100dvh] bg-[#f3f7f3] lg:grid lg:grid-cols-[minmax(380px,40%)_1fr]">
       {/* ── Panneau gauche (desktop) ── */}
-      <div
-        className="hidden lg:flex w-[420px] flex-shrink-0 flex-col justify-between p-10 relative overflow-hidden cross-bg"
+      <aside
+        className="hidden lg:flex flex-col justify-center px-12 py-8 relative overflow-hidden cross-bg"
         style={{ background: 'linear-gradient(160deg,#052005 0%,#0F4A0F 45%,#1A6B1A 100%)' }}
       >
         <div className="absolute bottom-0 left-0 w-72 h-72 rounded-full pointer-events-none"
           style={{ background: 'radial-gradient(circle,#F5C400,transparent)', opacity: 0.08 }} />
 
-        <div className="relative z-10">
-          <div className="w-12 h-12 rounded-[12px] bg-white flex items-center justify-center mb-8 shadow-cem-yellow overflow-hidden p-1.5">
+        <div className="relative z-10 w-full max-w-[520px]">
+          <div className="w-12 h-12 rounded-[12px] bg-white flex items-center justify-center mb-6 shadow-cem-yellow overflow-hidden p-1.5">
             <img src="/icon-192.png" alt="Logo CEM" className="w-full h-full object-contain" />
           </div>
-          <h1 className="font-display text-white text-[40px] font-semibold leading-tight mb-3">
+          <h1 className="font-display text-white text-[clamp(32px,3vw,36px)] font-semibold leading-tight mb-4">
             Système de Gestion<br />du Ministère
           </h1>
-          <p className="text-white/60 text-sm leading-relaxed mb-10">
+          <p className="text-white/65 text-sm leading-relaxed mb-8">
             Culte d&apos;Enfants de Melen · Église Évangélique du Cameroun, Yaoundé
           </p>
-          <div className="grid grid-cols-3 gap-3 mb-10">
-            {[{ v:'106+', l:'Membres' },{ v:'11', l:'Rubriques' },{ v:'100%', l:'Traçabilité' }].map(s => (
-              <div key={s.l} className="rounded-[14px] px-3 py-3.5 text-center" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                <p className="font-display text-[#F5C400] text-2xl font-bold leading-tight">{s.v}</p>
-                <p className="text-white/50 text-xs mt-0.5">{s.l}</p>
+          <div className="space-y-4 mb-8" aria-label="Avantages de SGM-CEM">
+            {['Suivi clair des contributions', 'Gestion centralisée des membres', 'Données sécurisées et traçables'].map(benefit => (
+              <div key={benefit} className="flex items-center gap-3 text-sm text-white/85">
+                <ShieldCheck size={18} className="shrink-0 text-[#F5C400]" aria-hidden="true" />
+                <span>{benefit}</span>
               </div>
             ))}
           </div>
@@ -285,13 +286,12 @@ export default function LoginPage() {
             </p>
           </div>
         </div>
-        <p className="relative z-10 text-white/40 text-xs italic">&quot;La Marche Ensemble dans l&apos;Unité&quot; · EEC Melen</p>
-      </div>
+      </aside>
 
       {/* ── Formulaire droite — scrollable sur mobile, centré sur desktop ── */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin bg-white">
-        <div className="min-h-full flex flex-col items-center justify-center p-6">
-        <div className="w-full max-w-sm">
+      <section className="flex min-h-[100dvh] items-center justify-center overflow-y-auto px-4 py-6 sm:px-8 lg:py-8 [@media(max-height:700px)]:py-4">
+        <motion.div initial={reduceMotion ? false : { opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="w-full max-w-[460px]">
+        <Card className="!rounded-3xl !border-white/80 shadow-[0_24px_70px_rgba(15,74,15,0.12)]" styles={{ body: { padding: 'clamp(20px, 5vw, 36px)' } }}>
           {/* Logo mobile */}
           <div className="lg:hidden flex justify-center mb-8">
             <div className="w-14 h-14 rounded-[14px] bg-white flex items-center justify-center shadow-cem-yellow overflow-hidden p-2">
@@ -299,79 +299,74 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl mb-1">Connexion</h2>
-          <p className="text-gray-400 text-sm mb-6">Accédez à votre espace SGM-CEM</p>
+          <Typography.Title level={2} className="!mb-1 !text-[#0F4A0F]">Connexion</Typography.Title>
+          <Typography.Text type="secondary">Accédez à votre espace SGM-CEM</Typography.Text>
 
           {/* Tabs */}
-          <div className="flex rounded-[12px] bg-gray-100 p-1 gap-1 mb-6">
-            {([['email','Email',Mail],['phone','Téléphone',Phone]] as const).map(([id, label, Icon]) => (
-              <button key={id} onClick={() => { setTab(id); setApiError('') }}
-                className={cn('flex-1 flex items-center justify-center gap-2 py-2 rounded-[10px] text-sm font-semibold transition-all',
-                  tab === id ? 'bg-white text-[#0F4A0F] shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
-                <Icon size={14} /> {label}
-              </button>
-            ))}
-          </div>
+          <Tabs activeKey={tab} centered className="my-5" onChange={key => { setTab(key as 'email' | 'phone'); setApiError('') }} items={[
+            { key: 'email', label: <span className="flex items-center gap-2"><Mail size={15} /> Email</span> },
+            { key: 'phone', label: <span className="flex items-center gap-2"><Phone size={15} /> Téléphone</span> },
+          ]} />
 
           {/* ── Email + password ── */}
           {tab === 'email' && (
-            <form onSubmit={handleSubmit(onEmailSubmit)} className="space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-gray-700 block mb-1.5">Adresse email</label>
-                <input {...register('email')} type="email" placeholder="admin@cem-melen.cm"
+            <Form component="form" layout="vertical" onFinish={handleSubmit(onEmailSubmit)} className="space-y-1">
+              <Form.Item
+                label="Adresse email"
+                validateStatus={errors.email ? 'error' : undefined}
+                help={errors.email?.message}
+              >
+                <Input {...register('email')} type="email" placeholder="admin@cem-melen.cm" size="large" prefix={<Mail size={16} />} autoComplete="email"
                   suppressHydrationWarning
-                  className="w-full px-4 py-3 border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30 focus:border-[#1A6B1A] transition-colors" />
-                {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email.message}</p>}
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-700 block mb-1.5">Mot de passe</label>
-                <div className="relative">
-                  <input {...register('password')} type={showPwd ? 'text' : 'password'} placeholder="••••••••"
+                  />
+              </Form.Item>
+              <Form.Item
+                label="Mot de passe"
+                validateStatus={errors.password ? 'error' : undefined}
+                help={errors.password?.message}
+              >
+                  <Input.Password {...register('password')} placeholder="••••••••" size="large" prefix={<Lock size={16} />} autoComplete="current-password"
+                    visibilityToggle={{ visible: showPwd, onVisibleChange: setShowPwd }}
                     suppressHydrationWarning
-                    className="w-full px-4 py-3 pr-10 border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30 focus:border-[#1A6B1A] transition-colors" />
-                  <button type="button" onClick={() => setShowPwd(v => !v)} suppressHydrationWarning
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                    {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-                {errors.password && <p className="text-xs text-red-500 mt-1">{errors.password.message}</p>}
+                    />
+              </Form.Item>
                 <div className="flex justify-end mt-1.5">
                   <button type="button" onClick={openForgotModal} suppressHydrationWarning
                     className="text-xs text-[#1A6B1A] hover:underline">
                     Mot de passe oublié ?
                   </button>
                 </div>
-              </div>
               {apiError && <ErrorBox message={apiError} />}
-              <button type="submit" disabled={isSubmitting} suppressHydrationWarning
-                className="w-full flex items-center justify-center gap-2 py-3 bg-[#1A6B1A] text-white font-semibold rounded-[10px] shadow-cem hover:bg-[#0F4A0F] active:scale-[0.98] transition-all disabled:opacity-60">
+              <Button type="primary" htmlType="submit" size="large" block loading={isSubmitting} disabled={isSubmitting}
+                className="!h-12 !bg-[#1A6B1A] !font-semibold">
                 {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Lock size={16} />}
                 {isSubmitting ? 'Connexion…' : 'Se connecter'}
-              </button>
-            </form>
+              </Button>
+            </Form>
           )}
 
           {/* ── Téléphone + OTP ── */}
           {tab === 'phone' && !otpSent && (
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-gray-700 block mb-1.5">Numéro de téléphone</label>
+            <Form component="div" layout="vertical" className="space-y-4">
+              <Form.Item
+                label="Numéro de téléphone"
+                validateStatus={phoneErr ? 'error' : undefined}
+                help={phoneErr || 'Le numéro doit être enregistré dans votre compte.'}
+              >
                 <div className="flex gap-2">
                   <span className="flex items-center px-3 py-3 bg-gray-100 border border-gray-200 rounded-[10px] text-sm text-gray-600 shrink-0 font-mono">🇨🇲 +237</span>
-                  <input value={phone} onChange={e => { setPhone(e.target.value.replace(/\D/g, '').slice(0, 9)); setPhoneErr('') }}
+                  <Input value={phone} onChange={e => { setPhone(e.target.value.replace(/\D/g, '').slice(0, 9)); setPhoneErr('') }}
                     placeholder="6XXXXXXXX" suppressHydrationWarning
-                    className="flex-1 px-3 py-3 border border-gray-200 rounded-[10px] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30" />
+                    aria-label="Numéro de téléphone" inputMode="numeric" size="large" className="font-mono" />
                 </div>
-                {phoneErr && <p className="text-xs text-red-500 mt-1">{phoneErr}</p>}
-                <p className="text-xs text-gray-400 mt-1">Le numéro doit être enregistré dans votre compte.</p>
-              </div>
+              </Form.Item>
               {apiError && <ErrorBox message={apiError} />}
-              <button onClick={sendOtp} disabled={sendingOtp || phone.length < 9}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-[#1A6B1A] text-white font-semibold rounded-[10px] shadow-cem hover:bg-[#0F4A0F] active:scale-[0.98] transition-all disabled:opacity-60">
+              <Button type="primary" size="large" block onClick={sendOtp} loading={sendingOtp} disabled={sendingOtp || phone.length < 9}
+                className="!h-12 !bg-[#1A6B1A] !font-semibold">
                 {sendingOtp ? <Loader2 size={16} className="animate-spin" /> : <Phone size={16} />}
                 {sendingOtp ? 'Envoi du code…' : 'Recevoir le code SMS/WhatsApp'}
-              </button>
-            </div>
+              </Button>
+            </Form>
           )}
 
           {tab === 'phone' && otpSent && (
@@ -383,16 +378,17 @@ export default function LoginPage() {
                   <ArrowLeft size={11} /> Changer le numéro
                 </button>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-700 block text-center">Code à 6 chiffres</label>
+              <Form component="div" layout="vertical">
+                <Form.Item label="Code à 6 chiffres" className="!mb-0">
                 <OtpInput value={otp} onChange={setOtp} disabled={verifyingOtp} />
-              </div>
+                </Form.Item>
+              </Form>
               {apiError && <ErrorBox message={apiError} />}
-              <button onClick={verifyOtp} disabled={otp.length < 6 || verifyingOtp}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-[#1A6B1A] text-white font-semibold rounded-[10px] shadow-cem hover:bg-[#0F4A0F] active:scale-[0.98] transition-all disabled:opacity-60">
+              <Button type="primary" size="large" block onClick={verifyOtp} loading={verifyingOtp} disabled={otp.length < 6 || verifyingOtp}
+                className="!h-12 !bg-[#1A6B1A] !font-semibold">
                 {verifyingOtp ? <Loader2 size={16} className="animate-spin" /> : null}
                 {verifyingOtp ? 'Vérification…' : 'Valider le code'}
-              </button>
+              </Button>
               <div className="text-center">
                 {countdown > 0
                   ? <p className="text-xs text-gray-400">Renvoyer dans {countdown}s</p>
@@ -449,27 +445,28 @@ export default function LoginPage() {
           )}
 
           <p className="text-center text-xs text-gray-400 mt-6">SGM-CEM · Culte d&apos;Enfants de Melen · EEC Yaoundé</p>
-        </div>
-        </div>
-      </div>
+        </Card>
+        </motion.div>
+      </section>
 
       {/* ── Modal mot de passe oublié ── */}
       <Modal
         open={forgotOpen}
-        onClose={() => setForgotOpen(false)}
+        onCancel={() => setForgotOpen(false)}
         title="Mot de passe oublié"
-        description="Indiquez votre adresse email pour connaître la marche à suivre"
-        size="sm"
+        footer={null}
+        width={440}
       >
+        <Typography.Paragraph type="secondary">Indiquez votre adresse email pour connaître la marche à suivre.</Typography.Paragraph>
         {!forgotResult ? (
           <form onSubmit={submitForgotPassword} className="space-y-4">
             <div>
               <label className="text-xs font-semibold text-gray-700 block mb-1.5">Adresse email</label>
-              <input
+              <Input
                 type="email" required value={forgotEmail}
                 onChange={e => setForgotEmail(e.target.value)}
                 placeholder="vous@exemple.com"
-                className="w-full px-4 py-3 border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30 focus:border-[#1A6B1A] transition-colors"
+                size="large"
               />
             </div>
             {forgotError && <ErrorBox message={forgotError} />}
@@ -519,15 +516,10 @@ export default function LoginPage() {
           </div>
         )}
       </Modal>
-    </div>
+    </main>
   )
 }
 
 function ErrorBox({ message }: { message: string }) {
-  return (
-    <div className="flex items-start gap-2 px-3 py-2.5 bg-red-50 border border-red-200 rounded-[10px] text-sm text-red-700">
-      <AlertCircle size={14} className="mt-0.5 shrink-0" />
-      <span>{message}</span>
-    </div>
-  )
+  return <Alert type="error" showIcon message={message} role="alert" />
 }

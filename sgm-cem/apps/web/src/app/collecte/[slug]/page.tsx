@@ -1,18 +1,19 @@
 'use client'
+
+import type { ReactNode } from 'react'
 import { useParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
-import { AlertCircle, Loader2 } from 'lucide-react'
+import { Alert, Card, Result, Skeleton, Typography } from 'antd'
+import { motion, useReducedMotion } from 'framer-motion'
 import api from '@/lib/api'
 import { PublicCollecteStepper } from '@/components/public/PublicCollecteStepper'
 import type { CollectePubliqueDef } from '@sgm-cem/shared'
 
-// Page publique — accessible sans authentification, hors du groupe (app).
-// Le slug vient de la route dynamique : params est une Promise côté server
-// component, mais ici la page est CLIENT et utilise useParams() (pas de
-// useSearchParams, donc pas de boundary <Suspense> nécessaire ici).
+// Page publique accessible sans authentification, hors du groupe (app).
 export default function CollectePubliquePage() {
   const params = useParams<{ slug: string }>()
   const slug = params.slug
+  const reduceMotion = useReducedMotion()
 
   const { data, isLoading, isError } = useQuery<CollectePubliqueDef>({
     queryKey: ['collecte-publique', slug],
@@ -21,66 +22,103 @@ export default function CollectePubliquePage() {
     retry: false,
   })
 
+  const animation = reduceMotion
+    ? undefined
+    : { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 } }
+
   if (isLoading) {
     return (
-      <BrandedShell>
-        <div className="p-6 text-center space-y-4">
-          <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mx-auto animate-pulse">
-            <Loader2 size={28} className="text-blue-500 animate-spin" />
-          </div>
-          <div>
-            <h2 className="font-display font-semibold text-[#0F4A0F] text-xl mb-1">Chargement…</h2>
-            <p className="text-sm text-gray-500">Récupération de la collecte.</p>
-          </div>
+      <PublicShell animation={animation}>
+        <div className="space-y-5 p-5 sm:p-7" aria-busy="true" aria-label="Chargement de la collecte">
+          <Skeleton.Avatar active size={56} shape="square" />
+          <Skeleton active title={{ width: '58%' }} paragraph={{ rows: 3, width: ['100%', '88%', '64%'] }} />
+          <Skeleton.Button active block size="large" />
         </div>
-      </BrandedShell>
+      </PublicShell>
     )
   }
 
   if (isError || !data) {
     return (
-      <BrandedShell>
-        <div className="p-6 text-center space-y-4">
-          <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto">
-            <AlertCircle size={28} className="text-red-500" />
-          </div>
-          <div>
-            <h2 className="font-display font-semibold text-red-700 text-xl mb-1">Collecte introuvable</h2>
-            <p className="text-sm text-gray-500">
-              Collecte introuvable ou fermée. Vérifiez le lien reçu ou contactez l&apos;organisateur.
-            </p>
-          </div>
-        </div>
-      </BrandedShell>
+      <PublicShell animation={animation}>
+        <Result
+          status="error"
+          title="Collecte introuvable"
+          subTitle="Cette collecte n’est plus disponible ou le lien utilisé est incorrect."
+          extra={
+            <Alert
+              type="info"
+              showIcon
+              message="Besoin d’aide ?"
+              description="Vérifiez le lien reçu ou contactez l’organisateur de la collecte."
+              className="text-left"
+            />
+          }
+          className="px-4 py-7 sm:px-7"
+        />
+      </PublicShell>
     )
   }
 
-  return <PublicCollecteStepper collecte={data} slug={slug} />
+  return (
+    <motion.div
+      initial={reduceMotion ? undefined : { opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: reduceMotion ? 0 : 0.25 }}
+    >
+      <PublicCollecteStepper collecte={data} slug={slug} />
+    </motion.div>
+  )
 }
 
-/** Coque visuelle réutilisée pour les états chargement/erreur — même branding que /payment/return. */
-function BrandedShell({ children }: { children: React.ReactNode }) {
+type PublicShellProps = {
+  children: ReactNode
+  animation?: {
+    initial: { opacity: number; y: number }
+    animate: { opacity: number; y: number }
+  }
+}
+
+function PublicShell({ children, animation }: PublicShellProps) {
   return (
-    <div className="min-h-screen bg-[#F8FAF8] flex items-center justify-center p-6">
-      <div className="w-full max-w-sm bg-white rounded-[24px] shadow-sm border border-gray-100 overflow-hidden">
-        <div className="bg-gradient-to-br from-[#052005] to-[#1A6B1A] px-6 py-5 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-[10px] bg-[#F5C400] flex items-center justify-center">
-            <span className="text-[#0F4A0F] font-black text-sm font-display">CEM</span>
-          </div>
-          <div>
-            <p className="text-white font-semibold text-sm">SGM-CEM</p>
-            <p className="text-white/60 text-xs">Collecte publique</p>
-          </div>
-        </div>
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f4f7f4] px-4 py-8 sm:px-6">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-[#0f4a0f]/10 to-transparent" />
+      <motion.div
+        initial={animation?.initial}
+        animate={animation?.animate}
+        transition={{ duration: 0.35, ease: 'easeOut' }}
+        className="relative w-full max-w-md"
+      >
+        <Card
+          variant="borderless"
+          className="overflow-hidden shadow-[0_20px_60px_rgba(15,74,15,0.12)]"
+          styles={{ body: { padding: 0 } }}
+        >
+          <header className="bg-gradient-to-br from-[#073507] via-[#0f4a0f] to-[#1a6b1a] px-5 py-5 sm:px-7">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#f5c400] shadow-sm">
+                <span className="font-display text-sm font-black text-[#0f4a0f]">CEM</span>
+              </div>
+              <div>
+                <Typography.Text strong className="block !text-base !text-white">
+                  SGM-CEM
+                </Typography.Text>
+                <Typography.Text className="!text-xs !text-white/65">
+                  Espace de collecte sécurisé
+                </Typography.Text>
+              </div>
+            </div>
+          </header>
 
-        {children}
+          {children}
 
-        <div className="px-6 pb-5 text-center">
-          <p className="text-[10px] text-gray-400">
-            SGM-CEM · Culte d&apos;Enfants de Melen · EEC Yaoundé
-          </p>
-        </div>
-      </div>
-    </div>
+          <footer className="border-t border-slate-100 px-5 py-4 text-center">
+            <Typography.Text type="secondary" className="!text-[11px]">
+              Culte d&apos;Enfants de Melen · EEC Yaoundé
+            </Typography.Text>
+          </footer>
+        </Card>
+      </motion.div>
+    </main>
   )
 }

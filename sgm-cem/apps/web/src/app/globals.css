@@ -7,22 +7,73 @@
   :root {
     --sidebar-w: 260px;
     --topbar-h: 64px;
+    --cem-primary: #0F4A0F;
+    --cem-primary-strong: #052005;
+    --cem-primary-soft: #EAF5EA;
+    --cem-accent: #F5C400;
+    --cem-background: #F8FAF8;
+    --cem-surface: #FFFFFF;
+    --cem-surface-muted: #F3F7F3;
+    --cem-border: #E2E8E2;
+    --cem-border-strong: #C8D5C8;
+    --cem-text: #0F172A;
+    --cem-text-muted: #64748B;
+    --cem-focus: #1A6B1A;
+    --cem-shadow-sm: 0 1px 2px rgba(5, 32, 5, 0.05);
+    --cem-shadow-md: 0 12px 32px rgba(5, 32, 5, 0.08);
+    --cem-radius-card: 24px;
+    --cem-radius-control: 10px;
+    --cem-transition-fast: 150ms ease;
+    --cem-transition-base: 220ms cubic-bezier(0.4, 0, 0.2, 1);
+    color-scheme: light;
   }
-  * { box-sizing: border-box; }
+  *, *::before, *::after { box-sizing: border-box; }
   html {
     scroll-behavior: smooth;
-    /* dvh fixes the mobile browser chrome clipping 100vh */
+    scrollbar-color: var(--cem-border-strong) transparent;
+    scrollbar-width: thin;
+    /* dvh évite le rognage causé par la barre du navigateur mobile. */
     height: 100%;
     min-height: 100dvh;
   }
   body {
     font-family: 'Montserrat', system-ui, sans-serif;
-    background: #F0FDF4;
-    color: #0F172A;
+    background:
+      radial-gradient(circle at 12% 0%, rgba(245, 196, 0, 0.06), transparent 28rem),
+      radial-gradient(circle at 100% 16%, rgba(26, 107, 26, 0.06), transparent 34rem),
+      var(--cem-background);
+    color: var(--cem-text);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     min-height: 100dvh;
     overscroll-behavior: none;
+  }
+  button, input, textarea, select { font: inherit; }
+  a, button, input, textarea, select, [tabindex] {
+    -webkit-tap-highlight-color: transparent;
+  }
+  :where(a, button, input, textarea, select, [tabindex]):focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--cem-focus) 35%, transparent);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--cem-accent) 42%, white);
+    color: var(--cem-primary-strong);
+  }
+  *::-webkit-scrollbar { width: 8px; height: 8px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background: var(--cem-border-strong);
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover { background-color: var(--cem-text-muted); }
+
+  /* Harmonisation des surfaces Ant Design avec le socle CEM. */
+  :where(.ant-card, .ant-modal-content, .ant-drawer-content, .ant-popover-inner, .ant-dropdown-menu) {
+    border-color: var(--cem-border);
+    box-shadow: var(--cem-shadow-md);
   }
 }
 
@@ -56,6 +107,22 @@
 }
 
 @layer utilities {
+  /* Surfaces sémantiques réutilisables par les vues métier. */
+  .surface {
+    background: var(--cem-surface);
+    border: 1px solid var(--cem-border);
+    border-radius: var(--cem-radius-card);
+    box-shadow: var(--cem-shadow-sm);
+  }
+  .surface-muted {
+    background: var(--cem-surface-muted);
+    border: 1px solid var(--cem-border);
+    border-radius: var(--cem-radius-card);
+  }
+  .transition-ui {
+    transition: color var(--cem-transition-fast), background-color var(--cem-transition-fast), border-color var(--cem-transition-fast), box-shadow var(--cem-transition-base), opacity var(--cem-transition-fast);
+  }
+
   /* ── Fonts ─────────────────────────────────────────────────────── */
   .font-display { font-family: 'Montserrat', system-ui, sans-serif; }
   .font-mono    { font-family: 'JetBrains Mono', monospace; }
@@ -103,7 +170,7 @@
 
   /* ── Hover interactivity (A4) ───────────────────────────────────── */
   .interactive {
-    transition: transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+    transition: transform var(--cem-transition-fast), box-shadow var(--cem-transition-fast), background-color var(--cem-transition-fast);
   }
   .interactive:hover  { transform: translateY(-1px); }
   .interactive:active { transform: translateY(0) scale(0.99); }
@@ -154,5 +221,32 @@
     }
     .table-mobile-cards td        { display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0; font-size: 0.875rem; }
     .table-mobile-cards td[data-label]::before { content: attr(data-label); font-weight: 600; color: #64748B; font-size: 0.75rem; }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-delay: 0ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-delay: 0ms !important;
+    transition-duration: 1ms !important;
+  }
+
+  .stagger-children > *,
+  .page-transition,
+  .flow-dot,
+  .skeleton,
+  .badge-urgent {
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .interactive:hover,
+  .interactive:active {
+    transform: none;
   }
 }

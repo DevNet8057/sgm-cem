@@ -1,6 +1,8 @@
 'use client'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Alert, Button as AntButton, Form, Input, Modal, Progress, Result, Steps } from 'antd'
+import { motion, useReducedMotion } from 'framer-motion'
 import {
   AlertCircle, Check, CheckCircle2, CreditCard, ExternalLink,
   FileText, Heart, Loader2, Printer, RefreshCw, Share2, X,
@@ -32,6 +34,7 @@ const STEPS = ['Sélection', 'Mode', 'Récapitulatif', 'Résultat']
 
 export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: PaymentStepperProps) {
   const queryClient = useQueryClient()
+  const reduceMotion = useReducedMotion()
 
   // Taux de commission EFFECTIF servi par l'API (panneau développeur —
   // clé YELII_COMMISSION_RATE en base). Le taux compilé n'est qu'un fallback :
@@ -238,11 +241,31 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
     setError('')
   }
 
+  const canClose = payStatus === 'idle' || payStatus === 'confirmed' || payStatus === 'failed'
+
   // ── Rendu ─────────────────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 z-500 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={payStatus === 'idle' || payStatus === 'confirmed' || payStatus === 'failed' ? onClose : undefined} />
-      <div className="relative w-full max-w-xl bg-white rounded-[24px] shadow-cem-xl animate-modal-in overflow-hidden">
+    <Modal
+      open
+      title={null}
+      footer={null}
+      width={576}
+      centered
+      closable={false}
+      keyboard={canClose}
+      maskClosable={canClose}
+      onCancel={canClose ? onClose : undefined}
+      styles={{ container: { padding: 0, overflow: 'hidden', borderRadius: 24 } }}
+      modalRender={modal => (
+        <motion.div
+          initial={reduceMotion ? false : { opacity: 0, y: 24, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: reduceMotion ? 0 : 0.2, ease: 'easeOut' }}
+        >
+          {modal}
+        </motion.div>
+      )}
+    >
 
         {/* ── En-tête ── */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
@@ -250,40 +273,26 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
             <h2 className="font-display font-semibold text-[#0F4A0F] text-xl">Enregistrer un paiement</h2>
             <p className="text-xs text-gray-400 mt-0.5">Étape {step + 1} sur {STEPS.length}</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-[8px] text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
-            <X size={16} />
-          </button>
+          <AntButton type="text" shape="circle" aria-label="Fermer" icon={<X size={16} />} disabled={!canClose} onClick={onClose} />
         </div>
 
         {/* ── Barre de progression ── */}
-        <div className="flex items-center gap-1 px-6 py-3 border-b border-gray-50">
-          {STEPS.map((label, i) => (
-            <div key={i} className="flex items-center gap-1.5 flex-1 min-w-0">
-              <div className={cn(
-                'w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 transition-all',
-                i < step  ? 'bg-[#1A6B1A] text-white'
-                : i === step ? 'bg-[#F5C400] text-[#0F4A0F]'
-                : 'bg-gray-100 text-gray-400'
-              )}>
-                {i < step ? <Check size={10} /> : i + 1}
-              </div>
-              <span className={cn(
-                'text-[10px] font-semibold truncate hidden sm:block',
-                i === step ? 'text-[#0F4A0F]' : i < step ? 'text-[#1A6B1A]' : 'text-gray-400'
-              )}>{label}</span>
-              {i < STEPS.length - 1 && (
-                <div className={cn('flex-1 h-0.5 rounded mx-0.5', i < step ? 'bg-[#1A6B1A]' : 'bg-gray-200')} />
-              )}
-            </div>
-          ))}
+        <div className="border-b border-gray-50 px-4 py-4 sm:px-6">
+          <Steps current={step} responsive={false} size="small" items={STEPS.map(title => ({ title }))} />
         </div>
 
         {/* ── Contenu des étapes ── */}
-        <div className="px-6 py-5 max-h-[58vh] overflow-y-auto scrollbar-thin">
+        <motion.div
+          key={step}
+          initial={reduceMotion ? false : { opacity: 0, x: 12 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: reduceMotion ? 0 : 0.18 }}
+          className="max-h-[62dvh] overflow-y-auto px-4 py-5 scrollbar-thin sm:px-6"
+        >
 
           {/* ── Étape 1 : Sélection ── */}
           {step === 0 && (
-            <div className="space-y-4">
+            <Form layout="vertical" className="space-y-4">
               <div>
                 <SearchableSelect
                   label="Membre"
@@ -341,12 +350,11 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
                 <label className="text-xs font-semibold text-gray-600 block mb-1.5">
                   Montant (FCFA) <span className="text-red-500">*</span>
                 </label>
-                <input
+                <Input
                   type="number"
                   value={montant}
                   onChange={e => setMontant(e.target.value)}
                   placeholder="0"
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-[10px] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30"
                 />
                 {expectedAmount != null && (
                   <p className="text-xs text-[#1A6B1A] mt-1">
@@ -363,7 +371,7 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
                   </div>
                 )}
               </div>
-            </div>
+            </Form>
           )}
 
           {/* ── Étape 2 : Mode de paiement ── */}
@@ -385,11 +393,11 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
                   </p>
                   <div className="flex gap-2">
                     <span className="flex items-center px-3 py-2 bg-white border border-yellow-300 rounded-[8px] text-sm text-gray-600 shrink-0 font-mono">🇨🇲 +237</span>
-                    <input
+                    <Input
                       value={mobilePhone}
                       onChange={e => setMobilePhone(e.target.value.replace(/\D/g, '').slice(0, 9))}
                       placeholder="6XXXXXXXX"
-                      className="flex-1 px-3 py-2 border border-yellow-300 rounded-[8px] text-sm bg-white font-mono focus:outline-none focus:ring-2 focus:ring-yellow-400/40"
+                      inputMode="numeric"
                     />
                   </div>
                   <p className="text-[11px] text-yellow-700">
@@ -495,20 +503,20 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
             <div>
               {/* Initialisation — ne devrait pas durer */}
               {(payStatus === 'idle' || payStatus === 'submitting') && (
-                <div className="py-10 text-center space-y-3">
-                  <Loader2 size={32} className="animate-spin text-[#1A6B1A] mx-auto" />
-                  <p className="text-sm text-gray-500">Traitement en cours…</p>
-                </div>
+                <Result icon={<Loader2 size={32} className="mx-auto animate-spin text-[#1A6B1A]" />} title="Traitement en cours…" />
               )}
 
               {/* Mobile Money — attente USSD */}
               {payStatus === 'waiting' && (
-                <PendingScreen
-                  mode={operator === 'MTN' ? 'MTN_MOMO' : 'ORANGE_MONEY'}
-                  phone={`+237 ${mobilePhone}`}
-                  countdown={countdown}
-                  amount={mmBreakdown ? formatAmount(mmBreakdown.totalToPay) : undefined}
-                />
+                <div>
+                  <PendingScreen
+                    mode={operator === 'MTN' ? 'MTN_MOMO' : 'ORANGE_MONEY'}
+                    phone={`+237 ${mobilePhone}`}
+                    countdown={countdown}
+                    amount={mmBreakdown ? formatAmount(mmBreakdown.totalToPay) : undefined}
+                  />
+                  <Progress percent={Math.round((countdown / USSD_TIMEOUT) * 100)} showInfo={false} strokeColor="#F5C400" />
+                </div>
               )}
 
               {/* Timeout USSD */}
@@ -634,12 +642,9 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
 
           {/* Erreur de validation */}
           {error && step < 3 && (
-            <div className="mt-3 flex items-center gap-2 rounded-[10px] bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
-              <AlertCircle size={13} className="shrink-0" />
-              {error}
-            </div>
+            <Alert className="mt-3" type="error" showIcon message={error} />
           )}
-        </div>
+        </motion.div>
 
         {/* ── Footer ── */}
         <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50">
@@ -665,8 +670,7 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
             <Button onClick={onClose}>Fermer</Button>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
 
