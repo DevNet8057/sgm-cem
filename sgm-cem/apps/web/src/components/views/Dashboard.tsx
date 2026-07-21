@@ -67,7 +67,7 @@ export function Dashboard() {
   return (
     <motion.div {...motionProps} className="space-y-4 p-4 pb-20 md:space-y-6 md:p-6 lg:pb-6">
       <Card
-        bordered={false}
+        variant="borderless"
         className="overflow-hidden shadow-lg"
         styles={{ body: { background: 'linear-gradient(to bottom right, #052005, #0F4A0F 50%, #1A6B1A)' } }}
       >

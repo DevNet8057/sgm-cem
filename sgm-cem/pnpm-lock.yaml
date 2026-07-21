@@ -162,6 +162,9 @@ importers:
       '@ant-design/nextjs-registry':
         specifier: ^1.3.0
         version: 1.3.0(@ant-design/cssinjs@2.1.2)(antd@5.29.3)(next@15.1.6)(react-dom@19.2.7)(react@19.2.7)
+      '@ant-design/v5-patch-for-react-19':
+        specifier: ^1.0.3
+        version: 1.0.3(antd@5.29.3)(react-dom@19.2.7)(react@19.2.7)
       '@hookform/resolvers':
         specifier: ^3.9.1
         version: 3.10.0(react-hook-form@7.77.0)
@@ -410,6 +413,19 @@ packages:
       react: 19.2.7
       resize-observer-polyfill: 1.5.1
       throttle-debounce: 5.0.2
+    dev: false
+
+  /@ant-design/v5-patch-for-react-19@1.0.3(antd@5.29.3)(react-dom@19.2.7)(react@19.2.7):
+    resolution: {integrity: sha512-iWfZuSUl5kuhqLUw7jJXUQFMMkM7XpW7apmKzQBQHU0cpifYW4A79xIBt9YVO5IBajKpPG5UKP87Ft7Yrw1p/w==}
+    engines: {node: '>=12.x'}
+    peerDependencies:
+      antd: '>=5.22.6'
+      react: '>=19.0.0'
+      react-dom: '>=19.0.0'
+    dependencies:
+      antd: 5.29.3(date-fns@4.4.0)(react-dom@19.2.7)(react@19.2.7)
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
     dev: false
 
   /@aws-crypto/crc32@5.2.0:
