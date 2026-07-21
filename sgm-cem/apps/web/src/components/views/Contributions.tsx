@@ -424,7 +424,7 @@ export function Contributions() {
           <SearchableSelect label="Collecteur" required placeholder="Rechercher un collecteur…"
             value={declareForm.collecteurId}
             onChange={collecteurId => setDeclareForm({ ...declareForm, collecteurId })}
-            options={(collecteursData ?? []).map(u => ({ value: u.id, label: u.fullName, sublabel: u.role }))}
+            options={(collecteursData ?? []).filter(u => u.role === 'TRESORIER' || u.role === 'COLLECTEUR').map(u => ({ value: u.id, label: u.fullName, sublabel: u.role }))}
           />
           <SearchableSelect label="Rubrique" required placeholder="Rechercher une rubrique…"
             value={declareForm.rubriqueId}

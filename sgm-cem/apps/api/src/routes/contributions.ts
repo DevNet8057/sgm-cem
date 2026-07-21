@@ -9,6 +9,7 @@ import { initiateYeliiPayment, getYeliiStatus } from '../services/yelii.service'
 import { generateReceiptPDF, generateReceiptPdf } from '../services/receipt'
 import { getFileStream } from '../services/storage'
 import { calculateAmountWithCommission, YELII_COMMISSION_RATE } from '@sgm-cem/shared'
+import { notifyCollecteurNewContribution } from '../services/notification'
 
 // Modes réglés via Yelii Pro Pay (Mobile Money). "YELII" est l'option générique
 // du formulaire rapide (opérateur non précisé) — on part sur MTN par défaut dans ce cas.
@@ -34,6 +35,14 @@ const createSchema = z.object({
   referencePaiement: z.string().optional(),
   // B1 — le collecteur encaisse en présentiel : confirmation immédiate, pas de double validation.
   directCollection: z.boolean().optional(),
+})
+
+const declareSchema = z.object({
+  collecteurId: z.string().min(1, 'Collecteur requis'),
+  rubriqueId: z.string().min(1, 'Rubrique requise'),
+  montant: z.number().int().positive('Le montant doit être un entier positif (FCFA)'),
+  periodeLabel: z.string().max(120).optional(),
+  note: z.string().max(500).optional(),
 })
 
 router.get('/', authenticate, requireLevel(2), async (req, res) => {
@@ -102,6 +111,7 @@ router.get('/litiges', authenticate, requireLevel(3), async (_req, res) => {
 
 router.post('/', authenticate, requireLevel(2), async (req, res) => {
   const data = createSchema.parse(req.body)
+  const { directCollection, paymentChannel, ...contributionData } = data
 
   const [rubrique, membre] = await Promise.all([
     prisma.rubrique.findUnique({ where: { id: data.rubriqueId } }),
@@ -121,11 +131,11 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
     rubrique.amountTravailleur
 
   // B1 — encaissement en présentiel : confirmation immédiate, sans double validation.
-  const isDirectCash = data.modePaiement === 'ESPECES' && data.directCollection === true
+  const isDirectCash = data.modePaiement === 'ESPECES' && directCollection === true
 
   const contribution = await prisma.contribution.create({
     data: {
-      ...data,
+      ...contributionData,
       collecteurId: data.collecteurId ?? req.user!.userId,
       montantAttendu: montantAttendu ?? data.montant,
       statut: isDirectCash ? 'CONFIRME' : 'EN_ATTENTE_CONFIRMATION',
@@ -193,6 +203,68 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
       details: { montant: contribution.montant, statut: contribution.statut },
     }
   })
+
+  res.status(201).json({ success: true, data: contribution })
+})
+
+router.post('/declare', authenticate, requireLevel(2), async (req, res) => {
+  const data = declareSchema.parse(req.body)
+
+  const [rubrique, collecteur] = await Promise.all([
+    prisma.rubrique.findUnique({ where: { id: data.rubriqueId } }),
+    prisma.user.findFirst({
+      where: { id: data.collecteurId, isActive: true, role: { in: ['TRESORIER', 'COLLECTEUR'] } },
+      select: { id: true, fullName: true, phone: true, whatsappPhone: true },
+    }),
+  ])
+
+  if (!rubrique || rubrique.status !== 'OUVERTE') {
+    throw new AppError('BUSINESS_RULE', 'Rubrique fermée ou introuvable')
+  }
+  if (!collecteur) {
+    throw new AppError('NOT_FOUND', 'Collecteur introuvable ou rôle non éligible', 404)
+  }
+
+  const contribution = await prisma.contribution.create({
+    data: {
+      rubriqueId: data.rubriqueId,
+      collecteurId: data.collecteurId,
+      montant: data.montant,
+      montantAttendu: data.montant,
+      modePaiement: 'ESPECES',
+      statut: 'EN_ATTENTE_CONFIRMATION',
+      localisationFonds: 'CHEZ_COLLECTEUR',
+      periodeLabel: data.periodeLabel,
+      note: data.note,
+    },
+    include: {
+      rubrique: { select: { title: true, code: true } },
+      collecteur: { select: { fullName: true } },
+    },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: req.user!.userId,
+      userName: req.user!.email,
+      action: 'CREATE',
+      entityType: 'Contribution',
+      entityId: contribution.id,
+      details: { montant: contribution.montant, statut: contribution.statut, declaredForCollecteurId: data.collecteurId, viaDeclare: true },
+    },
+  })
+
+  try {
+    await notifyCollecteurNewContribution({
+      collecteurId: data.collecteurId,
+      collecteurPhone: collecteur.whatsappPhone ?? collecteur.phone,
+      memberName: `Remise groupée déclarée par ${req.user!.email}`,
+      montant: contribution.montant,
+      rubriqueCode: contribution.rubrique.code,
+    })
+  } catch (e) {
+    console.error('[Notification] Échec notification collecteur (declare):', e)
+  }
 
   res.status(201).json({ success: true, data: contribution })
 })

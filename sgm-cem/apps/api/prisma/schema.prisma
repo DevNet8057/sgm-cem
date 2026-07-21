@@ -357,6 +357,7 @@ model Contribution {
   referencePaiement String?
   mobileMoneyPhone  String?
   momoTransactionId String?
+  note              String?            @db.Text // note libre — déclaration de remise groupée à un collecteur (pas de membreId, litigeMotif non pertinent)
 
   // ── Collecte publique — contributeur externe sans compte ────────────────────
   contributeurExterneId String? // XOR avec membreId — exactement l'un des deux, validé applicativement
