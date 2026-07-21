@@ -13,6 +13,7 @@ import { PasswordInput } from '@/components/ui/PasswordInput'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { SkeletonTableRow } from '@/components/ui/Skeleton'
 import { Modal } from '@/components/ui/Modal'
+import { Avatar } from '@/components/ui/Avatar'
 import type { User, UserRole } from '@/types'
 
 const ROLES: { value: UserRole; label: string; color: string }[] = [
@@ -184,7 +185,7 @@ export function GestionUtilisateurs() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-mobile-cards">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 {['Utilisateur', 'Email', 'Rôle', 'Statut', 'Dernière connexion', 'Actions'].map(col => (
@@ -205,11 +206,7 @@ export function GestionUtilisateurs() {
                   <tr key={u.id} className={cn('border-b border-gray-50 transition-colors', u.isActive ? 'hover:bg-gray-50/60' : 'bg-red-50/20 hover:bg-red-50/40')}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-[8px] bg-[#E8F5E8] flex items-center justify-center flex-shrink-0">
-                          <span className="text-[#1A6B1A] font-bold text-xs">
-                            {u.firstName[0]}{u.lastName[0]}
-                          </span>
-                        </div>
+                        <Avatar name={u.fullName} size="sm" />
                         <div>
                           <p className="font-medium text-gray-800">{u.fullName}</p>
                           {u.mustChangePassword && (
@@ -220,21 +217,21 @@ export function GestionUtilisateurs() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-600 font-mono">{u.email}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 text-xs text-gray-600 font-mono" data-label="Email">{u.email}</td>
+                    <td className="px-4 py-3" data-label="Rôle">
                       <StatusBadge status={u.role as Parameters<typeof StatusBadge>[0]['status']} dot={false} />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3" data-label="Statut">
                       <span className={cn('inline-flex items-center gap-1 text-xs font-semibold rounded-full px-2.5 py-0.5',
                         u.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700')}>
                         <span className={cn('w-1.5 h-1.5 rounded-full', u.isActive ? 'bg-green-500' : 'bg-red-500')} />
                         {u.isActive ? 'Actif' : 'Désactivé'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-400">
+                    <td className="px-4 py-3 text-xs text-gray-400" data-label="Dernière connexion">
                       {u.lastLoginAt ? formatDate(u.lastLoginAt) : 'Jamais connecté'}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3" data-label="Actions">
                       <div className="flex gap-1.5">
                         {/* Connecter (impersonation) — DEVELOPER uniquement, cible active non-DEVELOPER */}
                         {isDeveloper && u.isActive && u.role !== 'DEVELOPER' && u.id !== currentUser?.id && (

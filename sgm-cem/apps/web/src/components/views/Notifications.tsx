@@ -98,16 +98,15 @@ export function Notifications() {
           description="Les alertes importantes apparaîtront ici."
         />
       ) : (
-        <div className="overflow-hidden rounded-[18px] border border-gray-100 bg-white shadow-[0_2px_12px_rgba(15,74,15,0.06)]">
-          {data.map((notification, idx) => {
+        <div className="space-y-2.5 stagger-children">
+          {data.map((notification) => {
             const config = TYPE_CONFIG[notification.type] ?? TYPE_CONFIG.SYSTEM
             return (
               <article
                 key={notification.id}
                 className={cn(
-                  'flex flex-col gap-3 border-b border-gray-100 p-4 last:border-b-0 sm:flex-row sm:items-start sm:justify-between transition-colors',
-                  !notification.isRead ? 'bg-[#F2FFF4]' : 'hover:bg-gray-50/60',
-                  idx === 0 && 'rounded-t-[18px]'
+                  'interactive flex flex-col gap-3 rounded-[14px] border border-gray-100 bg-white p-4 hover:shadow-cem-sm sm:flex-row sm:items-start sm:justify-between',
+                  !notification.isRead ? 'bg-[#F2FFF4]' : 'hover:bg-gray-50/60'
                 )}
               >
                 <div className="flex gap-3">

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Alert, Avatar, Button, Card, Empty, Progress, Segmented, Select, Skeleton, Statistic, Tag } from 'antd'
+import { Alert, Button, Card, Empty, Progress, Segmented, Select, Skeleton, Statistic, Tag } from 'antd'
 import { motion, useReducedMotion } from 'framer-motion'
 import {
   AlertTriangle, CheckCircle2, CreditCard, Crown, FileText, FolderOpen,
@@ -13,7 +13,9 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import api from '@/lib/api'
-import { formatAmount, formatDateTime, getInitials, MODE_PAIEMENT_LABELS } from '@/lib/utils'
+import { ActivityCard } from '@/components/ui/ActivityCard'
+import { Avatar } from '@/components/ui/Avatar'
+import { formatAmount, MODE_PAIEMENT_LABELS } from '@/lib/utils'
 import { useAppStore } from '@/store/appStore'
 import { useAuthStore } from '@/store/authStore'
 import type { Contribution, DashboardStats, ModePaiement } from '@/types'
@@ -64,7 +66,11 @@ export function Dashboard() {
 
   return (
     <motion.div {...motionProps} className="space-y-4 p-4 pb-20 md:space-y-6 md:p-6 lg:pb-6">
-      <Card bordered={false} className="overflow-hidden bg-gradient-to-br from-[#052005] via-[#0F4A0F] to-[#1A6B1A] shadow-lg">
+      <Card
+        bordered={false}
+        className="overflow-hidden shadow-lg"
+        styles={{ body: { background: 'linear-gradient(to bottom right, #052005, #0F4A0F 50%, #1A6B1A)' } }}
+      >
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
             <p className="mb-1 text-xs capitalize text-white/60">
@@ -87,7 +93,7 @@ export function Dashboard() {
       {statsQuery.isLoading ? <DashboardSkeleton /> : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard icon={<Wallet size={20} />} title="Collecte annuelle" value={stats?.totalCollectedYear ?? 0} formatter={formatAmount} color="#1A6B1A" onClick={() => setActiveView('contributions')} />
-          <MetricCard icon={<TrendingUp size={20} />} title="Ce mois-ci" value={stats?.totalCollectedMonth ?? 0} formatter={formatAmount} color="#D4A900" onClick={() => setActiveView('statistiques')} />
+          <MetricCard icon={<TrendingUp size={20} />} title="Ce mois-ci" value={stats?.totalCollectedMonth ?? 0} formatter={formatAmount} color="#D4A900" iconTextColor="#052005" onClick={() => setActiveView('statistiques')} />
           <MetricCard icon={<CheckCircle2 size={20} />} title="Taux de confirmation" value={stats?.globalConfirmationRate ?? 0} suffix="%" color="#2563EB" onClick={() => setActiveView('validations')} />
           <MetricCard icon={<AlertTriangle size={20} />} title="Litiges actifs" value={stats?.litiges ?? 0} color="#DC2626" onClick={() => setActiveView('litiges')} />
         </div>
@@ -132,7 +138,7 @@ export function Dashboard() {
 
       <div className="grid grid-cols-1 gap-4 md:gap-6 xl:grid-cols-3">
         <Panel title="Top contributeurs">
-          {(stats?.topContributors?.length ?? 0) === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Aucun contributeur confirmé" /> : <div className="space-y-2">{(stats?.topContributors ?? []).map((item, index) => <button key={item.membreId} type="button" onClick={() => setActiveView('contributions')} className="flex w-full items-center gap-3 rounded-xl border border-slate-100 p-3 text-left transition hover:border-green-300 hover:bg-green-50"><Avatar className="shrink-0 bg-green-100 font-bold text-green-800">{getInitials(item.fullName)}</Avatar><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{item.fullName}</span><span className="text-xs text-slate-400">#{index + 1} · {item.count} contribution(s)</span></span><strong className="text-sm text-[#1A6B1A]">{formatAmount(item.total)}</strong></button>)}</div>}
+          {(stats?.topContributors?.length ?? 0) === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Aucun contributeur confirmé" /> : <div className="space-y-2">{(stats?.topContributors ?? []).map((item, index) => <button key={item.membreId} type="button" onClick={() => setActiveView('contributions')} className="flex w-full items-center gap-3 rounded-xl border border-slate-100 p-3 text-left transition hover:border-green-300 hover:bg-green-50"><Avatar name={item.fullName} size="sm" /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{item.fullName}</span><span className="text-xs text-slate-400">#{index + 1} · {item.count} contribution(s)</span></span><strong className="text-sm text-[#1A6B1A]">{formatAmount(item.total)}</strong></button>)}</div>}
         </Panel>
 
         <Panel title="Taux par rubrique">
@@ -152,8 +158,8 @@ export function Dashboard() {
   )
 }
 
-function MetricCard({ icon, title, value, suffix, formatter, color, onClick }: { icon: React.ReactNode; title: string; value: number; suffix?: string; formatter?: (value: number) => string; color: string; onClick: () => void }) {
-  return <Card hoverable className="relative" styles={{ body: { padding: 18 } }}><button type="button" aria-label={`Consulter ${title}`} onClick={onClick} className="absolute inset-0 z-10 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A6B1A]" /><div className="mb-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ color, background: `${color}12` }}>{icon}</span></div><Statistic title={title} value={value} suffix={suffix} formatter={() => formatter ? formatter(value) : value} valueStyle={{ color: '#0F172A', fontWeight: 700, fontSize: 24 }} /></Card>
+function MetricCard({ icon, title, value, suffix, formatter, color, iconTextColor, onClick }: { icon: React.ReactNode; title: string; value: number; suffix?: string; formatter?: (value: number) => string; color: string; iconTextColor?: string; onClick: () => void }) {
+  return <Card hoverable className="relative" styles={{ body: { padding: 18 } }}><button type="button" aria-label={`Consulter ${title}`} onClick={onClick} className="absolute inset-0 z-10 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A6B1A]" /><div className="mb-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: color, color: iconTextColor ?? '#fff' }}>{icon}</span></div><Statistic title={title} value={value} suffix={suffix} formatter={() => formatter ? formatter(value) : value} valueStyle={{ color: '#0F172A', fontWeight: 700, fontSize: 24 }} /></Card>
 }
 
 function DashboardSkeleton() { return <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <Card key={index}><Skeleton active paragraph={{ rows: 2 }} /></Card>)}</div> }
@@ -164,7 +170,25 @@ function Panel({ title, extra, children }: { title: string; extra?: React.ReactN
 
 function ActivityTimeline({ items }: { items: Contribution[] }) {
   if (!items.length) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Aucune contribution récente" />
-  return <div className="divide-y divide-slate-100">{items.slice(0, 8).map(item => <div key={item.id} className="flex items-center gap-3 py-3"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-green-50 text-sm font-bold text-green-700">{MODE_PAIEMENT_LABELS[item.modePaiement]?.charAt(0)}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-800">{item.membre?.user.fullName ?? 'Membre inconnu'}</p><p className="truncate text-xs text-slate-400">{item.rubrique?.code} · {formatDateTime(item.createdAt)}</p></div><div className="text-right"><strong className="block text-sm text-[#1A6B1A]">{formatAmount(item.montant)}</strong><Tag color={STATUS_COLORS[item.statut]} className="m-0">{STATUS_LABELS[item.statut] ?? item.statut}</Tag></div></div>)}</div>
+  return (
+    <div className="stagger-children space-y-2">
+      {items.slice(0, 8).map(item => (
+        <ActivityCard
+          key={item.id}
+          avatar={<Avatar name={item.membre?.user.fullName ?? 'Membre inconnu'} size="md" />}
+          title={item.membre?.user.fullName ?? 'Membre inconnu'}
+          subtitle={`${item.rubrique?.code ?? ''} · ${MODE_PAIEMENT_LABELS[item.modePaiement]}`}
+          timestamp={item.createdAt}
+          trailing={
+            <>
+              <strong className="block text-sm text-[#1A6B1A]">{formatAmount(item.montant)}</strong>
+              <Tag color={STATUS_COLORS[item.statut]} className="m-0">{STATUS_LABELS[item.statut] ?? item.statut}</Tag>
+            </>
+          }
+        />
+      ))}
+    </div>
+  )
 }
 
 function MoneyTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; dataKey?: string }>; label?: string }) {

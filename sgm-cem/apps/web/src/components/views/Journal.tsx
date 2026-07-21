@@ -6,6 +6,7 @@ import api from '@/lib/api'
 import { cn, formatDateTime, ROLE_LABELS, ROLE_LEVELS } from '@/lib/utils'
 import { SkeletonTableRow } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Avatar } from '@/components/ui/Avatar'
 import { useAuthStore } from '@/store/authStore'
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -268,7 +269,7 @@ export function Journal() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-mobile-cards">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 {['Date & heure', 'Utilisateur', 'Action', 'Élément', 'Détails', 'Adresse IP'].map(col => (
@@ -292,12 +293,17 @@ export function Journal() {
                   <tr key={log.id} className="border-b border-gray-50 hover:bg-[#1A6B1A]/4 transition-colors">
                     <td className="px-4 py-3 whitespace-nowrap font-mono text-xs text-gray-600">{formatDateTime(log.createdAt)}</td>
                     <td className="px-4 py-3">
-                      <p className="font-medium text-gray-800 whitespace-nowrap">{log.userName}</p>
-                      {log.user?.role && (
-                        <p className="text-[10px] text-gray-400">{ROLE_LABELS[log.user.role] ?? log.user.role}</p>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <Avatar name={log.userName} size="xs" />
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-gray-800 text-xs">{log.userName}</p>
+                          {log.user?.role && (
+                            <p className="truncate text-[10px] text-gray-400">{ROLE_LABELS[log.user.role] ?? log.user.role}</p>
+                          )}
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3" data-label="Action">
                       <span className={cn(
                         'inline-block text-[11px] font-semibold border rounded-full px-2.5 py-1 whitespace-nowrap',
                         ACTION_STYLES[log.action] ?? 'bg-gray-50 text-gray-600 border-gray-200'
@@ -305,9 +311,9 @@ export function Journal() {
                         {ACTION_LABELS[log.action] ?? log.action}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{ENTITY_LABELS[log.entityType] ?? log.entityType}</td>
-                    <td className="px-4 py-3"><DetailChips details={log.details} /></td>
-                    <td className="px-4 py-3 font-mono text-xs text-gray-400 whitespace-nowrap">{log.ipAddress ?? '—'}</td>
+                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap" data-label="Élément">{ENTITY_LABELS[log.entityType] ?? log.entityType}</td>
+                    <td className="px-4 py-3" data-label="Détails"><DetailChips details={log.details} /></td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-400 whitespace-nowrap" data-label="Adresse IP">{log.ipAddress ?? '—'}</td>
                   </tr>
                 ))
               )}

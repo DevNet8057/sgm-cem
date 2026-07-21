@@ -1,13 +1,14 @@
 'use client'
 import { useRef } from 'react'
 import { Bell, ChevronDown, LogOut, Menu as MenuIcon, UserCircle } from 'lucide-react'
-import { Avatar, Badge, Button, Dropdown, Tooltip, type MenuProps } from 'antd'
+import { Badge, Button, Dropdown, Tooltip, type MenuProps } from 'antd'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { useAppStore } from '@/store/appStore'
 import { useAuthStore } from '@/store/authStore'
-import { getInitials, ROLE_LABELS } from '@/lib/utils'
+import { ROLE_LABELS } from '@/lib/utils'
+import { Avatar } from '@/components/ui/Avatar'
 import type { ApiResponse, Notification } from '@/types'
 
 const VIEW_TITLES: Record<string, string> = {
@@ -178,12 +179,12 @@ export function TopBar() {
             aria-label="Ouvrir le menu du profil"
           >
             <Avatar
-              size={34}
+              name={user.fullName}
               src={user.photoUrl}
-              className="shrink-0 bg-[#F5C400]! font-bold text-[#0F4A0F]!"
-            >
-              {getInitials(user.fullName)}
-            </Avatar>
+              size={34}
+              override={{ bg: '#F5C400', text: '#0F4A0F' }}
+              className="shrink-0"
+            />
             <span className="hidden min-w-0 md:block">
               <span className="block max-w-32 truncate text-xs font-semibold leading-tight text-slate-800">{user.firstName}</span>
               <span className="mt-0.5 block max-w-32 truncate text-[10px] leading-tight text-slate-400">{ROLE_LABELS[user.role] ?? user.role}</span>

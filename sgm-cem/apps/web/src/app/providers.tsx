@@ -23,7 +23,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
-    <AntdRegistry>
+    <AntdRegistry layer>
       <ConfigProvider locale={fr_FR} theme={lightTheme}>
         <App>
           <QueryClientProvider client={queryClient}>

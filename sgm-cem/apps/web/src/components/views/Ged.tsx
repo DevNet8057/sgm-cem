@@ -269,7 +269,7 @@ export function Ged() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm table-mobile-cards">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50">
                   {['Document', 'Commission', 'Type', 'Statut', 'Cree le', 'Actions'].map(col => (
@@ -339,11 +339,11 @@ function DocumentRow({ document, onSubmit, onApprove, onReject, onArchive, onDow
           </div>
         </div>
       </td>
-      <td className="px-4 py-3 text-xs text-gray-500">{document.commission?.nom ?? '-'}</td>
-      <td className="px-4 py-3 text-xs text-gray-500">{document.typeDocument?.libelle ?? document.typeCode}</td>
-      <td className="px-4 py-3"><Status status={document.statut} /></td>
-      <td className="px-4 py-3 text-xs text-gray-400">{formatDate(document.createdAt)}</td>
-      <td className="px-4 py-3">
+      <td className="px-4 py-3 text-xs text-gray-500" data-label="Commission">{document.commission?.nom ?? '-'}</td>
+      <td className="px-4 py-3 text-xs text-gray-500" data-label="Type">{document.typeDocument?.libelle ?? document.typeCode}</td>
+      <td className="px-4 py-3" data-label="Statut"><Status status={document.statut} /></td>
+      <td className="px-4 py-3 text-xs text-gray-400" data-label="Créé le">{formatDate(document.createdAt)}</td>
+      <td className="px-4 py-3" data-label="Actions">
         <div className="flex flex-wrap gap-1.5">
           <button onClick={onDownload} title="Télécharger"
             className="flex items-center gap-1 px-2 py-1.5 rounded-[8px] text-xs font-semibold text-sky-600 border border-sky-200 hover:bg-sky-50 active:scale-95 transition-all">

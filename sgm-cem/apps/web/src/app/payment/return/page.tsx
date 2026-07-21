@@ -76,7 +76,7 @@ function PaymentReturnContent() {
     <div className="auth-public-background min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-sm bg-white rounded-[24px] shadow-sm border border-gray-100 overflow-hidden">
         {/* Logo */}
-        <div className="bg-gradient-to-br from-[#052005] to-[#1A6B1A] px-6 py-5 flex items-center gap-3">
+        <div className="bg-linear-to-br from-[#052005] to-[#1A6B1A] px-6 py-5 flex items-center gap-3">
           <BrandMark size={40} variant="compact" alt="Logo CEM" />
           <div>
             <p className="text-white font-semibold text-sm">SGM-CEM</p>

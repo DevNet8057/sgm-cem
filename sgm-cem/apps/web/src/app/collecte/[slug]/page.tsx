@@ -81,7 +81,7 @@ type PublicShellProps = {
 function PublicShell({ children, animation }: PublicShellProps) {
   return (
     <main className="auth-public-background relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-8 sm:px-6">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-[#0f4a0f]/10 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-linear-to-b from-[#0f4a0f]/10 to-transparent" />
       <motion.div
         initial={animation?.initial}
         animate={animation?.animate}
@@ -93,7 +93,7 @@ function PublicShell({ children, animation }: PublicShellProps) {
           className="!overflow-hidden !rounded-[24px] shadow-[0_20px_60px_rgba(15,74,15,0.12)]"
           styles={{ body: { padding: 0 } }}
         >
-          <header className="bg-gradient-to-br from-[#073507] via-[#0f4a0f] to-[#1a6b1a] px-5 py-5 sm:px-7">
+          <header className="bg-linear-to-br from-[#073507] via-[#0f4a0f] to-[#1a6b1a] px-5 py-5 sm:px-7">
             <div className="flex items-center gap-3">
               <BrandMark size={56} variant="compact" alt="Logo CEM" />
               <div>

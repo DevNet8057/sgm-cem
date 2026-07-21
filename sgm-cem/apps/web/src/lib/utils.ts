@@ -39,6 +39,25 @@ export const progressGradient = (ratio: number): string =>
 export const getInitials = (fullName: string): string =>
   fullName.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
 
+export const AVATAR_PALETTE: Array<{ bg: string; text: string }> = [
+  { bg: '#E8F5E8', text: '#0F4A0F' },
+  { bg: '#D4EDD4', text: '#1A6B1A' },
+  { bg: '#FEF3C7', text: '#92400E' },
+  { bg: '#F3F4F6', text: '#374151' },
+  { bg: '#FCE7D6', text: '#9A3412' },
+  { bg: '#E2E8F0', text: '#334155' },
+]
+
+export const avatarColorFromName = (name: string): { bg: string; text: string } => {
+  const trimmed = name.trim()
+  if (!trimmed) return AVATAR_PALETTE[0]
+  let hash = 0
+  for (let i = 0; i < trimmed.length; i++) {
+    hash = (hash * 31 + trimmed.charCodeAt(i)) >>> 0
+  }
+  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length]
+}
+
 export const ROLE_LEVELS: Record<string, number> = {
   DEVELOPER: 6, ADMIN: 5, TRESORIER: 4, RESPONSABLE: 3,
   ADJOINT_RESPONSABLE: 3, COLLECTEUR: 2, MEMBRE: 1,

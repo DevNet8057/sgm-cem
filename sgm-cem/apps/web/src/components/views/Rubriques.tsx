@@ -328,7 +328,7 @@ function RubriqueCard({ rubrique: r, loadingStatus, onEdit, onStatus }: {
 
   return (
     <div className="bg-white rounded-[18px] border border-gray-100 overflow-hidden hover:shadow-cem-lg hover:-translate-y-1 hover:border-[#1A6B1A]/30 transition-all duration-200 group">
-      <div className={`h-1.5 bg-gradient-to-r ${topColor}`} />
+      <div className={`h-1.5 bg-linear-to-r ${topColor}`} />
       <div className="p-5">
         <div className="flex items-start justify-between mb-3">
           <div className="flex-1 min-w-0">

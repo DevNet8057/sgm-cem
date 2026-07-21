@@ -5,6 +5,7 @@ import {
   Camera, Check, KeyRound, Loader2,
   Phone, Save, ShieldCheck, Trash2, User,
 } from 'lucide-react'
+import { Avatar } from '@/components/ui/Avatar'
 import { PasswordInput } from '@/components/ui/PasswordInput'
 import api from '@/lib/api'
 import { cn, ROLE_LABELS } from '@/lib/utils'
@@ -118,8 +119,6 @@ export function MonProfil() {
     changePwd.mutate()
   }
 
-  const initials = `${profile?.firstName?.[0] ?? ''}${profile?.lastName?.[0] ?? ''}`.toUpperCase()
-
   if (isLoading) return (
     <div className="p-6 animate-page-enter">
       <div className="h-40 skeleton rounded-[18px] mb-5" />
@@ -137,13 +136,13 @@ export function MonProfil() {
         <div className="relative z-10 p-5 flex flex-col sm:flex-row items-center gap-5">
           {/* Avatar */}
           <div className="relative group">
-            <div className="w-20 h-20 rounded-full overflow-hidden bg-[#F5C400] flex items-center justify-center shadow-cem-yellow border-4 border-white/20">
-              {profile?.photoUrl ? (
-                <img src={profile.photoUrl} alt="avatar" className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-[#0F4A0F] font-black text-2xl font-display">{initials}</span>
-              )}
-            </div>
+            <Avatar
+              name={profile?.fullName ?? ''}
+              src={profile?.photoUrl}
+              size={80}
+              override={{ bg: '#F5C400', text: '#0F4A0F' }}
+              className="shadow-cem-yellow border-4 border-white/20"
+            />
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadPhoto.isPending}

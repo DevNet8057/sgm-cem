@@ -174,7 +174,7 @@ export function Prestations() {
               <EmptyState icon={Receipt} title="Aucune prestation" description="Creez une prestation pour suivre les entrees et les depenses." />
             ) : filtered.map(item => (
               <button key={item.id} onClick={() => setSelectedId(item.id)}
-                className={cn('w-full text-left p-4 border-b border-gray-100 hover:bg-[#F2FFF4] transition-colors', selectedIdSafe === item.id && 'bg-[#F2FFF4]')}>
+                className={cn('w-full text-left p-4 border-b border-gray-100 hover:bg-[#F2FFF4] transition-colors interactive hover:shadow-cem-sm', selectedIdSafe === item.id && 'bg-[#F2FFF4]')}>
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="font-mono text-[11px] text-gray-400">{item.reference}</p>

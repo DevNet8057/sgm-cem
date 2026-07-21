@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle2, MessageSquare, Paperclip, XCircle } from 'lucide-react'
 import api from '@/lib/api'
 import { formatAmount, formatDateTime, MODE_PAIEMENT_LABELS } from '@/lib/utils'
+import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SkeletonTableRow } from '@/components/ui/Skeleton'
@@ -79,7 +80,7 @@ export function Litiges() {
           <h3 className="font-display font-semibold text-white text-sm">Contributions contestées</h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-mobile-cards">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 {['Membre', 'Rubrique', 'Montant', 'Mode', 'Motif du litige', 'Date', 'Action'].map(col => (
@@ -101,18 +102,23 @@ export function Litiges() {
               ) : (
                 litiges.map(c => (
                   <tr key={c.id} className="border-b border-gray-50 hover:bg-red-50/30 transition-colors">
-                    <td className="px-4 py-3 font-medium text-gray-800">{c.membre?.user.fullName ?? '-'}</td>
-                    <td className="px-4 py-3 text-xs text-gray-600">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar name={c.membre?.user.fullName ?? '—'} size="sm" />
+                        <p className="font-medium text-gray-800">{c.membre?.user.fullName ?? '-'}</p>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-600" data-label="Rubrique">
                       <p className="font-mono font-semibold">{c.rubrique?.code}</p>
                       <p className="text-gray-400 truncate max-w-[160px]">{c.rubrique?.title}</p>
                     </td>
-                    <td className="px-4 py-3 font-mono font-bold text-[#1A6B1A]">{formatAmount(c.montant)}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{MODE_PAIEMENT_LABELS[c.modePaiement]}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 font-mono font-bold text-[#1A6B1A]" data-label="Montant">{formatAmount(c.montant)}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500" data-label="Mode">{MODE_PAIEMENT_LABELS[c.modePaiement]}</td>
+                    <td className="px-4 py-3" data-label="Motif">
                       <p className="text-xs text-red-700 max-w-[200px] line-clamp-2">{c.litigeMotif ?? '-'}</p>
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-400">{formatDateTime(c.createdAt)}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 text-xs text-gray-400" data-label="Date">{formatDateTime(c.createdAt)}</td>
+                    <td className="px-4 py-3" data-label="Action">
                       <div className="flex flex-wrap gap-2">
                         {c.proofUrl && (
                           <a

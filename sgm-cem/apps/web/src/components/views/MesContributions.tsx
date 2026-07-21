@@ -8,6 +8,7 @@ import { useAuthStore } from '@/store/authStore'
 import { SkeletonTableRow } from '@/components/ui/Skeleton'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { ActivityCard } from '@/components/ui/ActivityCard'
 import type { Contribution } from '@/types'
 
 export function MesContributions() {
@@ -69,7 +70,7 @@ export function MesContributions() {
 
       {/* Table */}
       <div className="bg-white rounded-[18px] border border-gray-100 overflow-hidden shadow-[0_2px_12px_rgba(15,74,15,0.04)]">
-        <div className="overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
@@ -108,6 +109,37 @@ export function MesContributions() {
           </table>
         </div>
 
+        <div className="md:hidden stagger-children space-y-2.5 p-3">
+          {isLoading ? (
+            Array.from({ length: 5 }).map((_, i) => <div key={i} className="skeleton h-20 rounded-[14px]" />)
+          ) : filtered.length === 0 ? (
+            <EmptyState
+              icon={CreditCard}
+              title="Aucune contribution"
+              description="Vos contributions apparaîtront ici une fois enregistrées."
+            />
+          ) : (
+            filtered.map(c => (
+              <ActivityCard
+                key={c.id}
+                avatar={
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-50 text-sm font-bold text-[#1A6B1A]">
+                    {MODE_PAIEMENT_LABELS[c.modePaiement]?.charAt(0)}
+                  </span>
+                }
+                title={c.rubrique?.title ?? c.rubrique?.code ?? 'Contribution'}
+                subtitle={c.periodeLabel ?? formatDate(c.createdAt)}
+                trailing={
+                  <>
+                    <strong className="block font-mono text-sm text-[#1A6B1A]">{formatAmount(c.montant)}</strong>
+                    <StatusBadge status={c.statut} />
+                  </>
+                }
+              />
+            ))
+          )}
+        </div>
+
         {pagination && pagination.totalPages > 1 && (
           <div className="flex items-center justify-between px-5 py-4 border-t border-gray-100 bg-gray-50/30">
             <p className="text-xs text-gray-500">Page {pagination.page} / {pagination.totalPages}</p>
@@ -130,7 +162,7 @@ export function MesContributions() {
 
 function SummaryCard({ label, value, color, bg }: { label: string; value: string; color: string; bg: string }) {
   return (
-    <div className="bg-white rounded-[14px] border border-gray-100 p-4">
+    <div className="bg-white rounded-[14px] border border-gray-100 p-4 interactive hover:shadow-cem-sm">
       <div className="w-2 h-2 rounded-full mb-2" style={{ background: color }} />
       <p className="font-display font-bold text-2xl leading-tight" style={{ color }}>{value}</p>
       <p className="text-xs text-gray-500 mt-0.5">{label}</p>

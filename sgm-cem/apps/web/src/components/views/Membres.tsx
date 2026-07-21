@@ -6,11 +6,12 @@ import {
   Plus, Search, Users, X,
 } from 'lucide-react'
 import api from '@/lib/api'
-import { cn, formatDate, getInitials } from '@/lib/utils'
+import { cn, formatDate } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { SkeletonTableRow } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Avatar } from '@/components/ui/Avatar'
 import type { Membre } from '@/types'
 
 const GROUPES    = ['TEMPLE', 'MVOG_BETSI', 'BISCUITERIE', 'OBILI', 'SCIENCES', 'POLYTECHNIQUE']
@@ -165,13 +166,16 @@ export function Membres() {
   return (
     <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter">
       {/* Header */}
-      <div className="relative overflow-hidden rounded-[18px] border border-[#0F4A0F]/10 bg-white mb-6">
-        <div className="absolute inset-y-0 left-0 w-1.5 bg-[#2563EB]" />
+      <div className="relative overflow-hidden rounded-[18px] border border-[#0F4A0F]/10 bg-white mb-6 shadow-cem-sm">
+        <div className="absolute inset-y-0 left-0 w-2 bg-[#2563EB]" />
         <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-blue-600">Annuaire</p>
-            <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Membres</h2>
-            <p className="text-gray-500 text-sm mt-0.5">{pagination?.total ?? 0} membre(s) enregistré(s)</p>
+          <div className="flex items-center gap-3">
+            <span className="hidden sm:flex h-11 w-11 items-center justify-center rounded-xl bg-[#2563EB] text-white shrink-0"><Users size={20} /></span>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-blue-600">Annuaire</p>
+              <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Membres</h2>
+              <p className="text-gray-500 text-sm mt-0.5">{pagination?.total ?? 0} membre(s) enregistré(s)</p>
+            </div>
           </div>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" onClick={() => { setMode(mode === 'import' ? 'none' : 'import'); setError('') }}>
@@ -400,7 +404,7 @@ export function Membres() {
           <span className="text-white/60 text-xs bg-white/10 px-2.5 py-1 rounded-full">{pagination?.total ?? 0} au total</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-mobile-cards">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 {['Membre', 'Groupe', 'Catégorie', 'Profil', 'Couple', 'Statut', 'Adhésion', 'Action'].map(col => (
@@ -423,19 +427,17 @@ export function Membres() {
                     <tr key={m.id} className="border-b border-gray-50 hover:bg-[#1A6B1A]/4 transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-[8px] bg-[#E8F5E8] flex items-center justify-center shrink-0">
-                            <span className="text-[#1A6B1A] font-bold text-xs">{getInitials(m.user.fullName)}</span>
-                          </div>
+                          <Avatar name={m.user.fullName} size="sm" />
                           <div>
                             <p className="font-medium text-gray-800">{m.user.fullName}</p>
                             <p className="text-xs text-gray-400 font-mono">{m.memberId}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-600">{GROUPE_LABELS[m.groupe] ?? m.groupe}</td>
-                      <td className="px-4 py-3 text-xs text-gray-500">{m.categorie.replace(/_/g, ' ')}</td>
-                      <td className="px-4 py-3 text-xs text-gray-500">{m.profilFinancier}</td>
-                      <td className="px-4 py-3 text-xs">
+                      <td className="px-4 py-3 text-xs text-gray-600" data-label="Groupe">{GROUPE_LABELS[m.groupe] ?? m.groupe}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500" data-label="Catégorie">{m.categorie.replace(/_/g, ' ')}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500" data-label="Profil">{m.profilFinancier}</td>
+                      <td className="px-4 py-3 text-xs" data-label="Couple">
                         {mc.couple ? (
                           <span className="flex items-center gap-1 text-pink-600">
                             <Heart size={11} fill="currentColor" />
@@ -445,9 +447,9 @@ export function Membres() {
                           <span className="text-gray-400 italic truncate max-w-[120px]">{mc.nomConjoint}</span>
                         ) : '—'}
                       </td>
-                      <td className="px-4 py-3"><StatusBadge status={m.statut} /></td>
-                      <td className="px-4 py-3 text-xs text-gray-400">{formatDate(m.dateAdhesion)}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" data-label="Statut"><StatusBadge status={m.statut} /></td>
+                      <td className="px-4 py-3 text-xs text-gray-400" data-label="Adhésion">{formatDate(m.dateAdhesion)}</td>
+                      <td className="px-4 py-3" data-label="Action">
                         <Button size="sm" variant="outline" onClick={() => startEdit(m)}>
                           <Edit3 size={13} /> Modifier
                         </Button>

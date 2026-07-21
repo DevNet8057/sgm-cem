@@ -4,12 +4,13 @@ import {
   Users, Archive, Briefcase, AlertTriangle, BarChart3, FileText,
   Bell, Settings, LogOut, X, UserCog, CreditCard as CardIcon, UserCircle, Terminal, History, Globe,
 } from 'lucide-react'
-import { Avatar, Badge, Drawer, Layout, Menu, type MenuProps } from 'antd'
+import { Badge, Drawer, Layout, Menu, type MenuProps } from 'antd'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useAppStore } from '@/store/appStore'
 import { useAuthStore } from '@/store/authStore'
 import { BrandMark } from '@/components/ui/BrandMark'
-import { getInitials, ROLE_LABELS, ROLE_LEVELS } from '@/lib/utils'
+import { Avatar } from '@/components/ui/Avatar'
+import { ROLE_LABELS, ROLE_LEVELS } from '@/lib/utils'
 
 // ─── Navigation par rôle ─────────────────────────────────────────────
 // minLevel : niveau minimum pour voir l'item
@@ -167,12 +168,12 @@ export function Sidebar() {
         <div className="border-t border-white/10 p-4">
           <div className="flex items-center gap-3 rounded-xl bg-white/[0.06] p-2.5">
             <Avatar
-              size={36}
+              name={user.fullName}
               src={user.photoUrl}
-              className="shrink-0 bg-[#F5C400]! font-bold text-[#0F4A0F]!"
-            >
-              {getInitials(user.fullName)}
-            </Avatar>
+              size={36}
+              override={{ bg: '#F5C400', text: '#0F4A0F' }}
+              className="shrink-0"
+            />
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-semibold text-white">{user.firstName}</p>
               <p className="mt-0.5 truncate text-[10px] text-white/45">{user.email}</p>

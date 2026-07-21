@@ -9,6 +9,7 @@ import { Modal } from '@/components/ui/Modal'
 import { SkeletonCard } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { StatusBadge } from '@/components/ui/StatusBadge'
+import { Avatar } from '@/components/ui/Avatar'
 import { useAppStore } from '@/store/appStore'
 import { downloadXlsx } from '@/lib/exportXlsx'
 import type { ChampPersonnalise, ChampPersonnaliseType } from '@sgm-cem/shared'
@@ -240,7 +241,7 @@ function CollecteCard({ collecte: c, toggleLoading, onEdit, onToggleActive, onCo
 
   return (
     <div className="bg-white rounded-[18px] border border-gray-100 overflow-hidden hover:shadow-cem-lg hover:-translate-y-1 hover:border-[#1A6B1A]/30 transition-all duration-200">
-      <div className={cn('h-1.5 bg-gradient-to-r', c.isActive ? 'from-[#1A6B1A] to-[#2D8C2D]' : 'from-gray-300 to-gray-200')} />
+      <div className={cn('h-1.5 bg-linear-to-r', c.isActive ? 'from-[#1A6B1A] to-[#2D8C2D]' : 'from-gray-300 to-gray-200')} />
       <div className="p-5">
         <div className="flex items-start justify-between mb-3 gap-2">
           <div className="flex-1 min-w-0">
@@ -390,7 +391,7 @@ function CollecteContributionsDrawer({ collecte, open, onClose }: {
         <EmptyState icon={CreditCard} title="Aucune contribution" description="Aucune contribution pour l'instant." className="py-10" />
       ) : (
         <div className="overflow-x-auto border border-gray-100 rounded-[12px]">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-mobile-cards">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 {['Date', 'Nom', 'Type', 'Téléphone', 'Montant', 'Statut', 'Mode', ...champs.map(c => c.label)].map(col => (
@@ -401,9 +402,14 @@ function CollecteContributionsDrawer({ collecte, open, onClose }: {
             <tbody>
               {rows.map(r => (
                 <tr key={r.id} className="border-b border-gray-50 hover:bg-[#1A6B1A]/4 transition-colors">
-                  <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{formatDateTime(r.date)}</td>
-                  <td className="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{r.nom}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">
+                  <td data-label="Date" className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{formatDateTime(r.date)}</td>
+                  <td className="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">
+                    <div className="flex items-center gap-2.5">
+                      <Avatar name={r.nom} size="xs" />
+                      <span>{r.nom}</span>
+                    </div>
+                  </td>
+                  <td data-label="Type" className="px-3 py-2 whitespace-nowrap">
                     <span className={cn(
                       'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border',
                       r.type === 'MEMBRE' ? 'bg-[#EFF6FF] text-[#1E40AF] border-[#BFDBFE]' : 'bg-[#FEF9C3] text-[#713F12] border-[#FDE68A]'
@@ -411,12 +417,12 @@ function CollecteContributionsDrawer({ collecte, open, onClose }: {
                       {r.type === 'MEMBRE' ? 'Membre' : 'Externe'}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{r.type === 'EXTERNE' ? (r.phone ?? '—') : '—'}</td>
-                  <td className="px-3 py-2 font-mono font-bold text-[#1A6B1A] whitespace-nowrap">{formatAmount(r.montant)}</td>
-                  <td className="px-3 py-2 whitespace-nowrap"><StatusBadge status={r.statut} /></td>
-                  <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{MODE_PAIEMENT_LABELS[r.modePaiement] ?? r.modePaiement}</td>
+                  <td data-label="Téléphone" className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{r.type === 'EXTERNE' ? (r.phone ?? '—') : '—'}</td>
+                  <td data-label="Montant" className="px-3 py-2 font-mono font-bold text-[#1A6B1A] whitespace-nowrap">{formatAmount(r.montant)}</td>
+                  <td data-label="Statut" className="px-3 py-2 whitespace-nowrap"><StatusBadge status={r.statut} /></td>
+                  <td data-label="Mode" className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{MODE_PAIEMENT_LABELS[r.modePaiement] ?? r.modePaiement}</td>
                   {champs.map(champ => (
-                    <td key={champ.key} className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">{formatChampValue(r.valeursChamps?.[champ.key])}</td>
+                    <td key={champ.key} data-label={champ.label} className="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">{formatChampValue(r.valeursChamps?.[champ.key])}</td>
                   ))}
                 </tr>
               ))}

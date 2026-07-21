@@ -191,7 +191,7 @@
   .interactive {
     transition: transform var(--cem-transition-fast), box-shadow var(--cem-transition-fast), background-color var(--cem-transition-fast);
   }
-  .interactive:hover  { transform: translateY(-1px); }
+  .interactive:hover  { transform: translateY(-2px); box-shadow: var(--cem-shadow-md); }
   .interactive:active { transform: translateY(0) scale(0.99); }
 
   /* ── Trajet de l'argent : flux animé le long d'un connecteur ──────── */

@@ -13,6 +13,7 @@ import { ContributionStepper } from '@/components/views/ContributionStepper'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { Modal } from '@/components/ui/Modal'
 import { queueContribution } from '@/lib/offlineQueue'
+import { Avatar } from '@/components/ui/Avatar'
 import type { Contribution, Membre, ModePaiement, Rubrique } from '@/types'
 
 // getBaseURL() garantit le suffixe /api quel que soit l'environnement
@@ -224,13 +225,16 @@ export function Contributions() {
   return (
     <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter">
       {/* Header */}
-      <div className="relative overflow-hidden rounded-[18px] border border-[#0F4A0F]/10 bg-white mb-6">
-        <div className="absolute inset-y-0 left-0 w-1.5 bg-[#1A6B1A]" />
+      <div className="relative overflow-hidden rounded-[18px] border border-[#0F4A0F]/10 bg-white mb-6 shadow-cem-sm">
+        <div className="absolute inset-y-0 left-0 w-2 bg-[#1A6B1A]" />
         <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-[#1A6B1A]">Caisse</p>
-            <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Contributions</h2>
-            <p className="text-gray-500 text-sm mt-0.5">{pagination?.total ?? 0} enregistrement(s)</p>
+          <div className="flex items-center gap-3">
+            <span className="hidden sm:flex h-11 w-11 items-center justify-center rounded-xl bg-[#1A6B1A] text-white shrink-0"><CreditCard size={20} /></span>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-[#1A6B1A]">Caisse</p>
+              <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Contributions</h2>
+              <p className="text-gray-500 text-sm mt-0.5">{pagination?.total ?? 0} enregistrement(s)</p>
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="outline" onClick={() => setShowAdvancedFilters(v => !v)}>
@@ -469,7 +473,7 @@ export function Contributions() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-mobile-cards">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 {['Membre', 'Rubrique', 'Montant', 'Mode', 'Statut', 'Date', ''].map(col => (
@@ -487,13 +491,18 @@ export function Contributions() {
               ) : (
                 contributions.map(c => (
                   <tr key={c.id} className="border-b border-gray-50 hover:bg-[#1A6B1A]/4 transition-colors group">
-                    <td className="px-4 py-3"><p className="font-medium text-gray-800">{c.membre?.user.fullName ?? '-'}</p></td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">{c.rubrique?.code}</td>
-                    <td className="px-4 py-3"><span className="font-mono font-bold text-[#1A6B1A]">{formatAmount(c.montant)}</span></td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{MODE_PAIEMENT_LABELS[c.modePaiement]}</td>
-                    <td className="px-4 py-3"><StatusBadge status={c.statut} /></td>
-                    <td className="px-4 py-3 text-xs text-gray-400">{formatDate(c.createdAt)}</td>
                     <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar name={c.membre?.user.fullName ?? '—'} size="sm" />
+                        <p className="font-medium text-gray-800">{c.membre?.user.fullName ?? '-'}</p>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 text-xs" data-label="Rubrique">{c.rubrique?.code}</td>
+                    <td className="px-4 py-3" data-label="Montant"><span className="font-mono font-bold text-[#1A6B1A]">{formatAmount(c.montant)}</span></td>
+                    <td className="px-4 py-3 text-xs text-gray-500" data-label="Mode">{MODE_PAIEMENT_LABELS[c.modePaiement]}</td>
+                    <td className="px-4 py-3" data-label="Statut"><StatusBadge status={c.statut} /></td>
+                    <td className="px-4 py-3 text-xs text-gray-400" data-label="Date">{formatDate(c.createdAt)}</td>
+                    <td className="px-4 py-3" data-label="Actions">
                       <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => setTimelineId(c.id)}

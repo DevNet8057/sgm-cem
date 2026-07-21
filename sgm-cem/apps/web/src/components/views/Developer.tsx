@@ -220,7 +220,7 @@ function WebhookRecalculateCard({ current, onHistory }: { current?: ConfigItem; 
   })
 
   return (
-    <div className="p-5 bg-gradient-to-br from-[#0F4A0F]/[0.03] to-[#F5C400]/[0.06] rounded-[14px] border-2 border-[#1A6B1A]/20">
+    <div className="p-5 bg-linear-to-br from-[#0F4A0F]/[0.03] to-[#F5C400]/[0.06] rounded-[14px] border-2 border-[#1A6B1A]/20">
       <div className="flex items-center gap-2 mb-3">
         <Webhook size={18} className="text-[#1A6B1A]" />
         <h3 className="font-display font-semibold text-[#0F4A0F]">Webhook Yelii</h3>

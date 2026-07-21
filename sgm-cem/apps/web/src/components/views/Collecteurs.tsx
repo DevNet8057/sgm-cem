@@ -3,7 +3,8 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowRight, Building2, Calendar, Check, ChevronDown, CreditCard, FolderOpen, HandCoins, Landmark, MapPin, Plus, RefreshCw, ShieldCheck, Shield, Smartphone, User, UserCheck, UserPlus, Wallet, X, XCircle, Loader2, Banknote } from 'lucide-react'
 import api from '@/lib/api'
-import { cn, formatAmount, formatDate, formatDateTime, getInitials, LOCALISATION_FONDS_LABELS, MODE_PAIEMENT_LABELS, ROLE_LABELS, TRANSFER_TYPE_LABELS } from '@/lib/utils'
+import { cn, formatAmount, formatDate, formatDateTime, LOCALISATION_FONDS_LABELS, MODE_PAIEMENT_LABELS, ROLE_LABELS, TRANSFER_TYPE_LABELS } from '@/lib/utils'
+import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SkeletonTableRow } from '@/components/ui/Skeleton'
@@ -243,7 +244,7 @@ export function Collecteurs() {
         {error && <div className="m-4 px-3 py-2 rounded-[10px] bg-red-50 border border-red-100 text-sm text-red-600">{error}</div>}
 
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-mobile-cards">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 <th className="px-4 py-3 text-left">
@@ -300,7 +301,7 @@ export function Collecteurs() {
           </div>
           {bankError && <div className="m-4 px-3 py-2 rounded-[10px] bg-red-50 border border-red-100 text-sm text-red-600">{bankError}</div>}
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm table-mobile-cards">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50">
                   <th className="px-4 py-3 text-left">
@@ -334,13 +335,18 @@ export function Collecteurs() {
                           )}
                         />
                       </td>
-                      <td className="px-4 py-3 font-medium text-gray-800">{c.membre?.user.fullName ?? '-'}</td>
-                      <td className="px-4 py-3 text-xs text-gray-600">
+                      <td className="px-4 py-3 font-medium text-gray-800">
+                        <div className="flex items-center gap-2">
+                          <Avatar name={c.membre?.user.fullName ?? '—'} size="xs" />
+                          <span>{c.membre?.user.fullName ?? '-'}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-600" data-label="Rubrique">
                         <p className="font-mono">{c.rubrique?.code}</p>
                       </td>
-                      <td className="px-4 py-3 font-mono font-bold text-blue-600">{formatAmount(c.montant)}</td>
-                      <td className="px-4 py-3 text-xs text-gray-500">{LOCATION_LABELS[c.localisationFonds ?? ''] ?? '-'}</td>
-                      <td className="px-4 py-3 text-xs text-gray-400">{formatDate(c.createdAt)}</td>
+                      <td className="px-4 py-3 font-mono font-bold text-blue-600" data-label="Montant">{formatAmount(c.montant)}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500" data-label="Localisation">{LOCATION_LABELS[c.localisationFonds ?? ''] ?? '-'}</td>
+                      <td className="px-4 py-3 text-xs text-gray-400" data-label="Date">{formatDate(c.createdAt)}</td>
                     </tr>
                   ))
                 )}
@@ -403,7 +409,7 @@ function BankDepositHistory() {
         <p className="text-white/60 text-xs">Chaque référence de bordereau/relevé est la preuve du versement en banque</p>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm table-mobile-cards">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/50">
               {['Date', 'Réf. bordereau / relevé', 'Montant', 'Déposé par', 'Contributions', ''].map(col => (
@@ -419,20 +425,20 @@ function BankDepositHistory() {
             ) : (
               (deposits ?? []).map(d => (
                 <tr key={d.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
-                  <td className="px-4 py-3 text-xs text-gray-500">
+                  <td className="px-4 py-3 text-xs text-gray-500" data-label="Date">
                     {formatDateTime(d.createdAt)}
                     {d.dateBordereau && <p className="text-[10px] text-gray-400">Bordereau : {formatDate(d.dateBordereau)}</p>}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" data-label="Réf. bordereau">
                     <span className="inline-flex items-center gap-1.5 font-mono font-bold text-[#0F4A0F] bg-[#E8F5E8] border border-[#1A6B1A]/20 px-2.5 py-1 rounded-[8px]">
                       <ShieldCheck size={12} className="text-[#1A6B1A]" />
                       {d.referenceBordereau}
                     </span>
                   </td>
-                  <td className="px-4 py-3 font-mono font-bold text-[#0F4A0F]">{formatAmount(d.totalAmount)}</td>
-                  <td className="px-4 py-3 text-xs text-gray-600">{d.depositedByName}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{d.contributions.length} contribution(s)</td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 font-mono font-bold text-[#0F4A0F]" data-label="Montant">{formatAmount(d.totalAmount)}</td>
+                  <td className="px-4 py-3 text-xs text-gray-600" data-label="Déposé par">{d.depositedByName}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500" data-label="Contributions">{d.contributions.length} contribution(s)</td>
+                  <td className="px-4 py-3 text-right" data-label="Action">
                     <Button size="sm" variant="ghost" onClick={() => setDetail(d)}>Détail</Button>
                   </td>
                 </tr>
@@ -448,7 +454,7 @@ function BankDepositHistory() {
         description={`${formatAmount(detail?.totalAmount ?? 0)} FCFA · déposé par ${detail?.depositedByName ?? ''} · ${detail ? formatDateTime(detail.createdAt) : ''}`}>
         {detail?.note && <p className="mb-3 text-xs text-gray-500 italic">Note : « {detail.note} »</p>}
         <div className="max-h-[45vh] overflow-y-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-mobile-cards">
             <thead>
               <tr className="border-b border-gray-100">
                 {['Membre', 'Rubrique', 'Mode', 'Montant'].map(col => (
@@ -459,10 +465,15 @@ function BankDepositHistory() {
             <tbody>
               {detail?.contributions.map(c => (
                 <tr key={c.id} className="border-b border-gray-50">
-                  <td className="px-3 py-2 text-gray-800">{c.membre?.user.fullName ?? '-'}</td>
-                  <td className="px-3 py-2 text-xs font-mono text-gray-600">{c.rubrique?.code}</td>
-                  <td className="px-3 py-2 text-xs text-gray-500">{MODE_PAIEMENT_LABELS[c.modePaiement] ?? c.modePaiement}</td>
-                  <td className="px-3 py-2 font-mono font-semibold text-[#0F4A0F]">{formatAmount(c.montant)}</td>
+                  <td className="px-3 py-2 text-gray-800">
+                    <div className="flex items-center gap-2">
+                      <Avatar name={c.membre?.user.fullName ?? '—'} size="xs" />
+                      <span>{c.membre?.user.fullName ?? '-'}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-xs font-mono text-gray-600" data-label="Rubrique">{c.rubrique?.code}</td>
+                  <td className="px-3 py-2 text-xs text-gray-500" data-label="Mode">{MODE_PAIEMENT_LABELS[c.modePaiement] ?? c.modePaiement}</td>
+                  <td className="px-3 py-2 font-mono font-semibold text-[#0F4A0F]" data-label="Montant">{formatAmount(c.montant)}</td>
                 </tr>
               ))}
             </tbody>
@@ -622,16 +633,21 @@ function ContributionRow({ contribution, selected, onToggle }: {
   return (
     <tr className="border-b border-gray-50 hover:bg-[#1A6B1A]/4 transition-colors">
       <td className="px-4 py-3"><input type="checkbox" checked={selected} onChange={onToggle} /></td>
-      <td className="px-4 py-3 font-medium text-gray-800">{contribution.membre?.user.fullName ?? '-'}</td>
-      <td className="px-4 py-3 text-xs text-gray-600">
+      <td className="px-4 py-3 font-medium text-gray-800">
+        <div className="flex items-center gap-2">
+          <Avatar name={contribution.membre?.user.fullName ?? '—'} size="xs" />
+          <span>{contribution.membre?.user.fullName ?? '-'}</span>
+        </div>
+      </td>
+      <td className="px-4 py-3 text-xs text-gray-600" data-label="Rubrique">
         <p className="font-mono">{contribution.rubrique?.code}</p>
         <p className="text-gray-400 truncate max-w-[160px]">{contribution.rubrique?.title}</p>
       </td>
-      <td className="px-4 py-3 text-xs text-gray-500">{contribution.collecteur?.fullName ?? '-'}</td>
-      <td className="px-4 py-3 font-mono font-bold text-[#1A6B1A]">{formatAmount(contribution.montant)}</td>
-      <td className="px-4 py-3 text-xs text-gray-500">{MODE_PAIEMENT_LABELS[contribution.modePaiement]}</td>
-      <td className="px-4 py-3 text-xs text-gray-500">{LOCATION_LABELS[contribution.localisationFonds ?? ''] ?? '-'}</td>
-      <td className="px-4 py-3 text-xs text-gray-400">{formatDate(contribution.createdAt)}</td>
+      <td className="px-4 py-3 text-xs text-gray-500" data-label="Collecteur">{contribution.collecteur?.fullName ?? '-'}</td>
+      <td className="px-4 py-3 font-mono font-bold text-[#1A6B1A]" data-label="Montant">{formatAmount(contribution.montant)}</td>
+      <td className="px-4 py-3 text-xs text-gray-500" data-label="Mode">{MODE_PAIEMENT_LABELS[contribution.modePaiement]}</td>
+      <td className="px-4 py-3 text-xs text-gray-500" data-label="Localisation">{LOCATION_LABELS[contribution.localisationFonds ?? ''] ?? '-'}</td>
+      <td className="px-4 py-3 text-xs text-gray-400" data-label="Date">{formatDate(contribution.createdAt)}</td>
     </tr>
   )
 }
