@@ -7,12 +7,14 @@ import { getConfigNumber } from '../services/config.service'
 
 const prisma = new PrismaClient()
 
-const STALE_AFTER_MS = 15 * 60 * 1000 // 15 minutes
+const STALE_AFTER_MS = 60 * 1000 // 1 minute — filet de sécurité, le poll actif (/payments/status) gère le cas nominal en quasi temps réel
 
 /**
  * I8 — Job de réconciliation failsafe (section 11 Cas 2 du doc paiements).
- * Vérifie directement chez Yelii les contributions Mobile Money bloquées en
- * PROCESSING depuis plus de 15 minutes (cas où le webhook n'est jamais arrivé).
+ * Le mécanisme principal est désormais le poll actif du frontend
+ * (`/payments/status/:id`, toutes les 5s) via `syncYeliiPaymentStatus` — ce
+ * job n'est qu'un filet de sécurité pour le cas où l'onglet a été fermé
+ * avant confirmation (webhook manqué ET aucun poll pour rattraper).
  *
  * Fréquence DYNAMIQUE (panneau développeur, section E) : le cron tourne chaque
  * minute et n'exécute le job que si RECONCILIATION_INTERVAL_MINUTES se sont

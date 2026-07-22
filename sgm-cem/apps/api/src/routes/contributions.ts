@@ -5,11 +5,12 @@ import { PrismaClient } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
-import { initiateYeliiPayment, getYeliiStatus } from '../services/yelii.service'
+import { initiateYeliiPayment } from '../services/yelii.service'
 import { generateReceiptPDF, generateReceiptPdf } from '../services/receipt'
 import { getFileStream } from '../services/storage'
 import { calculateAmountWithCommission, YELII_COMMISSION_RATE } from '@sgm-cem/shared'
 import { notifyCollecteurNewContribution } from '../services/notification'
+import { syncYeliiPaymentStatus } from '../services/payment-sync.service'
 
 // Modes réglés via Yelii Pro Pay (Mobile Money). "YELII" est l'option générique
 // du formulaire rapide (opérateur non précisé) — on part sur MTN par défaut dans ce cas.
@@ -270,36 +271,9 @@ router.post('/declare', authenticate, requireLevel(2), async (req, res) => {
 })
 
 router.get('/:id/payment-status', authenticate, requireLevel(2), async (req, res) => {
-  const contribution = await prisma.contribution.findUnique({ where: { id: String(req.params.id) } })
-  if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
-
-  if (contribution.statut === 'CONFIRME' || contribution.statut === 'ANNULE' || contribution.statut === 'LITIGE') {
-    res.json({ success: true, data: { id: contribution.id, statut: contribution.statut } })
-    return
-  }
-
-  if ((YELII_MODES as readonly string[]).includes(contribution.modePaiement) && contribution.externalTransactionId) {
-    const remoteStatus = await getYeliiStatus(contribution.externalTransactionId)
-    if (remoteStatus === 'success' && contribution.statut === 'EN_ATTENTE_CONFIRMATION') {
-      const updated = await prisma.contribution.update({
-        where: { id: contribution.id },
-        data: { statut: 'CONFIRME', paymentStatus: 'SUCCESS', confirmedAt: new Date(), referencePaiement: contribution.referencePaiement ?? contribution.externalTransactionId },
-      })
-      await generateReceiptPDF(updated.id)
-      res.json({ success: true, data: { id: updated.id, statut: updated.statut } })
-      return
-    }
-    if ((remoteStatus === 'failed' || remoteStatus === 'cancelled') && contribution.statut === 'EN_ATTENTE_CONFIRMATION') {
-      const updated = await prisma.contribution.update({
-        where: { id: contribution.id },
-        data: { statut: 'ANNULE', paymentStatus: 'FAILED', litigeMotif: 'Paiement Yelii échoué ou annulé.' },
-      })
-      res.json({ success: true, data: { id: updated.id, statut: updated.statut } })
-      return
-    }
-  }
-
-  res.json({ success: true, data: { id: contribution.id, statut: contribution.statut } })
+  const result = await syncYeliiPaymentStatus(String(req.params.id))
+  if (!result) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
+  res.json({ success: true, data: { id: result.id, statut: result.statut } })
 })
 
 router.patch('/:id/confirm', authenticate, requireLevel(2), async (req, res) => {

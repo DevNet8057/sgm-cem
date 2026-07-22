@@ -9,6 +9,7 @@ import { calculateAmountWithCommission, YELII_COMMISSION_RATE } from '@sgm-cem/s
 import { getPrisma } from '../lib/prisma'
 import { getConfigBool, getConfigNumber } from '../services/config.service'
 import { audit } from '../services/audit.service'
+import { syncYeliiPaymentStatus } from '../services/payment-sync.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -230,32 +231,26 @@ router.get('/status/:id', authenticate, requireLevel(2), async (req, res) => {
   const id = String(req.params.id)
 
   const contribution = await prisma.contribution.findFirst({
-    where: {
-      OR: [
-        { id },
-        { externalTransactionId: id },
-      ],
-    },
-    select: {
-      id: true,
-      statut: true,
-      paymentStatus: true,
-      montant: true,
-      receiptUrl: true,
-    },
+    where: { OR: [{ id }, { externalTransactionId: id }] },
+    select: { id: true },
   })
 
   if (!contribution) {
     return res.status(404).json({ success: false, error: 'Contribution inconnue' })
   }
 
+  const result = await syncYeliiPaymentStatus(contribution.id)
+  if (!result) {
+    return res.status(404).json({ success: false, error: 'Contribution inconnue' })
+  }
+
   res.json({
     success: true,
     data: {
-      id: contribution.id,
-      statut: contribution.statut,
-      paymentStatus: contribution.paymentStatus,
-      receiptUrl: contribution.receiptUrl ?? null,
+      id: result.id,
+      statut: result.statut,
+      paymentStatus: result.paymentStatus,
+      receiptUrl: result.receiptUrl ?? null,
     },
   })
 })
