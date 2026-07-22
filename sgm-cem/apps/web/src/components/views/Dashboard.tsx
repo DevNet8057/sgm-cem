@@ -38,6 +38,12 @@ const STATUS_LABELS: Record<string, string> = {
   CONFIRME: 'Confirmé', EN_ATTENTE_CONFIRMATION: 'En attente', LITIGE: 'Litige', ANNULE: 'Annulé',
 }
 
+const RANK_BADGE_COLORS: Record<number, { background: string; color: string }> = {
+  0: { background: '#F5C400', color: '#052005' },
+  1: { background: '#CBD5E1', color: '#334155' },
+  2: { background: '#D9A066', color: '#FFFFFF' },
+}
+
 export function Dashboard() {
   const { setActiveView } = useAppStore()
   const { user } = useAuthStore()
@@ -65,7 +71,7 @@ export function Dashboard() {
     : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.35 } }
 
   return (
-    <motion.div {...motionProps} className="space-y-4 p-4 pb-20 md:space-y-6 md:p-6 lg:pb-6">
+    <motion.div {...motionProps} className="space-y-5 p-4 pb-20 md:space-y-8 md:p-6 lg:pb-6">
       <Card
         variant="borderless"
         className="overflow-hidden shadow-lg"
@@ -91,7 +97,7 @@ export function Dashboard() {
       )}
 
       {statsQuery.isLoading ? <DashboardSkeleton /> : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard icon={<Wallet size={20} />} title="Collecte annuelle" value={stats?.totalCollectedYear ?? 0} formatter={formatAmount} color="#1A6B1A" onClick={() => setActiveView('contributions')} />
           <MetricCard icon={<TrendingUp size={20} />} title="Ce mois-ci" value={stats?.totalCollectedMonth ?? 0} formatter={formatAmount} color="#D4A900" iconTextColor="#052005" onClick={() => setActiveView('statistiques')} />
           <MetricCard icon={<CheckCircle2 size={20} />} title="Taux de confirmation" value={stats?.globalConfirmationRate ?? 0} suffix="%" color="#2563EB" onClick={() => setActiveView('validations')} />
@@ -99,7 +105,7 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 md:gap-6 xl:grid-cols-[2fr_1fr]">
+      <div className="grid grid-cols-1 gap-5 md:gap-6 xl:grid-cols-[2fr_1fr]">
         <Panel title="Collectes mensuelles">
           <Segmented block className="mb-4 sm:w-auto" value={chartMode} onChange={value => setChartMode(value as 'montants' | 'taux')} options={[{ label: 'Montants', value: 'montants' }, { label: 'Taux', value: 'taux' }]} />
           {monthlyQuery.isLoading ? <Skeleton active paragraph={{ rows: 7 }} /> : monthlyData.length === 0 ? <Empty description="Aucune donnée mensuelle pour cet exercice" /> : (
@@ -136,21 +142,21 @@ export function Dashboard() {
         {statsQuery.isLoading ? <Skeleton active /> : <ActivityTimeline items={stats?.recentContributions ?? []} />}
       </Panel>
 
-      <div className="grid grid-cols-1 gap-4 md:gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 md:gap-6 xl:grid-cols-3">
         <Panel title="Top contributeurs">
-          {(stats?.topContributors?.length ?? 0) === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Aucun contributeur confirmé" /> : <div className="space-y-2">{(stats?.topContributors ?? []).map((item, index) => <button key={item.membreId} type="button" onClick={() => setActiveView('contributions')} className="flex w-full items-center gap-3 rounded-xl border border-slate-100 p-3 text-left transition hover:border-[#1A6B1A]/30 hover:bg-[#E8F5E8]"><Avatar name={item.fullName} size="sm" /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{item.fullName}</span><span className="text-xs text-slate-400">#{index + 1} · {item.count} contribution(s)</span></span><strong className="text-sm text-[#1A6B1A]">{formatAmount(item.total)}</strong></button>)}</div>}
+          {(stats?.topContributors?.length ?? 0) === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Aucun contributeur confirmé" /> : <div className="space-y-2">{(stats?.topContributors ?? []).map((item, index) => <button key={item.membreId} type="button" onClick={() => setActiveView('contributions')} className="flex w-full items-center gap-3 rounded-xl border border-slate-100 p-3 text-left transition hover:border-[#1A6B1A]/30 hover:bg-[#E8F5E8]"><Avatar name={item.fullName} size="sm" /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{item.fullName}</span><span className="flex items-center gap-1.5 text-xs text-slate-400">{RANK_BADGE_COLORS[index] && <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold" style={{ background: RANK_BADGE_COLORS[index].background, color: RANK_BADGE_COLORS[index].color }}>{index + 1}</span>}#{index + 1} · {item.count} contribution(s)</span></span><strong className="text-sm text-[#1A6B1A]">{formatAmount(item.total)}</strong></button>)}</div>}
         </Panel>
 
         <Panel title="Taux par rubrique">
-          {(stats?.contributionRates?.length ?? 0) === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Aucune rubrique active" /> : <div className="space-y-4">{(stats?.contributionRates ?? []).map(item => <button key={item.rubriqueId} onClick={() => setActiveView('rubriques')} className="w-full text-left"><div className="mb-1 flex justify-between text-xs"><strong className="text-slate-700">{item.code}</strong><span>{item.rate == null ? 'Libre' : `${item.rate} %`}</span></div><Progress percent={Math.min(100, item.rate ?? 0)} showInfo={false} strokeColor={(item.rate ?? 0) >= 80 ? '#1A6B1A' : (item.rate ?? 0) >= 50 ? '#F5C400' : '#EF4444'} /><div className="flex justify-between text-[11px] text-slate-400"><span>{formatAmount(item.total)}</span><span>{item.count} paiement(s)</span></div></button>)}</div>}
+          {(stats?.contributionRates?.length ?? 0) === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Aucune rubrique active" /> : <div className="space-y-4">{(stats?.contributionRates ?? []).map(item => <button key={item.rubriqueId} onClick={() => setActiveView('rubriques')} className="w-full text-left"><div className="mb-1 flex justify-between text-xs"><strong className="text-slate-700">{item.code}</strong>{item.rate == null ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">Libre</span> : <span>{item.rate} %</span>}</div>{item.rate != null && <Progress percent={Math.min(100, item.rate)} showInfo={false} strokeColor={item.rate >= 80 ? '#1A6B1A' : item.rate >= 50 ? '#F5C400' : '#EF4444'} />}<div className="flex justify-between text-[11px] text-slate-400"><span>{formatAmount(item.total)}</span><span>{item.count} paiement(s)</span></div></button>)}</div>}
         </Panel>
 
-        <div className="space-y-5">
+        <div className="flex h-full flex-col gap-5">
           <Panel title="Actions rapides"><div className="grid grid-cols-2 gap-2">{[
             { icon: Users, label: 'Nouveau membre', view: 'membres' }, { icon: CreditCard, label: 'Enregistrer', view: 'contributions' },
             { icon: CheckCircle2, label: 'Valider', view: 'validations' }, { icon: FileText, label: 'Rapport', view: 'rapports' },
           ].map(action => <Button key={action.label} block className="h-auto py-3" onClick={() => setActiveView(action.view)}><span className="flex flex-col items-center gap-1"><action.icon size={17} /><small>{action.label}</small></span></Button>)}</div></Panel>
-          <Card className="border-0 text-white" styles={{ body: { background: '#0F4A0F' } }}><div className="flex items-center gap-2 text-xs text-white/60"><Crown size={15} className="text-[#F5C400]" /> Grand contributeur {year}</div><div className="mt-2 truncate text-xl font-semibold">{stats?.topContributor?.fullName ?? 'Aucun'}</div><div className="text-sm font-bold text-[#F5C400]">{formatAmount(stats?.topContributor?.total ?? 0)}</div></Card>
+          <Card className="flex flex-1 flex-col justify-center border-0 text-white" styles={{ body: { background: '#0F4A0F' } }}><div className="flex items-center gap-2 text-xs text-white/60"><Crown size={15} className="text-[#F5C400]" /> Grand contributeur {year}</div><div className="mt-2 truncate text-xl font-semibold">{stats?.topContributor?.fullName ?? 'Aucun'}</div><div className="text-sm font-bold text-[#F5C400]">{formatAmount(stats?.topContributor?.total ?? 0)}</div></Card>
         </div>
       </div>
 
