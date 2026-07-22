@@ -75,7 +75,7 @@ export function Dashboard() {
       <Card
         variant="borderless"
         className="overflow-hidden shadow-lg"
-        styles={{ body: { background: 'linear-gradient(to bottom right, #052005, #0F4A0F 50%, #1A6B1A)' } }}
+        styles={{ body: { background: 'radial-gradient(circle at 88% 0%, rgba(245,196,0,0.10), transparent 22rem), radial-gradient(circle at 0% 100%, rgba(255,255,255,0.06), transparent 22rem), linear-gradient(to bottom right, #052005, #0F4A0F 50%, #1A6B1A)' } }}
       >
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
@@ -97,11 +97,11 @@ export function Dashboard() {
       )}
 
       {statsQuery.isLoading ? <DashboardSkeleton /> : (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="stagger-children grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard icon={<Wallet size={20} />} title="Collecte annuelle" value={stats?.totalCollectedYear ?? 0} formatter={formatAmount} color="#1A6B1A" onClick={() => setActiveView('contributions')} />
           <MetricCard icon={<TrendingUp size={20} />} title="Ce mois-ci" value={stats?.totalCollectedMonth ?? 0} formatter={formatAmount} color="#D4A900" iconTextColor="#052005" onClick={() => setActiveView('statistiques')} />
-          <MetricCard icon={<CheckCircle2 size={20} />} title="Taux de confirmation" value={stats?.globalConfirmationRate ?? 0} suffix="%" color="#2563EB" onClick={() => setActiveView('validations')} />
-          <MetricCard icon={<AlertTriangle size={20} />} title="Litiges actifs" value={stats?.litiges ?? 0} color="#DC2626" onClick={() => setActiveView('litiges')} />
+          <MetricCard icon={<CheckCircle2 size={20} />} title="Taux de confirmation" value={stats?.globalConfirmationRate ?? 0} suffix="%" color="#065F46" onClick={() => setActiveView('validations')} />
+          <MetricCard icon={<AlertTriangle size={20} />} title="Litiges actifs" value={stats?.litiges ?? 0} color="#DC2626" pulse={(stats?.litiges ?? 0) > 0} onClick={() => setActiveView('litiges')} />
         </div>
       )}
 
@@ -164,8 +164,8 @@ export function Dashboard() {
   )
 }
 
-function MetricCard({ icon, title, value, suffix, formatter, color, iconTextColor, onClick }: { icon: React.ReactNode; title: string; value: number; suffix?: string; formatter?: (value: number) => string; color: string; iconTextColor?: string; onClick: () => void }) {
-  return <Card hoverable className="relative" styles={{ body: { padding: 18 } }}><button type="button" aria-label={`Consulter ${title}`} onClick={onClick} className="absolute inset-0 z-10 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A6B1A]" /><div className="mb-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: color, color: iconTextColor ?? '#fff' }}>{icon}</span></div><Statistic title={title} value={value} suffix={suffix} formatter={() => formatter ? formatter(value) : value} valueStyle={{ color: '#0F172A', fontWeight: 700, fontSize: 24 }} /></Card>
+function MetricCard({ icon, title, value, suffix, formatter, color, iconTextColor, pulse, onClick }: { icon: React.ReactNode; title: string; value: number; suffix?: string; formatter?: (value: number) => string; color: string; iconTextColor?: string; pulse?: boolean; onClick: () => void }) {
+  return <Card hoverable className="relative" styles={{ body: { padding: 18 } }}><button type="button" aria-label={`Consulter ${title}`} onClick={onClick} className="absolute inset-0 z-10 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A6B1A]" /><div className="mb-3"><span className={`flex h-10 w-10 items-center justify-center rounded-xl ${pulse ? 'animate-pulse' : ''}`} style={{ background: color, color: iconTextColor ?? '#fff' }}>{icon}</span></div><Statistic title={title} value={value} suffix={suffix} formatter={() => formatter ? formatter(value) : value} valueStyle={{ color: '#0F172A', fontWeight: 700, fontSize: 24 }} /></Card>
 }
 
 function DashboardSkeleton() { return <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <Card key={index}><Skeleton active paragraph={{ rows: 2 }} /></Card>)}</div> }
