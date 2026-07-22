@@ -131,7 +131,8 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
         if (rUrl) setReceiptUrl(rUrl)
         await queryClient.invalidateQueries({ queryKey: ['contributions'] })
         await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
-        setTimeout(onSuccess, 2500)
+        // Pas de fermeture automatique : l'utilisateur consulte le reçu
+        // (Partager / Imprimer) puis ferme lui-même.
         return true
       }
       if (statut === 'ANNULE' || ps === 'FAILED') {
@@ -140,7 +141,7 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
       }
     } catch { /* le webhook mettra à jour */ }
     return false
-  }, [contribId, queryClient, onSuccess])
+  }, [contribId, queryClient])
 
   useEffect(() => {
     if ((payStatus !== 'waiting' && payStatus !== 'redirected') || !contribId) return

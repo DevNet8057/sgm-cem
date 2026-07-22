@@ -19,6 +19,9 @@ Ce document remplace tout ancien flow de paiement Mobile Money dans le projet. L
 
 **Règle absolue (RB-02) : un paiement Mobile Money n'est CONFIRMÉ dans la base de données qu'après réception ET vérification du webhook Yelii. Jamais avant.**
 
+> **📌 Mise à jour 2026-07-22 — mécanisme de confirmation réellement implémenté.**
+> En environnement de dev, le webhook Yelii est injoignable (pas de tunnel public permanent) — RB-02 reste respecté en esprit (jamais de confirmation sans interroger Yelii lui-même), mais la vérification se fait désormais **activement** via `getYeliiStatus()` (appel direct à `GET /collect/status/:id` chez Yelii, la même source de vérité que le webhook) plutôt que passivement en attendant son arrivée. Voir la note détaillée dans la section 10 / Cas 1 ci-dessous.
+
 ---
 
 ## 1. IDENTIFIANTS ET CONFIGURATION
@@ -824,19 +827,30 @@ catch (err: any) {
 
 ## 10. LES 4 CAS LIMITES À GÉRER
 
-### Cas 1 — Le webhook n'arrive jamais (serveur down au mauvais moment)
+### Cas 1 — Le webhook n'arrive jamais (serveur down au mauvais moment, ou injoignable en dev)
 
-Yelii offre un endpoint de retry ET tu as le polling. Deux filets de sécurité :
+Trois filets de sécurité (le premier n'était pas prévu dans la conception initiale, ajouté le 2026-07-22 après un bug réel constaté en test) :
 
-**Filet A — Job de réconciliation automatique** (`apps/api/src/jobs/yelii-reconciliation.ts`) :
+**Filet A (principal en pratique) — Vérification active à chaque poll frontend** (`apps/api/src/services/payment-sync.service.ts`, fonction `syncYeliiPaymentStatus`) :
 ```typescript
-// Toutes les 10 minutes, vérifier les contributions en PROCESSING depuis > 15 min
-// Pour chacune, appeler getCollectionStatus() directement chez Yelii
-// Si success → confirmer comme le ferait le webhook
-// Si failed → passer en ANNULE
+// Appelé par GET /api/payments/status/:id ET GET /api/contributions/:id/payment-status
+// (les deux routes délèguent au même service — pas de duplication).
+// Tant que la contribution est EN_ATTENTE_CONFIRMATION avec un externalTransactionId
+// Mobile Money : appelle getYeliiStatus() en direct, met à jour statut + paymentStatus
+// + génère le reçu immédiatement si succès.
+```
+Le frontend (`PaymentStepper.tsx`) interroge cette route toutes les 5 secondes pendant l'attente USSD — la confirmation ou l'échec réel remonte donc en quelques secondes, sans dépendre du webhook ni du cron ci-dessous.
+
+**Filet B — Job de réconciliation automatique** (`apps/api/src/jobs/payment-reconciliation.ts`, PAS `yelii-reconciliation.ts` comme initialement prévu — nom réel du fichier) :
+```typescript
+// Fréquence dynamique (défaut 10 min, configurable en base via panneau développeur
+// section "Comportement système" → RECONCILIATION_INTERVAL_MINUTES, effet immédiat).
+// Vérifie les contributions en PROCESSING depuis plus de 1 minute (STALE_AFTER_MS,
+// réduit de 15 à 1 min le 2026-07-22 — filet A gère déjà le cas nominal en quasi
+// temps réel, ce job ne sert plus que de rattrapage si l'onglet du payeur est fermé).
 ```
 
-**Filet B — Bouton admin "Rejouer le webhook"** qui appelle `retryWebhook(transactionId)`.
+**Filet C — Bouton admin "Rejouer le webhook"** qui appelle `retryWebhook(transactionId)`.
 
 ### Cas 2 — Double webhook (Yelii renvoie deux fois)
 

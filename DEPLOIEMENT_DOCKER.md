@@ -2,7 +2,12 @@
 
 > **⚠️ LECTURE OBLIGATOIRE** avant toute tâche touchant au déploiement, aux Dockerfiles,
 > aux variables d'environnement ou à la configuration. Référencé par `CLAUDE.md`.
-> Dernière mise à jour : 2026-07-16 — déploiement vérifié fonctionnel de bout en bout.
+> Dernière mise à jour : 2026-07-22 — correctifs paiements Mobile Money (§7/§7bis).
+> Déploiement Docker local vérifié fonctionnel de bout en bout depuis le 2026-07-16.
+> **Migration prévue : Docker → AWS** (cible actuelle, remplace l'hypothèse VPS
+> générique ci-dessous — mettre à jour la section « Mise en production » dès que les
+> choix AWS concrets (EC2 vs ECS/Fargate, RDS vs Postgres conteneurisé, etc.) sont
+> arrêtés, ne pas improviser de détails non décidés).
 
 ## Démarrage rapide
 
@@ -70,11 +75,29 @@ Les Dockerfiles copient `packages/shared` (package.json + tsconfig + src) AVANT
 `pnpm install --filter <app>...` — le postinstall racine compile shared. Ne pas "simplifier".
 
 ### 7. Webhooks Yelii : route `/webhooks/yelii` (SANS préfixe `/api`)
-En local, Yelii ne peut pas joindre `localhost` → pas de confirmation temps réel.
-Filets de sécurité vérifiés : la page `/payment/return` polle le statut 60 s, et le cron
-de réconciliation repasse toutes les 10 min. Pour du temps réel : VPS + domaine
-(ou tunnel Cloudflare **nommé** — les tunnels `trycloudflare.com` sont éphémères,
-celui utilisé en dev est mort).
+En local, Yelii ne peut pas joindre `localhost` → pas de confirmation temps réel par webhook.
+**Depuis le 2026-07-22, ce n'est plus bloquant** : `GET /api/payments/status/:id` (pollé
+toutes les 5 s par le frontend pendant l'attente d'un paiement Mobile Money) vérifie
+maintenant activement le statut chez Yelii lui-même (`payment-sync.service.ts`) au lieu
+de se contenter de lire la base — la confirmation ou l'échec réel remonte en quelques
+secondes, avec ou sans webhook. Le cron de réconciliation (`payment-reconciliation.ts`,
+seuil réduit de 15 min à **1 min**, fréquence dynamique via panneau développeur
+`RECONCILIATION_INTERVAL_MINUTES`, défaut 10 min) ne sert plus que de filet de secours
+si l'utilisateur ferme l'onglet avant confirmation. Pour un webhook temps réel malgré
+tout (recommandé en prod, réduit la charge de polling) : VPS + domaine (ou tunnel
+Cloudflare **nommé** — les tunnels `trycloudflare.com` sont éphémères, celui utilisé
+en dev est mort).
+
+### 7bis. Fuite de process Puppeteer — corrigée le 2026-07-22
+`generateReceiptPdf` (génération du reçu PDF) ne fermait pas le navigateur headless
+Chromium si la génération échouait en cours de route (`browser.close()` jamais atteint
+faute de `try/finally`). Sur un conteneur de longue durée générant beaucoup de reçus,
+ça finissait par épuiser les ressources et faire échouer TOUTE génération de reçu —
+symptôme observé : `SERVER_ERROR` systématique après plusieurs heures d'utilisation,
+résolu par un simple redémarrage (qui masquait le vrai problème). Corrigé avec un
+`try/finally` garantissant la fermeture du navigateur dans tous les cas — si ce
+symptôme réapparaît malgré le correctif, vérifier `tasklist`/`ps aux | grep chrome`
+pour des process Chromium orphelins avant de conclure à autre chose.
 
 ### 8bis. DEUX PostgreSQL sur cette machine — piège majeur (découvert le 2026-07-17)
 Un PostgreSQL **natif Windows** (service `postgresql-x64-18`) tourne sur le port 5432
@@ -101,9 +124,16 @@ depuis l'hôte) ; les conteneurs, eux, se parlent par le réseau Docker interne
 Admin : `devnet8057@gmail.com` + 5 comptes staff de démo (mot de passe commun de seed —
 **à changer avant toute utilisation réelle**, voir `ADMIN_PASSWORD` dans `.env`).
 
-## Mise en production (prochaine étape décidée : à faire)
+## Mise en production (prochaine étape décidée : migration vers AWS — détails à préciser)
 
-1. VPS (Hetzner/Contabo/OVH ~5-10 €/mois) + nom de domaine.
+Cible confirmée : **AWS**, après ce déploiement Docker local. Les points ci-dessous
+restent valables tels quels (image Docker déjà construite, ne change pas selon
+l'hébergeur) ; seuls le choix du service de calcul (EC2 simple vs ECS/Fargate) et
+du service de base de données (Postgres conteneurisé vs RDS managé) restent à
+arbitrer — ne pas présumer d'un choix précis tant qu'il n'a pas été décidé
+explicitement, les compléter ici une fois tranchés.
+
+1. VPS générique (Hetzner/Contabo/OVH) OU instance EC2 AWS équivalente, + nom de domaine.
 2. Installer Docker, copier le projet + `.env` racine (jamais via git — il est ignoré).
 3. Ajuster `.env` : `APP_URL`, `API_URL`, `NEXT_PUBLIC_API_URL` → domaine public.
 4. Reverse proxy (Caddy recommandé : HTTPS automatique) devant web:3000 et api:3001.
