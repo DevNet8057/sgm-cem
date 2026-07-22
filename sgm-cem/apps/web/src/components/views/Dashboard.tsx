@@ -26,7 +26,7 @@ interface MonthlyStat {
 }
 
 const MODE_COLORS: Record<ModePaiement, string> = {
-  ESPECES: '#16A34A', MTN_MOMO: '#F5C400', ORANGE_MONEY: '#F97316', YELII: '#7E22CE',
+  ESPECES: '#1A6B1A', MTN_MOMO: '#F5C400', ORANGE_MONEY: '#F97316', YELII: '#7E22CE',
   CARTE_VISA: '#2563EB', VIREMENT: '#7C3AED',
 }
 
@@ -138,7 +138,7 @@ export function Dashboard() {
 
       <div className="grid grid-cols-1 gap-4 md:gap-6 xl:grid-cols-3">
         <Panel title="Top contributeurs">
-          {(stats?.topContributors?.length ?? 0) === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Aucun contributeur confirmé" /> : <div className="space-y-2">{(stats?.topContributors ?? []).map((item, index) => <button key={item.membreId} type="button" onClick={() => setActiveView('contributions')} className="flex w-full items-center gap-3 rounded-xl border border-slate-100 p-3 text-left transition hover:border-green-300 hover:bg-green-50"><Avatar name={item.fullName} size="sm" /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{item.fullName}</span><span className="text-xs text-slate-400">#{index + 1} · {item.count} contribution(s)</span></span><strong className="text-sm text-[#1A6B1A]">{formatAmount(item.total)}</strong></button>)}</div>}
+          {(stats?.topContributors?.length ?? 0) === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Aucun contributeur confirmé" /> : <div className="space-y-2">{(stats?.topContributors ?? []).map((item, index) => <button key={item.membreId} type="button" onClick={() => setActiveView('contributions')} className="flex w-full items-center gap-3 rounded-xl border border-slate-100 p-3 text-left transition hover:border-[#1A6B1A]/30 hover:bg-[#E8F5E8]"><Avatar name={item.fullName} size="sm" /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{item.fullName}</span><span className="text-xs text-slate-400">#{index + 1} · {item.count} contribution(s)</span></span><strong className="text-sm text-[#1A6B1A]">{formatAmount(item.total)}</strong></button>)}</div>}
         </Panel>
 
         <Panel title="Taux par rubrique">
@@ -150,7 +150,7 @@ export function Dashboard() {
             { icon: Users, label: 'Nouveau membre', view: 'membres' }, { icon: CreditCard, label: 'Enregistrer', view: 'contributions' },
             { icon: CheckCircle2, label: 'Valider', view: 'validations' }, { icon: FileText, label: 'Rapport', view: 'rapports' },
           ].map(action => <Button key={action.label} block className="h-auto py-3" onClick={() => setActiveView(action.view)}><span className="flex flex-col items-center gap-1"><action.icon size={17} /><small>{action.label}</small></span></Button>)}</div></Panel>
-          <Card className="border-0 bg-[#0F4A0F] text-white"><div className="flex items-center gap-2 text-xs text-white/60"><Crown size={15} className="text-[#F5C400]" /> Grand contributeur {year}</div><div className="mt-2 truncate text-xl font-semibold">{stats?.topContributor?.fullName ?? 'Aucun'}</div><div className="text-sm font-bold text-[#F5C400]">{formatAmount(stats?.topContributor?.total ?? 0)}</div></Card>
+          <Card className="border-0 text-white" styles={{ body: { background: '#0F4A0F' } }}><div className="flex items-center gap-2 text-xs text-white/60"><Crown size={15} className="text-[#F5C400]" /> Grand contributeur {year}</div><div className="mt-2 truncate text-xl font-semibold">{stats?.topContributor?.fullName ?? 'Aucun'}</div><div className="text-sm font-bold text-[#F5C400]">{formatAmount(stats?.topContributor?.total ?? 0)}</div></Card>
         </div>
       </div>
 

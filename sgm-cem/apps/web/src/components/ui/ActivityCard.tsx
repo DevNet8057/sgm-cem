@@ -22,7 +22,7 @@ export function ActivityCard({
   avatar, title, subtitle, timestamp, trailing, onClick, unread, className,
 }: ActivityCardProps) {
   const rootClassName = cn(
-    'interactive flex w-full items-start gap-3 rounded-[14px] border border-gray-100 bg-white p-3.5 text-left hover:shadow-cem',
+    'interactive flex w-full items-start gap-3 rounded-[14px] border border-gray-100 bg-white p-4 text-left',
     unread && 'bg-[#F2FFF4]',
     onClick && 'cursor-pointer',
     className

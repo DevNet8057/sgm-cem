@@ -7,7 +7,7 @@ import {
   AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, CreditCard, ExternalLink,
   FileText, Heart, Loader2, Printer, RefreshCw, Share2, X,
 } from 'lucide-react'
-import api from '@/lib/api'
+import api, { getBaseURL } from '@/lib/api'
 import { cn, formatAmount } from '@/lib/utils'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { calculateAmountWithCommission, YELII_COMMISSION_RATE } from '@sgm-cem/shared'
@@ -64,6 +64,9 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
   const [contribId, setContribId] = useState<string | null>(null)
   const [cinetpayUrl, setCinetpayUrl] = useState<string | null>(null)
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null)
+  const [receiptTimedOut, setReceiptTimedOut] = useState(false)
+  // Incrémenté par le bouton « Réessayer » pour relancer le polling du reçu.
+  const [receiptAttempt, setReceiptAttempt] = useState(0)
   const [failReason, setFailReason] = useState('')
   const [countdown, setCountdown] = useState(USSD_TIMEOUT)
 
@@ -147,6 +150,34 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
     }, 5000)
     return () => clearInterval(iv)
   }, [payStatus, contribId, poll])
+
+  // ── Récupération du reçu avec retry court ─────────────────────────────────
+  // Le PDF Puppeteer n'est pas toujours prêt à l'instant où le paiement passe
+  // à CONFIRME. On interroge /payments/status toutes les 1,5 s (max 10 essais,
+  // ~15 s). Passé ce délai, on bascule sur un état « échec » actionnable plutôt
+  // que de laisser le spinner tourner indéfiniment.
+  useEffect(() => {
+    if (payStatus !== 'confirmed' || receiptUrl || !contribId) return
+    setReceiptTimedOut(false)
+    let tries = 0
+    const iv = setInterval(async () => {
+      tries += 1
+      try {
+        const r = await api.get(`/payments/status/${contribId}`)
+        const url = (r.data.data.receiptUrl ?? null) as string | null
+        if (url) {
+          setReceiptUrl(url)
+          clearInterval(iv)
+          return
+        }
+      } catch { /* réessai au prochain tick */ }
+      if (tries >= 10) {
+        clearInterval(iv)
+        setReceiptTimedOut(true)
+      }
+    }, 1500)
+    return () => clearInterval(iv)
+  }, [payStatus, receiptUrl, contribId, receiptAttempt])
 
   // ── Mutation : initier le paiement ───────────────────────────────────────
   const pay = useMutation({
@@ -235,6 +266,8 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
   function retry() {
     setPayStatus('idle')
     setContribId(null)
+    setReceiptUrl(null)
+    setReceiptTimedOut(false)
     setFailReason('')
     setStep(2) // Retour au récap pour re-confirmer
     setError('')
@@ -659,6 +692,29 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
                       >
                         Partager
                       </AntButton>
+                    </div>
+                  ) : receiptTimedOut ? (
+                    <div className="space-y-3">
+                      <p className="text-xs text-gray-500">
+                        Le reçu met plus de temps que prévu à se générer. Votre paiement est bien confirmé.
+                      </p>
+                      <div className="flex flex-wrap items-center justify-center gap-2">
+                        <AntButton
+                          type="primary"
+                          icon={<FileText size={14} />}
+                          href={`${getBaseURL()}/contributions/${contribId}/receipt`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Voir le reçu
+                        </AntButton>
+                        <AntButton
+                          icon={<RefreshCw size={13} />}
+                          onClick={() => { setReceiptTimedOut(false); setReceiptAttempt(a => a + 1) }}
+                        >
+                          Réessayer
+                        </AntButton>
+                      </div>
                     </div>
                   ) : (
                     <div className="flex items-center justify-center gap-2 text-xs text-gray-400">

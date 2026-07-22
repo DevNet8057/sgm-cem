@@ -233,7 +233,7 @@ export function Contributions() {
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-[#1A6B1A]">Caisse</p>
               <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Contributions</h2>
-              <p className="text-gray-500 text-sm mt-0.5">{pagination?.total ?? 0} enregistrement(s)</p>
+              <p className="text-slate-500 text-sm mt-0.5">{pagination?.total ?? 0} enregistrement(s)</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -264,9 +264,9 @@ export function Contributions() {
 
       {/* D : Query builder — chips de filtres */}
       {showAdvancedFilters && (
-        <div className="mb-4 bg-white rounded-[18px] border border-gray-100 p-4 space-y-3">
+        <div className="mb-4 bg-white rounded-[18px] border border-slate-100 p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-widest text-gray-400">Filtres avancés</span>
+            <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Filtres avancés</span>
             {(statusFilter || modeFilter || rubriqueFilter) && (
               <button
                 onClick={() => { setStatusFilter(''); setModeFilter(''); setRubriqueFilter(''); setPage(1) }}
@@ -278,7 +278,7 @@ export function Contributions() {
           </div>
 
           <div>
-            <p className="text-xs font-semibold text-gray-500 mb-2">Statut</p>
+            <p className="text-xs font-semibold text-slate-500 mb-2">Statut</p>
             <div className="flex flex-wrap gap-2">
               {STATUS_CHIPS.map(chip => (
                 <FilterChip
@@ -294,7 +294,7 @@ export function Contributions() {
           </div>
 
           <div>
-            <p className="text-xs font-semibold text-gray-500 mb-2">Mode de paiement</p>
+            <p className="text-xs font-semibold text-slate-500 mb-2">Mode de paiement</p>
             <div className="flex flex-wrap gap-2">
               {MODE_CHIPS.map(chip => (
                 <FilterChip
@@ -311,7 +311,7 @@ export function Contributions() {
 
           {(rubriquesData?.length ?? 0) > 0 && (
             <div>
-              <p className="text-xs font-semibold text-gray-500 mb-2">Rubrique</p>
+              <p className="text-xs font-semibold text-slate-500 mb-2">Rubrique</p>
               <div className="flex flex-wrap gap-2">
                 {(rubriquesData ?? []).filter(r => r.status === 'OUVERTE').map(r => (
                   <FilterChip
@@ -332,7 +332,7 @@ export function Contributions() {
       {/* Chips filtres actifs */}
       {(statusFilter || modeFilter || rubriqueFilter) && !showAdvancedFilters && (
         <div className="mb-3 flex flex-wrap gap-2 items-center">
-          <span className="text-xs text-gray-400">Filtres actifs :</span>
+          <span className="text-xs text-slate-400">Filtres actifs :</span>
           {statusFilter && (
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#E8F5E8] text-[#1A6B1A] text-xs font-semibold border border-[#1A6B1A]/20">
               {STATUS_CHIPS.find(c => c.value === statusFilter)?.label}
@@ -356,7 +356,7 @@ export function Contributions() {
 
       {showForm && (
         <form onSubmit={e => { e.preventDefault(); createContribution.mutate() }}
-          className="mb-5 bg-white rounded-[18px] border border-gray-100 p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+          className="mb-5 bg-white rounded-[18px] border border-slate-100 p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
           <SearchableSelect label="Membre" required placeholder="Rechercher un membre…"
             value={form.membreId}
             onChange={membreId => setForm({ ...form, membreId })}
@@ -416,10 +416,10 @@ export function Contributions() {
       {showDeclare && (
         <form onSubmit={e => { e.preventDefault(); declareMutation.mutate() }}
           className="mb-5 bg-white rounded-[18px] border border-amber-100 shadow-sm p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
-          <div className="md:col-span-4 flex items-center gap-2 pb-1 border-b border-gray-100">
+          <div className="md:col-span-4 flex items-center gap-2 pb-1 border-b border-slate-100">
             <MapPin size={14} className="text-amber-500" />
-            <span className="text-sm font-semibold text-gray-700">Déclarer une remise à un collecteur</span>
-            <span className="ml-auto text-xs text-gray-400">Le collecteur sera notifié pour confirmer</span>
+            <span className="text-sm font-semibold text-slate-700">Déclarer une remise à un collecteur</span>
+            <span className="ml-auto text-xs text-slate-400">Le collecteur sera notifié pour confirmer</span>
           </div>
           <SearchableSelect label="Collecteur" required placeholder="Rechercher un collecteur…"
             value={declareForm.collecteurId}
@@ -445,12 +445,12 @@ export function Contributions() {
 
       {/* Recherche */}
       <div className="relative mb-4">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input
           value={search}
           onChange={e => { setSearch(e.target.value); setPage(1) }}
           placeholder="Rechercher par nom de membre ou rubrique…"
-          className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30 focus:border-[#1A6B1A]"
+          className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30 focus:border-[#1A6B1A]"
         />
       </div>
 
@@ -467,7 +467,7 @@ export function Contributions() {
         </div>
       )}
 
-      <div className="bg-white rounded-[18px] border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-[18px] border border-slate-100 overflow-hidden">
         <div className="px-5 py-4" style={{ background: 'linear-gradient(135deg, #0F4A0F, #1A6B1A)' }}>
           <h3 className="font-display font-semibold text-white text-sm">Liste des contributions</h3>
         </div>
@@ -475,9 +475,9 @@ export function Contributions() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm table-mobile-cards">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/50">
+              <tr className="border-b border-slate-100 bg-slate-50/50">
                 {['Membre', 'Rubrique', 'Montant', 'Mode', 'Statut', 'Date', ''].map(col => (
-                  <th key={col} className="px-4 py-3 text-left text-xs font-semibold text-gray-500">
+                  <th key={col} className="px-4 py-3 text-left text-xs font-semibold text-slate-500">
                     {col ? <span className="flex items-center gap-1">{col} <ChevronsUpDown size={10} /></span> : null}
                   </th>
                 ))}
@@ -490,18 +490,18 @@ export function Contributions() {
                 <tr><td colSpan={7}><EmptyState icon={CreditCard} title="Aucune contribution" description="Les contributions enregistrees apparaitront ici" /></td></tr>
               ) : (
                 contributions.map(c => (
-                  <tr key={c.id} className="border-b border-gray-50 hover:bg-[#1A6B1A]/4 transition-colors group">
+                  <tr key={c.id} className="border-b border-slate-50 hover:bg-[#1A6B1A]/4 transition-colors group">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
                         <Avatar name={c.membre?.user.fullName ?? '—'} size="sm" />
-                        <p className="font-medium text-gray-800">{c.membre?.user.fullName ?? '-'}</p>
+                        <p className="font-medium text-slate-800">{c.membre?.user.fullName ?? '-'}</p>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-gray-600 text-xs" data-label="Rubrique">{c.rubrique?.code}</td>
+                    <td className="px-4 py-3 text-slate-600 text-xs" data-label="Rubrique">{c.rubrique?.code}</td>
                     <td className="px-4 py-3" data-label="Montant"><span className="font-mono font-bold text-[#1A6B1A]">{formatAmount(c.montant)}</span></td>
-                    <td className="px-4 py-3 text-xs text-gray-500" data-label="Mode">{MODE_PAIEMENT_LABELS[c.modePaiement]}</td>
+                    <td className="px-4 py-3 text-xs text-slate-500" data-label="Mode">{MODE_PAIEMENT_LABELS[c.modePaiement]}</td>
                     <td className="px-4 py-3" data-label="Statut"><StatusBadge status={c.statut} /></td>
-                    <td className="px-4 py-3 text-xs text-gray-400" data-label="Date">{formatDate(c.createdAt)}</td>
+                    <td className="px-4 py-3 text-xs text-slate-400" data-label="Date">{formatDate(c.createdAt)}</td>
                     <td className="px-4 py-3" data-label="Actions">
                       <div className="flex items-center gap-1.5">
                         <button
@@ -517,7 +517,7 @@ export function Contributions() {
                             title={c.proofUrl ? 'Remplacer la preuve' : 'Joindre une preuve de paiement'}
                             className={cn(
                               'flex items-center gap-1 px-2 py-1.5 rounded-[8px] text-xs font-semibold border cursor-pointer active:scale-95 transition-all',
-                              c.proofUrl ? 'text-green-600 border-green-200 hover:bg-green-50' : 'text-gray-500 border-gray-200 hover:bg-gray-50'
+                              c.proofUrl ? 'text-green-600 border-green-200 hover:bg-green-50' : 'text-slate-500 border-slate-200 hover:bg-slate-50'
                             )}
                           >
                             {proofUploading === c.id
@@ -570,15 +570,15 @@ export function Contributions() {
         </div>
 
         {pagination && pagination.totalPages > 1 && (
-          <div className="flex items-center justify-between px-5 py-4 border-t border-gray-100">
-            <p className="text-xs text-gray-500">Page {pagination.page} sur {pagination.totalPages} — {pagination.total} résultat(s)</p>
+          <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100">
+            <p className="text-xs text-slate-500">Page {pagination.page} sur {pagination.totalPages} — {pagination.total} résultat(s)</p>
             <div className="flex gap-2">
               <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-[8px] disabled:opacity-40 hover:bg-gray-100 transition-colors">
+                className="px-3 py-1.5 text-xs font-medium border border-slate-200 rounded-[8px] disabled:opacity-40 hover:bg-slate-100 transition-colors">
                 ← Précédent
               </button>
               <button onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))} disabled={page === pagination.totalPages}
-                className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-[8px] disabled:opacity-40 hover:bg-gray-100 transition-colors">
+                className="px-3 py-1.5 text-xs font-medium border border-slate-200 rounded-[8px] disabled:opacity-40 hover:bg-slate-100 transition-colors">
                 Suivant →
               </button>
             </div>
@@ -608,31 +608,31 @@ export function Contributions() {
               <div className="flex justify-center py-8"><Loader2 size={24} className="animate-spin text-[#1A6B1A]" /></div>
             ) : timelineData ? (
               <>
-                <div className="mb-4 rounded-[12px] bg-gray-50 border border-gray-100 p-3 text-sm grid grid-cols-2 gap-2">
-                  <span className="text-gray-500">Membre</span>
-                  <span className="font-medium text-gray-800">{timelineData.contribution.membre ?? '-'}</span>
-                  <span className="text-gray-500">Rubrique</span>
-                  <span className="font-medium text-gray-800">{timelineData.contribution.rubrique ?? '-'}</span>
-                  <span className="text-gray-500">Montant</span>
+                <div className="mb-4 rounded-[12px] bg-slate-50 border border-slate-100 p-3 text-sm grid grid-cols-2 gap-2">
+                  <span className="text-slate-500">Membre</span>
+                  <span className="font-medium text-slate-800">{timelineData.contribution.membre ?? '-'}</span>
+                  <span className="text-slate-500">Rubrique</span>
+                  <span className="font-medium text-slate-800">{timelineData.contribution.rubrique ?? '-'}</span>
+                  <span className="text-slate-500">Montant</span>
                   <span className="font-mono font-bold text-[#1A6B1A]">{formatAmount(timelineData.contribution.montant)}</span>
-                  <span className="text-gray-500">Statut</span>
+                  <span className="text-slate-500">Statut</span>
                   <StatusBadge status={timelineData.contribution.statut} />
                 </div>
                 <div className="relative">
-                  <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-gray-100" />
+                  <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-slate-100" />
                   <ol className="space-y-4">
                     {(timelineData.timeline as TimelineStep[]).map((step, i) => (
                       <li key={i} className="relative flex gap-4 pl-10">
                         <div className={cn(
                           'absolute left-3 -translate-x-1/2 w-4 h-4 rounded-full border-2 flex items-center justify-center',
-                          i === 0 ? 'bg-[#1A6B1A] border-[#1A6B1A]' : 'bg-white border-gray-300'
+                          i === 0 ? 'bg-[#1A6B1A] border-[#1A6B1A]' : 'bg-white border-slate-300'
                         )}>
                           {i === 0 && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-800">{step.label}</p>
-                          <p className="text-xs text-gray-500">{step.actor}</p>
-                          {step.at && <p className="text-xs text-gray-400 mt-0.5">{formatDateTime(String(step.at))}</p>}
+                          <p className="text-sm font-semibold text-slate-800">{step.label}</p>
+                          <p className="text-xs text-slate-500">{step.actor}</p>
+                          {step.at && <p className="text-xs text-slate-400 mt-0.5">{formatDateTime(String(step.at))}</p>}
                           {step.localisation && <p className="text-xs text-blue-500 mt-0.5">{step.localisation}</p>}
                         </div>
                       </li>
@@ -641,7 +641,7 @@ export function Contributions() {
                 </div>
               </>
             ) : (
-              <p className="text-center text-gray-500 py-6">Aucune donnée</p>
+              <p className="text-center text-slate-500 py-6">Aucune donnée</p>
             )}
           </div>
         </Modal>
@@ -654,7 +654,7 @@ const STATUS_CHIPS = [
   { label: 'En attente', value: 'EN_ATTENTE_CONFIRMATION', color: 'bg-amber-50 text-amber-700 border-amber-200', activeColor: 'bg-amber-500 text-white border-amber-500' },
   { label: 'Confirmé',   value: 'CONFIRME',                color: 'bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]', activeColor: 'bg-[#1A6B1A] text-white border-[#1A6B1A]' },
   { label: 'Litige',     value: 'LITIGE',                  color: 'bg-red-50 text-red-700 border-red-200',  activeColor: 'bg-red-600 text-white border-red-600' },
-  { label: 'Annulé',     value: 'ANNULE',                  color: 'bg-gray-100 text-gray-500 border-gray-200', activeColor: 'bg-gray-500 text-white border-gray-500' },
+  { label: 'Annulé',     value: 'ANNULE',                  color: 'bg-slate-100 text-slate-500 border-slate-200', activeColor: 'bg-slate-500 text-white border-slate-500' },
 ] as const
 
 const MODE_CHIPS = [
@@ -697,9 +697,9 @@ function Input({ label, value, onChange, type = 'text', required }: {
 }) {
   return (
     <label className="block">
-      <span className="text-xs font-semibold text-gray-600">{label}</span>
+      <span className="text-xs font-semibold text-slate-600">{label}</span>
       <input type={type} required={required} value={value} onChange={e => onChange(e.target.value)}
-        className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30" />
+        className="mt-1 w-full px-3 py-2 border border-slate-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30" />
     </label>
   )
 }
