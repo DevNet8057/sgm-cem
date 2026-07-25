@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, History, ScrollText, X } from 'lucide-react'
+import { Select } from 'antd'
 import api from '@/lib/api'
 import { cn, formatDateTime, ROLE_LABELS, ROLE_LEVELS } from '@/lib/utils'
 import { SkeletonTableRow } from '@/components/ui/Skeleton'
@@ -232,12 +233,23 @@ export function Journal() {
         {canSeeOthers && (
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Utilisateur</label>
-            <select value={userId} onChange={e => { setUserId(e.target.value); setPage(1) }} className={cn(filterInputCls, 'max-w-[180px]')}>
-              <option value="">Tous</option>
-              {(actors ?? []).map(a => (
-                <option key={a.id} value={a.id}>{a.fullName} ({ROLE_LABELS[a.role] ?? a.role})</option>
-              ))}
-            </select>
+            <Select
+              showSearch
+              optionFilterProp="label"
+              options={(actors ?? []).map(a => ({ value: a.id, label: `${a.fullName} (${ROLE_LABELS[a.role] ?? a.role})` }))}
+              value={userId || undefined}
+              onChange={value => { setUserId(value ?? ''); setPage(1) }}
+              placeholder="Tous"
+              allowClear
+              className={cn(
+                'max-w-[180px]',
+                '[&_.ant-select-selector]:!rounded-[10px] [&_.ant-select-selector]:!border-gray-200 [&_.ant-select-selector]:!bg-white [&_.ant-select-selector]:!px-3 [&_.ant-select-selector]:!min-h-[34px] [&_.ant-select-selector]:!items-center',
+                '[&_.ant-select-selection-item]:!text-xs [&_.ant-select-selection-item]:!text-gray-700',
+                '[&_.ant-select-selection-placeholder]:!text-xs [&_.ant-select-selection-placeholder]:!text-gray-400',
+                '[&_.ant-select-selection-search-input]:!text-xs',
+                '[&.ant-select-focused_.ant-select-selector]:!border-[#1A6B1A] [&.ant-select-focused_.ant-select-selector]:!shadow-[0_0_0_2px_rgba(26,107,26,0.15)]'
+              )}
+            />
           </div>
         )}
         <div className="flex flex-col gap-1">

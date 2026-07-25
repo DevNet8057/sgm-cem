@@ -46,11 +46,18 @@ describe('validatePassword', () => {
   it('returns errors for weak password', () => {
     expect(validatePassword('test')).toEqual({
       valid: false,
-      errors: ['Le mot de passe doit contenir au moins 8 caractères'],
+      errors: [
+        'Le mot de passe doit contenir au moins 8 caractères',
+        'Le mot de passe doit contenir au moins une majuscule',
+        'Le mot de passe doit contenir au moins un chiffre',
+      ],
     })
     expect(validatePassword('abcdefgh')).toEqual({
       valid: false,
-      errors: ['Le mot de passe doit contenir au moins une majuscule'],
+      errors: [
+        'Le mot de passe doit contenir au moins une majuscule',
+        'Le mot de passe doit contenir au moins un chiffre',
+      ],
     })
     expect(validatePassword('Abcdefgh')).toEqual({
       valid: false,

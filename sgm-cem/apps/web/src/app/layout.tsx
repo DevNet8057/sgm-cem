@@ -20,16 +20,15 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#0F4A0F',
+  themeColor: '#07120D',
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr" suppressHydrationWarning>
-      <body suppressHydrationWarning>
+      <body className="font-dash" suppressHydrationWarning>
         {/*
           Pour que Google OAuth fonctionne, l'origine http://localhost:3000 doit être ajoutée
           manuellement dans Google Cloud Console → APIs & Services → Credentials → OAuth 2.0

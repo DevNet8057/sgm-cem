@@ -328,7 +328,7 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
       }}
       modalRender={modal => (
         <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 24, scale: 0.98 }}
+          initial={{ opacity: 0, y: 24, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: reduceMotion ? 0 : 0.2, ease: 'easeOut' }}
         >
@@ -366,7 +366,7 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
         {/* ── Contenu des étapes ── */}
         <motion.div
           key={step}
-          initial={reduceMotion ? false : { opacity: 0, x: 12 }}
+          initial={{ opacity: 0, x: 12 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: reduceMotion ? 0 : 0.18 }}
           className="px-4 py-5 sm:px-6"

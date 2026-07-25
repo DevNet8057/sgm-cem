@@ -1,6 +1,8 @@
 'use client'
+
+import { Alert, Button, Card, Result } from 'antd'
+import { KeyRound, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
-import { KeyRound, Loader2, ShieldCheck } from 'lucide-react'
 import { PasswordInput } from '@/components/ui/PasswordInput'
 import api from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
@@ -40,105 +42,140 @@ export function ChangePassword() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-[#F0FDF4] flex items-center justify-center p-6">
-        <div className="w-full max-w-sm text-center animate-modal-in">
-          <div className="w-20 h-20 rounded-full bg-[#1A6B1A] flex items-center justify-center mx-auto mb-6 shadow-cem-lg">
-            <ShieldCheck size={36} className="text-white" />
-          </div>
-          <h2 className="font-display font-semibold text-[#0F4A0F] text-3xl mb-2">Mot de passe sécurisé</h2>
-          <p className="text-gray-500 text-sm">Redirection en cours…</p>
-          <div className="mt-6 w-8 h-8 border-4 border-[#1A6B1A]/20 border-t-[#1A6B1A] rounded-full animate-spin mx-auto" />
-        </div>
-      </div>
+      <main className="flex min-h-screen items-center justify-center bg-[#07120D] p-4 font-dash sm:p-6">
+        <Card
+          variant="borderless"
+          className="w-full max-w-md overflow-hidden rounded-[20px] border border-white/[.06] bg-[#0E1C16] shadow-[0_8px_30px_rgba(0,0,0,.25)]"
+          styles={{ body: { padding: 0 } }}
+        >
+          <Result
+            status="success"
+            icon={(
+              <span className="mx-auto flex size-20 items-center justify-center rounded-full bg-emerald-500/15 text-[#2ECC71]">
+                <ShieldCheck size={38} strokeWidth={1.8} aria-hidden="true" />
+              </span>
+            )}
+            title={(
+              <h1 className="m-0 text-2xl font-semibold tracking-[-0.02em] text-white sm:text-3xl">
+                Mot de passe sécurisé
+              </h1>
+            )}
+            subTitle={(
+              <p className="m-0 text-[15px] text-[#94A3B8]" aria-live="polite">
+                Votre espace est prêt. Redirection en cours…
+              </p>
+            )}
+            className="px-4 py-8 sm:px-8 sm:py-10"
+          />
+        </Card>
+      </main>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#F0FDF4] flex items-center justify-center p-6">
-      <div className="w-full max-w-md animate-page-enter">
-        <div
-          className="rounded-[20px] p-6 mb-6 text-white relative overflow-hidden"
-          style={{ background: 'linear-gradient(135deg, #052005 0%, #0F4A0F 50%, #1A6B1A 100%)' }}
+    <main
+      className="flex min-h-screen items-center justify-center bg-[#07120D] p-4 font-dash sm:p-6"
+      aria-labelledby="change-password-title"
+    >
+      <div className="w-full max-w-md space-y-4 sm:space-y-6">
+        <Card
+          variant="borderless"
+          className="relative overflow-hidden rounded-[20px] border border-white/[.06] bg-[#081A12] shadow-[0_8px_30px_rgba(0,0,0,.25)] transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_40px_rgba(0,0,0,.35)]"
+          styles={{ body: { padding: 0 } }}
         >
           <div
-            className="absolute -top-10 -right-10 w-40 h-40 rounded-full pointer-events-none"
-            style={{ background: 'radial-gradient(circle, #F5C400, transparent)', opacity: 0.1 }}
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background: 'radial-gradient(circle at 85% 10%, rgba(46,204,113,.16), transparent 42%), linear-gradient(135deg, rgba(46,204,113,.08), transparent 62%)',
+            }}
+            aria-hidden="true"
           />
-          <div className="relative z-10 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-[14px] bg-[#F5C400] flex items-center justify-center shadow-cem-yellow">
-              <KeyRound size={22} className="text-[#0F4A0F]" />
+          <div className="relative p-5 sm:p-6">
+            <div className="flex items-start gap-4">
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-[14px] bg-gradient-to-br from-[#2ECC71] to-[#22C55E] text-[#07120D] shadow-[0_8px_24px_rgba(46,204,113,.18)]">
+                <KeyRound size={22} strokeWidth={2} aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <p className="mb-1 text-[13px] font-medium uppercase tracking-[0.12em] text-[#94A3B8]">
+                  Première connexion
+                </p>
+                <h1
+                  id="change-password-title"
+                  className="m-0 text-2xl font-semibold leading-tight tracking-[-0.03em] text-white sm:text-[30px]"
+                >
+                  Créez votre mot de passe
+                </h1>
+              </div>
             </div>
-            <div>
-              <p className="text-white/60 text-xs mb-0.5">Première connexion</p>
-              <h1 className="font-display font-semibold text-2xl leading-tight">Créez votre mot de passe</h1>
-            </div>
+            <p className="relative mt-5 text-[15px] leading-6 text-[#94A3B8]">
+              Bienvenue <strong className="font-semibold text-white">{user?.firstName}</strong>. Pour votre sécurité,
+              définissez un mot de passe personnel avant de continuer.
+            </p>
           </div>
-          <p className="mt-3 text-white/70 text-sm relative z-10">
-            Bienvenue <strong>{user?.firstName}</strong> — Pour votre sécurité, veuillez créer un mot de passe personnel.
-          </p>
-        </div>
+        </Card>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-[20px] border border-gray-100 p-6 space-y-4 shadow-[0_4px_24px_rgba(15,74,15,0.08)]">
-          {/* Password actuel */}
-          <PasswordInput
-            label="Mot de passe temporaire reçu *"
-            value={current}
-            onChange={e => setCurrent(e.target.value)}
-            placeholder="Mot de passe fourni par l'administrateur"
-            autoComplete="current-password"
-            required
-          />
+        <Card
+          variant="borderless"
+          className="rounded-[20px] border border-white/[.06] bg-[#0E1C16] shadow-[0_8px_30px_rgba(0,0,0,.25)] transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-[0_20px_40px_rgba(0,0,0,.35)]"
+          styles={{ body: { padding: 0 } }}
+        >
+          <form onSubmit={handleSubmit} className="space-y-5 p-5 sm:p-6">
+            <PasswordInput
+              label="Mot de passe temporaire reçu *"
+              value={current}
+              onChange={e => setCurrent(e.target.value)}
+              placeholder="Mot de passe fourni par l’administrateur"
+              autoComplete="current-password"
+              required
+            />
 
-          {/* Nouveau password avec indicateur */}
-          <PasswordInput
-            label="Nouveau mot de passe *"
-            value={next}
-            onChange={e => setNext(e.target.value)}
-            placeholder="Minimum 8 caractères, 1 majuscule, 1 chiffre"
-            autoComplete="new-password"
-            showStrengthIndicator={true}
-            required
-          />
+            <PasswordInput
+              label="Nouveau mot de passe *"
+              value={next}
+              onChange={e => setNext(e.target.value)}
+              placeholder="Minimum 8 caractères, 1 majuscule, 1 chiffre"
+              autoComplete="new-password"
+              showStrengthIndicator={true}
+              required
+            />
 
-{/* Confirmation */}
-           <PasswordInput
-             label="Confirmer le mot de passe *"
-             value={confirm}
-             onChange={e => setConfirm(e.target.value)}
-             placeholder="Répétez le mot de passe"
-             autoComplete="new-password"
-             required
-           />
+            <PasswordInput
+              label="Confirmer le mot de passe *"
+              value={confirm}
+              onChange={e => setConfirm(e.target.value)}
+              placeholder="Répétez le mot de passe"
+              autoComplete="new-password"
+              required
+            />
 
-          {error && (
-            <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-[10px] text-sm text-red-700">
-              {error}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={!canSubmit}
-            className="w-full flex items-center justify-center gap-2 py-3 bg-[#1A6B1A] text-white font-semibold rounded-[12px] shadow-cem hover:bg-[#0F4A0F] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? (
-              <>
-                <Loader2 size={16} className="animate-spin" />
-                Enregistrement…
-              </>
-            ) : (
-              <>
-                <ShieldCheck size={16} />
-                Définir mon mot de passe
-              </>
+            {error && (
+              <Alert
+                type="error"
+                showIcon
+                message="Modification impossible"
+                description={error}
+                className="rounded-[14px] border-red-500/25 bg-red-500/10 text-red-200"
+              />
             )}
-          </button>
 
-          <p className="text-center text-xs text-gray-400">
-            Conservez ce mot de passe en lieu sûr. Il vous sera demandé à chaque connexion.
-          </p>
-        </form>
+            <Button
+              type="primary"
+              htmlType="submit"
+              loading={loading}
+              disabled={!canSubmit}
+              icon={!loading ? <ShieldCheck size={17} strokeWidth={2} aria-hidden="true" /> : undefined}
+              block
+              className="h-[46px] rounded-[14px] border-0 bg-gradient-to-r from-[#2ECC71] to-[#22C55E] font-semibold text-[#07120D] shadow-[0_8px_24px_rgba(46,204,113,.16)] transition-[transform,box-shadow] duration-200 hover:scale-[1.02] hover:shadow-[0_12px_30px_rgba(46,204,113,.22)]"
+            >
+              {loading ? 'Enregistrement…' : 'Définir mon mot de passe'}
+            </Button>
+
+            <p className="text-center text-[13px] leading-5 text-[#94A3B8]">
+              Conservez ce mot de passe en lieu sûr. Il vous sera demandé à chaque connexion.
+            </p>
+          </form>
+        </Card>
       </div>
-    </div>
+    </main>
   )
 }

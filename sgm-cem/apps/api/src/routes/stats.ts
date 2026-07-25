@@ -173,7 +173,7 @@ export async function computeDashboardStats(requestedYear?: number) {
   }
 }
 
-router.get('/dashboard', authenticate, requireLevel(3), async (req, res) => {
+router.get('/dashboard', authenticate, requireLevel(2), async (req, res) => {
   const year = parseInt(req.query.year as string) || undefined
   const data = await computeDashboardStats(year)
   res.json({ success: true, data })
@@ -193,7 +193,7 @@ router.get('/financial-report.pdf', authenticate, requireLevel(3), async (req, r
   res.send(pdf)
 })
 
-router.get('/monthly', authenticate, requireLevel(3), async (req, res) => {
+router.get('/monthly', authenticate, requireLevel(2), async (req, res) => {
   const year = parseInt(req.query.year as string) || new Date().getFullYear()
 
   const monthly = await Promise.all(

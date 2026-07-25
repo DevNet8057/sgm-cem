@@ -1,21 +1,30 @@
 'use client'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle, Clock, XCircle, Loader2, ChevronDown } from 'lucide-react'
-import api, { getBaseURL } from '@/lib/api'
+import { Alert, App as AntApp, Card, Skeleton } from 'antd'
+import { CheckCircle, Clock, XCircle } from 'lucide-react'
+import api from '@/lib/api'
 import { formatAmount, formatDateTime, TRANSFER_TYPE_EMOJI, TRANSFER_TYPE_LABELS } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Textarea } from '@/components/ui/Input'
+import { Modal } from '@/components/ui/Modal'
 import type { FundsTransfer } from '@/types'
-
-// getBaseURL() garantit le suffixe /api quel que soit l'environnement
 
 export function TransferValidations() {
   const queryClient = useQueryClient()
+  const { message } = AntApp.useApp()
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [refuseModal, setRefuseModal] = useState({ open: false, transferId: null as string | null, reason: '' })
 
-  const { data, isLoading } = useQuery<FundsTransfer[]>({
+  const {
+    data,
+    error: queryError,
+    isError,
+    isFetching,
+    isLoading,
+    refetch,
+  } = useQuery<FundsTransfer[]>({
     queryKey: ['pending-my-approval'],
     queryFn: () => api.get('/funds/transfers/pending-my-approval').then(r => r.data.data),
     refetchInterval: 30000,
@@ -23,19 +32,45 @@ export function TransferValidations() {
 
   const confirmMutation = useMutation({
     mutationFn: (id: string) => api.patch(`/funds/transfers/${id}/confirm`),
-    onSuccess: (_res, id) => {
-      queryClient.invalidateQueries({ queryKey: ['pending-my-approval', 'collecteurs'] })
-      // Le bordereau de remise vient d'être généré — on l'ouvre immédiatement.
-      window.open(`${getBaseURL()}/funds/transfers/${id}/borderau`, '_blank')
+    onSuccess: async (_res, id) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['pending-my-approval'] }),
+        queryClient.invalidateQueries({ queryKey: ['collecteurs'] }),
+      ])
+      message.success('Transfert confirmé')
+
+      try {
+        const response = await api.get(`/funds/transfers/${id}/borderau`, {
+          responseType: 'blob',
+        })
+        const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `Bordereau-remise-${id.slice(0, 8).toUpperCase()}.pdf`
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        setTimeout(() => URL.revokeObjectURL(url), 10_000)
+      } catch {
+        message.warning(
+          "Le transfert est confirmé, mais le bordereau n'a pas pu être téléchargé."
+        )
+      }
     },
+    onError: (error: unknown) => message.error(getApiErrorMessage(error, 'Confirmation impossible')),
   })
 
   const refuseMutation = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) => api.patch(`/funds/transfers/${id}/refuse`, { reason }),
-    onSuccess: () => {
+    onSuccess: async () => {
       setRefuseModal({ open: false, transferId: null, reason: '' })
-      queryClient.invalidateQueries({ queryKey: ['pending-my-approval', 'collecteurs'] })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['pending-my-approval'] }),
+        queryClient.invalidateQueries({ queryKey: ['collecteurs'] }),
+      ])
+      message.success('Transfert refusé')
     },
+    onError: (error: unknown) => message.error(getApiErrorMessage(error, 'Refus impossible')),
   })
 
   const transfers = data ?? []
@@ -55,25 +90,78 @@ export function TransferValidations() {
       )}
 
       {isLoading ? (
-        <div className="space-y-4">{[1, 2].map(i => <div key={i} className="bg-white rounded-[18px] p-5 animate-pulse"><div className="h-4 bg-gray-200 rounded w-3/4 mb-3"></div></div>)}</div>
+        <div className="space-y-4">
+          {[1, 2].map(i => (
+            <Card key={i} data-premium-card>
+              <Skeleton active paragraph={{ rows: 2 }} title={{ width: '60%' }} />
+            </Card>
+          ))}
+        </div>
+      ) : isError ? (
+        <Alert
+          type="error"
+          showIcon
+          message="Impossible de charger les transferts"
+          description={getApiErrorMessage(queryError, 'Le service est momentanément indisponible.')}
+          action={
+            <Button
+              size="sm"
+              variant="outline"
+              loading={isFetching}
+              onClick={() => void refetch()}
+            >
+              Réessayer
+            </Button>
+          }
+        />
       ) : transfers.length === 0 ? (
         <EmptyState icon={CheckCircle} title="Aucune validation en attente" description="Tous les transferts ont été traités" />
       ) : (
-        <div className="space-y-4">{transfers.map(t => <TransferCard key={t.id} transfer={t} expanded={expandedId === t.id} onToggle={() => setExpandedId(expandedId === t.id ? null : t.id)} onConfirm={() => confirmMutation.mutate(t.id)} onRefuse={() => setRefuseModal({ open: true, transferId: t.id, reason: '' })} confirming={confirmMutation.isPending} />)}</div>
+        <div className="space-y-4">{transfers.map(t => <TransferCard key={t.id} transfer={t} expanded={expandedId === t.id} onToggle={() => setExpandedId(expandedId === t.id ? null : t.id)} onConfirm={() => { confirmMutation.reset(); confirmMutation.mutate(t.id) }} onRefuse={() => { refuseMutation.reset(); setRefuseModal({ open: true, transferId: t.id, reason: '' }) }} confirming={confirmMutation.isPending && confirmMutation.variables === t.id} />)}</div>
       )}
 
-      {refuseModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-[20px] max-w-sm w-full p-5">
-            <h3 className="font-semibold text-red-900 mb-4">Refuser le transfert</h3>
-            <textarea value={refuseModal.reason} onChange={e => setRefuseModal({ ...refuseModal, reason: e.target.value })} placeholder="Motif du refus..." rows={3} className="w-full p-2 border rounded mb-4" />
-            <div className="flex gap-2">
-              <Button variant="ghost" onClick={() => setRefuseModal({ ...refuseModal, open: false })} className="flex-1">Annuler</Button>
-              <Button variant="danger" onClick={() => refuseMutation.mutate({ id: refuseModal.transferId!, reason: refuseModal.reason })} disabled={refuseModal.reason.trim().length < 10} className="flex-1">Confirmer</Button>
-            </div>
+      <Modal
+        open={refuseModal.open}
+        onClose={() => setRefuseModal({ open: false, transferId: null, reason: '' })}
+        title="Refuser le transfert"
+        description="Indiquez un motif précis afin que l'émetteur puisse corriger la remise."
+        size="sm"
+      >
+        <div className="space-y-5">
+          <Textarea
+            autoFocus
+            label="Motif du refus"
+            value={refuseModal.reason}
+            onChange={e => setRefuseModal(current => ({ ...current, reason: e.target.value }))}
+            placeholder="Décrivez le motif du refus…"
+            rows={4}
+            hint={`${refuseModal.reason.trim().length} / 10 caractères minimum`}
+          />
+          <div className="flex flex-col-reverse gap-2 border-t border-white/10 pt-4 sm:flex-row sm:justify-end">
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => setRefuseModal({ open: false, transferId: null, reason: '' })}
+              className="w-full sm:w-auto"
+            >
+              Annuler
+            </Button>
+            <Button
+              variant="danger"
+              type="button"
+              loading={refuseMutation.isPending}
+              onClick={() => refuseMutation.mutate({
+                id: refuseModal.transferId!,
+                reason: refuseModal.reason.trim(),
+              })}
+              disabled={!refuseModal.transferId || refuseModal.reason.trim().length < 10}
+              className="w-full sm:w-auto"
+            >
+              Confirmer le refus
+            </Button>
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   )
 }
@@ -87,7 +175,7 @@ function TransferCard({ transfer, expanded, onToggle, onConfirm, onRefuse, confi
   confirming: boolean
 }) {
   return (
-    <div className="bg-white rounded-[18px] border-2 border-amber-200 p-4">
+    <Card data-premium-card className="border-amber-400/25">
       <div className="flex justify-between items-center mb-3">
         <div>
           <p className="font-semibold text-gray-900 text-sm">{transfer.senderName}</p>
@@ -107,7 +195,15 @@ function TransferCard({ transfer, expanded, onToggle, onConfirm, onRefuse, confi
         </div>
       )}
 
-      <button onClick={onToggle} className="text-xs text-[#1A6B1A] mb-3">{expanded ? 'Masquer' : 'Voir'} le détail</button>
+      <Button
+        variant="ghost"
+        size="sm"
+        type="button"
+        onClick={onToggle}
+        className="mb-3 !h-auto !px-0 !text-xs"
+      >
+        {expanded ? 'Masquer' : 'Voir'} le détail
+      </Button>
 
       {expanded && (
         <div className="border border-gray-100 rounded-[12px] divide-y mb-3 max-h-40 overflow-y-auto">{transfer.contributions.map(c => (
@@ -116,9 +212,34 @@ function TransferCard({ transfer, expanded, onToggle, onConfirm, onRefuse, confi
       )}
 
       <div className="flex gap-2">
-        <button onClick={onRefuse} disabled={confirming} className="flex-1 py-2 text-sm font-semibold text-red-600 border-2 border-red-200 rounded-[10px] disabled:opacity-50">Refuser</button>
-        <button onClick={onConfirm} disabled={confirming} className="flex-1 py-2 text-sm font-bold text-white bg-[#1A6B1A] rounded-[10px] disabled:opacity-50">{confirming ? <Loader2 className="animate-spin" /> : <CheckCircle />} Confirmer</button>
+        <Button
+          variant="outline"
+          type="button"
+          onClick={onRefuse}
+          disabled={confirming}
+          className="flex-1 !border-red-400/30 !text-red-400 enabled:hover:!border-red-400/60 enabled:hover:!bg-red-400/10"
+        >
+          <XCircle size={16} />
+          Refuser
+        </Button>
+        <Button
+          type="button"
+          onClick={onConfirm}
+          loading={confirming}
+          className="flex-1"
+        >
+          {!confirming && <CheckCircle size={16} />}
+          Confirmer
+        </Button>
       </div>
-    </div>
+    </Card>
   )
+}
+
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  const candidate = error as {
+    response?: { data?: { error?: { message?: string } } }
+    message?: string
+  }
+  return candidate.response?.data?.error?.message ?? candidate.message ?? fallback
 }

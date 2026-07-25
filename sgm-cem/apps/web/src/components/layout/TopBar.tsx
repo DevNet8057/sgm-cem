@@ -1,37 +1,24 @@
 'use client'
-import { useRef } from 'react'
-import { Bell, ChevronDown, LogOut, Menu as MenuIcon, UserCircle } from 'lucide-react'
-import { Badge, Button, Dropdown, Tooltip, type MenuProps } from 'antd'
+import { useMemo, useRef, useState } from 'react'
+import { Bell, ChevronDown, LogOut, Menu as MenuIcon, Moon, Search, Sun, UserCircle } from 'lucide-react'
+import { Badge, Button, Dropdown, Input, Tooltip, type MenuProps } from 'antd'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { useAppStore } from '@/store/appStore'
 import { useAuthStore } from '@/store/authStore'
+import { useThemeStore } from '@/store/themeStore'
 import { ROLE_LABELS } from '@/lib/utils'
 import { Avatar } from '@/components/ui/Avatar'
+import { getNavigationForRole, getViewTitle, type ViewId } from '@/config/navigation'
 import type { ApiResponse, Notification } from '@/types'
 
-const VIEW_TITLES: Record<string, string> = {
-  dashboard: 'Tableau de bord',
-  rubriques: 'Rubriques',
-  contributions: 'Contributions',
-  collecteurs: 'Fonds collecteurs',
-  validations: 'Validations en attente',
-  'transfer-validations': 'Fonds à réceptionner',
-  'collectes-publiques': 'Collectes publiques',
-  membres: 'Gestion des membres',
-  'mes-contributions': 'Mes contributions',
-  ged: 'GED Commissions',
-  prestations: 'Prestations de génie',
-  litiges: 'Gestion des litiges',
-  statistiques: 'Statistiques et analyses',
-  rapports: 'Rapports',
-  notifications: 'Notifications',
-  journal: "Journal d'activité",
-  utilisateurs: 'Utilisateurs',
-  parametres: 'Paramètres système',
-  developer: 'Espace développeur',
-  'mon-profil': 'Mon profil',
+function normalizeSearch(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('fr')
+    .trim()
 }
 
 function playNotifSound() {
@@ -85,9 +72,45 @@ function playNotifSound() {
 export function TopBar() {
   const { setSidebarOpen, setActiveView, setNotifications, addToast, activeView, unreadCount } = useAppStore()
   const { user, logout } = useAuthStore()
+  const { theme, toggleTheme } = useThemeStore()
   const reduceMotion = useReducedMotion()
   const seenIds = useRef<Set<string>>(new Set())
   const firstLoad = useRef(true)
+  const [navigationQuery, setNavigationQuery] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+
+  const navigationItems = useMemo(
+    () => (user ? getNavigationForRole(user.role) : []),
+    [user]
+  )
+  const searchResults = useMemo(() => {
+    const query = normalizeSearch(navigationQuery)
+    if (!query) return []
+
+    return navigationItems
+      .filter(item => normalizeSearch(`${item.label} ${item.title}`).includes(query))
+      .slice(0, 6)
+  }, [navigationItems, navigationQuery])
+  const currentView = navigationItems.some(item => item.id === activeView)
+    ? activeView as ViewId
+    : undefined
+  const currentTitle = currentView ? getViewTitle(currentView) : 'SGM-CEM'
+
+  function openView(view: ViewId) {
+    setActiveView(view)
+    setNavigationQuery('')
+    setSearchOpen(false)
+  }
+
+  const navigationMenuItems: MenuProps['items'] = searchResults.map(item => {
+    const Icon = item.icon
+
+    return {
+      key: item.id,
+      icon: <Icon size={16} />,
+      label: item.title,
+    }
+  })
 
   useQuery({
     queryKey: ['notifications'],
@@ -131,68 +154,113 @@ export function TopBar() {
   ]
 
   return (
-    <header
-      className="sticky top-0 z-[200] flex h-16 items-center gap-2 border-b border-slate-200/80 bg-white/85 px-3 shadow-[0_1px_0_rgba(15,74,15,0.03)] backdrop-blur-xl sm:gap-3 sm:px-5"
-    >
-      <Tooltip title="Ouvrir le menu" placement="bottom">
-        <Button
-          type="text"
-          shape="circle"
-          icon={<MenuIcon size={20} />}
-          onClick={() => setSidebarOpen(true)}
-          className="h-11! w-11! shrink-0 text-slate-600! hover:bg-emerald-50! hover:text-[#0F4A0F]! lg:hidden!"
-          aria-label="Ouvrir le menu de navigation"
-        />
-      </Tooltip>
-
-      <motion.div
-        key={activeView}
-        initial={reduceMotion ? false : { opacity: 0, y: -4 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: reduceMotion ? 0 : 0.2 }}
-        className="min-w-0 flex-1"
-      >
-        <p className="hidden text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 sm:block">SGM-CEM</p>
-        <p className="truncate font-display text-base font-semibold leading-tight text-[#0F4A0F]">
-          {VIEW_TITLES[activeView] ?? 'SGM-CEM'}
-        </p>
-      </motion.div>
-
-      <Tooltip title="Notifications" placement="bottom">
-        <Badge count={unreadCount > 9 ? '9+' : unreadCount} overflowCount={9} size="small" offset={[-2, 3]}>
+    <header className="sticky top-0 z-[200] shrink-0 px-3 pt-3 sm:px-5">
+      <div className="flex min-h-16 items-center gap-2 rounded-[20px] border border-dash-border bg-dash-sidebar/90 px-2.5 shadow-dash backdrop-blur-xl sm:gap-3 sm:px-4">
+        <Tooltip title="Ouvrir le menu" placement="bottom">
           <Button
             type="text"
             shape="circle"
-            icon={<Bell size={18} />}
-            onClick={() => setActiveView('notifications')}
-            className="h-11! w-11! text-slate-600! hover:bg-emerald-50! hover:text-[#0F4A0F]!"
-            aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} non lue${unreadCount > 1 ? 's' : ''}` : 'Notifications'}
+            icon={<MenuIcon size={20} />}
+            onClick={() => setSidebarOpen(true)}
+            className="h-11! w-11! shrink-0 text-dash-textMuted! hover:bg-dash-cardHover! hover:text-dash-text! lg:hidden!"
+            aria-label="Ouvrir le menu de navigation"
           />
-        </Badge>
-      </Tooltip>
+        </Tooltip>
 
-      {user && (
-        <Dropdown menu={{ items: profileItems }} placement="bottomRight" trigger={['click']}>
+        <motion.div
+          key={activeView}
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: reduceMotion ? 0 : 0.2 }}
+          className="min-w-0 flex-1"
+        >
+          <p className="hidden text-[10px] font-semibold uppercase tracking-[0.16em] text-dash-textMuted sm:block">SGM-CEM</p>
+          <p className="truncate font-display text-base font-semibold leading-tight text-dash-text">
+            {currentTitle}
+          </p>
+        </motion.div>
+
+        <div className="hidden w-full max-w-[300px] lg:block">
+          <Dropdown
+            open={searchOpen && navigationQuery.trim().length > 0 && searchResults.length > 0}
+            onOpenChange={setSearchOpen}
+            trigger={[]}
+            menu={{
+              items: navigationMenuItems,
+              onClick: ({ key }) => openView(key as ViewId),
+            }}
+            placement="bottomLeft"
+          >
+            <Input
+              value={navigationQuery}
+              onChange={event => {
+                setNavigationQuery(event.target.value)
+                setSearchOpen(true)
+              }}
+              onFocus={() => setSearchOpen(true)}
+              onPressEnter={() => {
+                const firstResult = searchResults[0]
+                if (firstResult) openView(firstResult.id)
+              }}
+              allowClear
+              prefix={<Search size={16} aria-hidden="true" />}
+              placeholder="Rechercher une rubrique…"
+              aria-label="Rechercher dans la navigation"
+              aria-haspopup="menu"
+              aria-expanded={searchOpen && searchResults.length > 0}
+              className="h-11! bg-dash-card/80!"
+            />
+          </Dropdown>
+        </div>
+
+        <Tooltip title={theme === 'dark' ? 'Passer en mode clair' : 'Passer en mode sombre'} placement="bottom">
           <Button
             type="text"
-            className="flex! h-11! items-center! gap-2! rounded-xl! px-1.5! text-left hover:bg-slate-100! sm:px-2!"
-            aria-label="Ouvrir le menu du profil"
-          >
-            <Avatar
-              name={user.fullName}
-              src={user.photoUrl}
-              size={34}
-              override={{ bg: '#F5C400', text: '#0F4A0F' }}
-              className="shrink-0"
+            shape="circle"
+            icon={theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            onClick={toggleTheme}
+            className="inline-flex! h-11! w-11! shrink-0! text-dash-textMuted! hover:bg-dash-cardHover! hover:text-dash-text!"
+            aria-pressed={theme === 'light'}
+            aria-label={theme === 'dark' ? 'Passer en mode clair' : 'Passer en mode sombre'}
+          />
+        </Tooltip>
+
+        <Tooltip title="Notifications" placement="bottom">
+          <Badge count={unreadCount > 9 ? '9+' : unreadCount} overflowCount={9} size="small" offset={[-2, 3]}>
+            <Button
+              type="text"
+              shape="circle"
+              icon={<Bell size={18} />}
+              onClick={() => setActiveView('notifications')}
+              className="h-11! w-11! text-dash-textMuted! hover:bg-dash-cardHover! hover:text-dash-text!"
+              aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} non lue${unreadCount > 1 ? 's' : ''}` : 'Notifications'}
             />
-            <span className="hidden min-w-0 md:block">
-              <span className="block max-w-32 truncate text-xs font-semibold leading-tight text-slate-800">{user.firstName}</span>
-              <span className="mt-0.5 block max-w-32 truncate text-[10px] leading-tight text-slate-400">{ROLE_LABELS[user.role] ?? user.role}</span>
-            </span>
-            <ChevronDown size={14} className="hidden shrink-0 text-slate-400 md:block" />
-          </Button>
-        </Dropdown>
-      )}
+          </Badge>
+        </Tooltip>
+
+        {user && (
+          <Dropdown menu={{ items: profileItems }} placement="bottomRight" trigger={['click']}>
+            <Button
+              type="text"
+              className="flex! h-11! items-center! gap-2! rounded-xl! px-1.5! text-left hover:bg-dash-cardHover! sm:px-2!"
+              aria-label="Ouvrir le menu du profil"
+            >
+              <Avatar
+                name={user.fullName}
+                src={user.photoUrl}
+                size={34}
+                override={{ bg: '#2ECC71', text: '#07120D' }}
+                className="shrink-0"
+              />
+              <span className="hidden min-w-0 md:block">
+                <span className="block max-w-32 truncate text-xs font-semibold leading-tight text-dash-text">{user.firstName}</span>
+                <span className="mt-0.5 block max-w-32 truncate text-[10px] leading-tight text-dash-textMuted">{ROLE_LABELS[user.role] ?? user.role}</span>
+              </span>
+              <ChevronDown size={14} className="hidden shrink-0 text-dash-textMuted md:block" />
+            </Button>
+          </Dropdown>
+        )}
+      </div>
     </header>
   )
 }

@@ -15,38 +15,23 @@ DB_HOST=$(echo "$DB_PARSED" | cut -d'|' -f1)
 DB_PORT=$(echo "$DB_PARSED" | cut -d'|' -f2)
 DB_USER=$(echo "$DB_PARSED" | cut -d'|' -f3)
 
-# Détection du contexte : Docker local (host=postgres) vs Render managed
-# Le host « postgres » est résolu par Docker DNS. Tout autre host
-# (y compris les FQDN Render comme xxx.oregon-postgres.render.com)
-# indique un service managé distant.
-case "$DB_HOST" in
-  localhost|postgres|127.0.0.1) IS_RENDER=0 ;;
-  *) IS_RENDER=1 ;;
-esac
-
-echo ">>> [API] Contexte détecté : host=$DB_HOST port=$DB_PORT user=$DB_USER (Render=$IS_RENDER)"
+echo ">>> [API] Cible PostgreSQL : host=$DB_HOST port=$DB_PORT user=$DB_USER"
 
 # ── Attente PostgreSQL ────────────────────────────────────────────────
-# Sur Render, la base managed est distante — on attend avec un timeout.
-# En Docker local, le host "postgres" est résolu par Docker DNS.
-if [ "$IS_RENDER" -eq 1 ]; then
-  echo ">>> [API] Attente de PostgreSQL (Render managed, timeout 120s)..."
-  TIMEOUT=120
-  ELAPSED=0
-  until pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" > /dev/null 2>&1; do
-    if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
-      echo ">>> [API] ❌ Timeout PostgreSQL après ${TIMEOUT}s"
-      exit 1
-    fi
-    sleep 3
-    ELAPSED=$((ELAPSED + 3))
-  done
-else
-  echo ">>> [API] Attente de PostgreSQL (Docker local)..."
-  until pg_isready -h postgres -p 5432 -U postgres > /dev/null 2>&1; do
-    sleep 2
-  done
-fi
+# Fonctionne aussi bien pour le host Docker Compose local ("postgres",
+# résolu par Docker DNS, prêt en quelques secondes) que pour une base
+# managée distante (timeout généreux de 120s).
+echo ">>> [API] Attente de PostgreSQL..."
+TIMEOUT=120
+ELAPSED=0
+until pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" > /dev/null 2>&1; do
+  if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
+    echo ">>> [API] ❌ Timeout PostgreSQL après ${TIMEOUT}s"
+    exit 1
+  fi
+  sleep 2
+  ELAPSED=$((ELAPSED + 2))
+done
 
 echo ">>> [API] ✅ PostgreSQL prêt"
 

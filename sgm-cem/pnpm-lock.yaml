@@ -234,6 +234,9 @@ importers:
       react:
         specifier: ^19.0.0
         version: 19.2.7
+      react-countup:
+        specifier: ^6.5.3
+        version: 6.5.3(react@19.2.7)
       react-dom:
         specifier: ^19.0.0
         version: 19.2.7(react@19.2.7)
@@ -5173,6 +5176,10 @@ packages:
       typescript: 5.9.3
     dev: false
 
+  /countup.js@2.10.1:
+    resolution: {integrity: sha512-UHW/BsPDgVZfN919D4iu2HPv+jJxZUuaR3EhT0ScFZaD446GiQtkMTgOnOyJXdA2AewdlyUk9UvERlTHTbVpcw==}
+    dev: false
+
   /crc-32@1.2.2:
     resolution: {integrity: sha512-ROmzCKrTnOwybPcJApAA6WBWij23HVfGVNKqqrZpuyZOHqK2CwHSvpGuyt/UNNvaIjEd8X5IFGp4Mh+Ie1IHJQ==}
     engines: {node: '>=0.8'}
@@ -9013,6 +9020,15 @@ packages:
       rc-util: 5.44.4(react-dom@19.2.7)(react@19.2.7)
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
+    dev: false
+
+  /react-countup@6.5.3(react@19.2.7):
+    resolution: {integrity: sha512-udnqVQitxC7QWADSPDOxVWULkLvKUWrDapn5i53HE4DPRVgs+Y5rr4bo25qEl8jSh+0l2cToJgGMx+clxPM3+w==}
+    peerDependencies:
+      react: '>= 16.3.0'
+    dependencies:
+      countup.js: 2.10.1
+      react: 19.2.7
     dev: false
 
   /react-dom@19.2.7(react@19.2.7):

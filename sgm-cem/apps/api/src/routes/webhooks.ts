@@ -1,5 +1,5 @@
 import { getConfig } from '../services/config.service'
-import { Router } from 'express'
+import { Router, type Request, type Response } from 'express'
 import { PrismaClient } from '@prisma/client'
 import crypto from 'crypto'
 import { notifyMemberConfirmed } from '../services/notification'
@@ -7,19 +7,40 @@ import { notifyMemberConfirmed } from '../services/notification'
 const router = Router()
 const prisma = new PrismaClient()
 
+type RawBodyRequest = Request & { rawBody?: Buffer }
+
+function hasValidHmacSignature(req: Request, secret: string | undefined, headerNames: string[]): boolean {
+  const rawBody = (req as RawBodyRequest).rawBody
+  const signatureHeader = headerNames
+    .map(headerName => req.get(headerName))
+    .find((value): value is string => Boolean(value))
+
+  if (!secret || !signatureHeader || !rawBody) return false
+
+  const signature = signatureHeader.trim().replace(/^sha256=/i, '')
+  if (!/^[a-f0-9]{64}$/i.test(signature)) return false
+
+  const expected = crypto.createHmac('sha256', secret).update(rawBody).digest()
+  const received = Buffer.from(signature, 'hex')
+
+  return received.length === expected.length && crypto.timingSafeEqual(received, expected)
+}
+
+function rejectInvalidSignature(res: Response) {
+  return res.status(401).json({
+    success: false,
+    error: {
+      code: 'UNAUTHORIZED',
+      message: 'Signature du webhook invalide.',
+    },
+  })
+}
+
 // ── MTN MoMo webhook ─────────────────────────────────────────────────
 router.post('/mtn', async (req, res) => {
-  // Vérification signature MTN (X-Callback-Url header)
-  const secret     = getConfig('MTN_WEBHOOK_SECRET')
-  const signature  = req.headers['x-callback-signature'] as string | undefined
-  const body       = JSON.stringify(req.body)
-
-  if (secret && signature) {
-    const expected = crypto.createHmac('sha256', secret).update(body).digest('hex')
-    if (signature !== expected) {
-      res.status(401).json({ error: 'Invalid signature' })
-      return
-    }
+  // Un secret absent est une erreur de configuration, jamais une autorisation implicite.
+  if (!hasValidHmacSignature(req, getConfig('MTN_WEBHOOK_SECRET'), ['x-callback-signature'])) {
+    return rejectInvalidSignature(res)
   }
 
   const { referenceId, status, financialTransactionId } = req.body
@@ -91,6 +112,14 @@ router.post('/mtn', async (req, res) => {
 
 // ── Orange Money webhook ──────────────────────────────────────────────
 router.post('/orange', async (req, res) => {
+  if (!hasValidHmacSignature(
+    req,
+    getConfig('ORANGE_CLIENT_SECRET'),
+    ['x-orange-signature', 'x-callback-signature']
+  )) {
+    return rejectInvalidSignature(res)
+  }
+
   const { status, order_id, txnid } = req.body
 
   if (!order_id) { res.sendStatus(200); return }

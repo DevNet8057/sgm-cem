@@ -1,5 +1,6 @@
 'use client'
 import { useMemo, useState } from 'react'
+import { Select as AntSelect } from 'antd'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowRight, Building2, Calendar, Check, ChevronDown, CreditCard, FolderOpen, HandCoins, Landmark, MapPin, Plus, RefreshCw, ShieldCheck, Shield, Smartphone, User, UserCheck, UserPlus, Wallet, X, XCircle, Loader2, Banknote } from 'lucide-react'
 import api from '@/lib/api'
@@ -114,7 +115,7 @@ export function Collecteurs() {
     },
   })
 
-  const contributions = data?.contributions ?? []
+  const contributions = useMemo(() => data?.contributions ?? [], [data?.contributions])
   const selectedTotal = useMemo(
     () => contributions.filter(c => selected.includes(c.id)).reduce((sum, c) => sum + c.montant, 0),
     [contributions, selected]
@@ -209,13 +210,16 @@ export function Collecteurs() {
           <div className="flex flex-wrap items-center gap-2">
             {isCollector ? (
               <>
-                <select value={recipientId} onChange={e => setRecipientId(e.target.value)}
-                  className="px-3 py-2 rounded-[10px] text-sm bg-white border-0 focus:outline-none">
-                  <option value="">Transférer à...</option>
-                  {eligibleRecipients.map(u => (
-                    <option key={u.id} value={u.id}>{u.fullName} ({u.role})</option>
-                  ))}
-                </select>
+                <AntSelect
+                  showSearch
+                  optionFilterProp="label"
+                  options={eligibleRecipients.map(u => ({ value: u.id, label: `${u.fullName} (${u.role})` }))}
+                  value={recipientId || undefined}
+                  onChange={value => setRecipientId(value ?? '')}
+                  placeholder="Transférer à..."
+                  allowClear
+                  className="min-w-[220px] [&_.ant-select-selector]:!rounded-[10px] [&_.ant-select-selector]:!border-0 [&_.ant-select-selector]:!bg-white"
+                />
                 <Button variant="yellow" disabled={selected.length === 0 || !recipientId} loading={isPending} onClick={submitTransfer}>
                   <UserPlus size={14} />
                   Transférer au destinataire

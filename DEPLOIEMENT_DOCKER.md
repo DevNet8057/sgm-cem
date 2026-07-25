@@ -2,7 +2,7 @@
 
 > **⚠️ LECTURE OBLIGATOIRE** avant toute tâche touchant au déploiement, aux Dockerfiles,
 > aux variables d'environnement ou à la configuration. Référencé par `CLAUDE.md`.
-> Dernière mise à jour : 2026-07-22 — correctifs paiements Mobile Money (§7/§7bis).
+> Dernière mise à jour : 2026-07-23 — stockage persistant des preuves privées (§8ter).
 > Déploiement Docker local vérifié fonctionnel de bout en bout depuis le 2026-07-16.
 > **Migration prévue : Docker → AWS** (cible actuelle, remplace l'hypothèse VPS
 > générique ci-dessous — mettre à jour la section « Mise en production » dès que les
@@ -20,7 +20,8 @@ docker compose up -d --build  # redéployer après modification du code
 ```
 
 - Web : http://localhost:3000 — API : http://localhost:3001/api/health
-- Les données vivent dans les volumes `pgdata` (PostgreSQL) et `redisdata`.
+- Les données vivent dans les volumes `pgdata` (PostgreSQL), `redisdata`,
+  `uploads` (fichiers publics) et `private_uploads` (preuves financières privées).
   `docker compose down` les préserve ; `down -v` les **détruit** (jamais sans accord explicite).
 
 ## Architecture conteneurisée
@@ -109,6 +110,21 @@ depuis l'hôte) ; les conteneurs, eux, se parlent par le réseau Docker interne
 - Le schéma du conteneur est resynchronisé par l'entrypoint (`db push`) à chaque
   redémarrage de l'api — un `db push` hôte ne suffit PAS pour le conteneur.
 - Ne jamais comparer des comptages entre les deux sans savoir lequel on interroge.
+
+### 8ter. Preuves financières : stockage privé persistant
+
+Les preuves de paiement ne doivent jamais être écrites sous `uploads/` : ce répertoire est
+servi publiquement par `/uploads`. Le service de stockage privé utilise
+`apps/api/private-uploads` en fallback local et le volume Docker nommé `private_uploads`.
+La consultation passe exclusivement par l’endpoint contributions authentifié avec contrôle
+RBAC/propriétaire.
+
+- `docker compose up -d --build` et `--force-recreate` préservent ce volume.
+- Inclure `private_uploads` dans les sauvegardes au même titre que `pgdata` et `uploads`.
+- Ne jamais exécuter `docker compose down -v` sans accord explicite : cette commande détruit
+  aussi les preuves privées.
+- En mode S3/R2, le bucket ou le préfixe des preuves doit rester privé ; aucune policy publique
+  `bucket/*` ne doit exposer `contribution-proofs/`.
 
 ### 8. Divers appris à la dure
 - `.dockerignore` : motifs avec `**/` (`**/node_modules`) — sans ça, seuls ceux de la racine sont exclus.

@@ -73,8 +73,8 @@ RUN pnpm --filter api build || true \
   && test -f /app/apps/api/dist/index.js
 
 # ── Étape 9 : Copier le point d'entrée (schéma DB + seed avant démarrage)
-# Le script détecte automatiquement le contexte (Docker local vs Render managed)
-# et adapte l'attente PostgreSQL + le db push en conséquence.
+# Attend PostgreSQL (local ou managé), applique le schéma (db push) et
+# seed la base si elle est vide, avant de lancer le serveur.
 COPY apps/api/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh
 

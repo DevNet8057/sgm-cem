@@ -183,6 +183,49 @@ Résultat attendu:
 - Fonctionne si depuis localhost:3000
 ```
 
+### Module 6: Interface Premium Ant Design
+
+#### Test 6.1: Coque et navigation par rôle
+
+Tester successivement MEMBRE, COLLECTEUR, RESPONSABLE, TRESORIER, ADMIN et DEVELOPER.
+
+Résultat attendu :
+
+- aucune destination non autorisée ou sans vue utilisable ;
+- même titre dans la sidebar, la recherche et le header ;
+- cinq entrées maximum dans la navigation mobile ;
+- sidebar `Menu`, drawer mobile, boutons et badges rendus par Ant Design.
+
+#### Test 6.2: Dashboard financier
+
+Résultat attendu :
+
+- compteurs animés, mini-courbes, courbe mensuelle et donut visibles ;
+- états chargement, vide et erreur cohérents ;
+- cartes à rayon `20px`, espacement desktop `24/32px`, aucune surface claire ;
+- tooltips lisibles et animations neutralisées avec `prefers-reduced-motion`.
+
+#### Test 6.3: Responsive et accessibilité
+
+Tester `320`, `360`, `390`, `768`, `1280` et `1440px`.
+
+Résultat attendu :
+
+- aucun débordement horizontal ;
+- cibles tactiles d’au moins `44px` ;
+- focus clavier visible, recherche utilisable avec Entrée ;
+- modales fermables par Échap, masque et bouton de fermeture ;
+- textes, montants longs, tableaux et menus restent lisibles.
+
+#### Test 6.4: Composants partagés
+
+Résultat attendu :
+
+- `Button`, `Input`, `Input.Password`, `Select`, `Modal`, `Tag`, `Avatar` et `Card`
+  restent des composants Ant Design ;
+- focus vert, erreurs rouges, statuts avec icône et couleur ;
+- fermeture/effacement n’entraîne aucune soumission de formulaire involontaire.
+
 ## 🐛 Scénarios de Dépannage
 
 ### Problème: Password field affiche "undefined"
@@ -246,6 +289,9 @@ UI/UX:
 [ ] Icons cohérents
 [ ] Colors cohérentes
 [ ] Responsive design OK
+[ ] Recette 320/360/390/768/1280/1440 effectuée
+[ ] Navigation contrôlée pour les 6 rôles
+[ ] prefers-reduced-motion vérifié
 
 Performance:
 [ ] Pas de console errors

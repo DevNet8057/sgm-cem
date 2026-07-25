@@ -143,6 +143,7 @@ export default function LoginPage() {
 
   /* ── Initialiser Google (sans prompt automatique) ── */
   useEffect(() => {
+    const googleButton = googleBtnRef.current
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
     if (!clientId) return
 
@@ -163,15 +164,15 @@ export default function LoginPage() {
             use_fedcm_for_prompt: true,
             itp_support: true,
           })
-          if (googleBtnRef.current) {
-            window.google.accounts.id.renderButton(googleBtnRef.current, {
+          if (googleButton) {
+            window.google.accounts.id.renderButton(googleButton, {
               type: 'standard',
               theme: 'outline',
               size: 'large',
               shape: 'pill',
               text: 'continue_with',
               locale: 'fr',
-              width: googleBtnRef.current.offsetWidth || 300,
+              width: googleButton.offsetWidth || 300,
             })
           }
           setGoogleBtnReady(true)
@@ -184,8 +185,8 @@ export default function LoginPage() {
     return () => {
       disposed = true
       setGoogleBtnReady(false)
-      if (googleBtnRef.current) {
-        try { googleBtnRef.current.innerHTML = '' } catch {}
+      if (googleButton) {
+        try { googleButton.innerHTML = '' } catch {}
       }
     }
   }, [handleGoogleCredential])
@@ -289,7 +290,7 @@ export default function LoginPage() {
 
       {/* ── Formulaire droite — scrollable sur mobile, centré sur desktop ── */}
       <section className="flex min-h-[100dvh] items-center justify-center overflow-y-auto px-4 py-6 sm:px-8 lg:py-8 [@media(max-height:700px)]:py-4">
-        <motion.div initial={reduceMotion ? false : { opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="w-full max-w-[460px]">
+        <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduceMotion ? 0 : 0.35 }} className="w-full max-w-[460px]">
         <Card className="!rounded-3xl !border-white/80 shadow-[0_24px_70px_rgba(15,74,15,0.12)]" styles={{ body: { padding: 'clamp(20px, 5vw, 36px)' } }}>
           {/* Logo mobile */}
           <div className="lg:hidden flex justify-center mb-8">

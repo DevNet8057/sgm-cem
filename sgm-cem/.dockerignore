@@ -21,6 +21,7 @@
 
 # Fichiers volumineux générés (les uploads vivent dans un volume monté)
 **/uploads
+**/private-uploads
 apps/api/tests
 
 # caches et OS

@@ -4,8 +4,8 @@
   "description": "Culte d'Enfants de Melen · EEC Yaoundé",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#F0FDF4",
-  "theme_color": "#0F4A0F",
+  "background_color": "#07120D",
+  "theme_color": "#07120D",
   "orientation": "portrait",
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },

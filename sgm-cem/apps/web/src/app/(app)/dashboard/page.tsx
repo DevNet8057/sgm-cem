@@ -1,98 +1,150 @@
 'use client'
+import dynamic from 'next/dynamic'
+import { Card, Skeleton } from 'antd'
 import { useAppStore } from '@/store/appStore'
 import { useAuthStore } from '@/store/authStore'
-import { ROLE_LEVELS } from '@/lib/utils'
+import { canAccessView, getNavigationForRole, type ViewId } from '@/config/navigation'
 
-import { Dashboard }            from '@/components/views/Dashboard'
-import { DashboardCollecteur }  from '@/components/views/DashboardCollecteur'
-import { Rubriques }            from '@/components/views/Rubriques'
-import { Contributions }        from '@/components/views/Contributions'
-import { Collecteurs }          from '@/components/views/Collecteurs'
-import { Membres }              from '@/components/views/Membres'
-import { Validations }          from '@/components/views/Validations'
-import { TransferValidations }  from '@/components/views/TransferValidations'
-import { CollectesPubliques }   from '@/components/views/CollectesPubliques'
-import { Litiges }              from '@/components/views/Litiges'
-import { Statistiques }         from '@/components/views/Statistiques'
-import { Rapports }             from '@/components/views/Rapports'
-import { Notifications }        from '@/components/views/Notifications'
-import { Parametres }           from '@/components/views/Parametres'
-import { Prestations }          from '@/components/views/Prestations'
-import { Ged }                  from '@/components/views/Ged'
-import { GestionUtilisateurs }  from '@/components/views/GestionUtilisateurs'
-import { MesContributions }     from '@/components/views/MesContributions'
-import { MonProfil }            from '@/components/views/MonProfil'
-import { Developer }            from '@/components/views/Developer'
-import { Journal }              from '@/components/views/Journal'
-
-function AccessDenied() {
+function ViewLoading() {
   return (
-    <div className="flex flex-col items-center justify-center h-[60vh] gap-4 text-center p-6 animate-page-enter">
-      <div className="w-20 h-20 bg-red-50 rounded-[20px] flex items-center justify-center text-3xl">🔒</div>
-      <h2 className="font-display font-semibold text-[#0F4A0F] text-xl">Accès restreint</h2>
-      <p className="text-gray-400 text-sm max-w-xs">
-        Vous n&apos;avez pas les droits nécessaires pour accéder à cette section.
-        Contactez votre administrateur si vous pensez que c&apos;est une erreur.
-      </p>
+    <div
+      className="p-4 md:p-6 xl:p-8 animate-page-enter"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <span className="sr-only">Chargement de la vue…</span>
+      <Card
+        variant="borderless"
+        className="min-h-[420px] border border-white/[.06] bg-[#0E1C16] shadow-[0_8px_30px_rgba(0,0,0,.25)]"
+      >
+        <Skeleton
+          active
+          title={{ width: '38%' }}
+          paragraph={{ rows: 8, width: ['100%', '92%', '96%', '82%', '100%', '88%', '94%', '70%'] }}
+        />
+      </Card>
     </div>
   )
 }
 
+const Dashboard = dynamic(
+  () => import('@/components/views/Dashboard').then(module => module.Dashboard),
+  { loading: ViewLoading },
+)
+const DashboardCollecteur = dynamic(
+  () => import('@/components/views/DashboardCollecteur').then(module => module.DashboardCollecteur),
+  { loading: ViewLoading },
+)
+const Rubriques = dynamic(
+  () => import('@/components/views/Rubriques').then(module => module.Rubriques),
+  { loading: ViewLoading },
+)
+const Contributions = dynamic(
+  () => import('@/components/views/Contributions').then(module => module.Contributions),
+  { loading: ViewLoading },
+)
+const Collecteurs = dynamic(
+  () => import('@/components/views/Collecteurs').then(module => module.Collecteurs),
+  { loading: ViewLoading },
+)
+const Membres = dynamic(
+  () => import('@/components/views/Membres').then(module => module.Membres),
+  { loading: ViewLoading },
+)
+const Validations = dynamic(
+  () => import('@/components/views/Validations').then(module => module.Validations),
+  { loading: ViewLoading },
+)
+const TransferValidations = dynamic(
+  () => import('@/components/views/TransferValidations').then(module => module.TransferValidations),
+  { loading: ViewLoading },
+)
+const CollectesPubliques = dynamic(
+  () => import('@/components/views/CollectesPubliques').then(module => module.CollectesPubliques),
+  { loading: ViewLoading },
+)
+const Litiges = dynamic(
+  () => import('@/components/views/Litiges').then(module => module.Litiges),
+  { loading: ViewLoading },
+)
+const Statistiques = dynamic(
+  () => import('@/components/views/Statistiques').then(module => module.Statistiques),
+  { loading: ViewLoading },
+)
+const Rapports = dynamic(
+  () => import('@/components/views/Rapports').then(module => module.Rapports),
+  { loading: ViewLoading },
+)
+const Notifications = dynamic(
+  () => import('@/components/views/Notifications').then(module => module.Notifications),
+  { loading: ViewLoading },
+)
+const Parametres = dynamic(
+  () => import('@/components/views/Parametres').then(module => module.Parametres),
+  { loading: ViewLoading },
+)
+const Prestations = dynamic(
+  () => import('@/components/views/Prestations').then(module => module.Prestations),
+  { loading: ViewLoading },
+)
+const Ged = dynamic(
+  () => import('@/components/views/Ged').then(module => module.Ged),
+  { loading: ViewLoading },
+)
+const GestionUtilisateurs = dynamic(
+  () => import('@/components/views/GestionUtilisateurs').then(module => module.GestionUtilisateurs),
+  { loading: ViewLoading },
+)
+const MesContributions = dynamic(
+  () => import('@/components/views/MesContributions').then(module => module.MesContributions),
+  { loading: ViewLoading },
+)
+const MonProfil = dynamic(
+  () => import('@/components/views/MonProfil').then(module => module.MonProfil),
+  { loading: ViewLoading },
+)
+const Developer = dynamic(
+  () => import('@/components/views/Developer').then(module => module.Developer),
+  { loading: ViewLoading },
+)
+const Journal = dynamic(
+  () => import('@/components/views/Journal').then(module => module.Journal),
+  { loading: ViewLoading },
+)
+
 export default function AppPage() {
   const { activeView } = useAppStore()
   const { user } = useAuthStore()
-  const level = ROLE_LEVELS[user?.role ?? ''] ?? 1
-  const isAdmin  = user?.role === 'ADMIN' || user?.role === 'DEVELOPER'
-  const isMembre = user?.role === 'MEMBRE'
+  if (!user) return <ViewLoading />
 
-  // MEMBRE : interface simplifiée
-  if (isMembre) {
-    switch (activeView) {
-      case 'mes-contributions':
-      case 'dashboard':     return <MesContributions />
-      case 'notifications': return <Notifications />
-      case 'journal':       return <Journal />
-      case 'mon-profil':    return <MonProfil />
-      default:              return <MesContributions />
-    }
-  }
+  const requestedView = activeView as ViewId
+  const safeActiveView = canAccessView(user.role, requestedView)
+    ? requestedView
+    : getNavigationForRole(user.role)[0]?.id ?? 'mon-profil'
 
-  // COLLECTEUR : interface limitée
-  if (user?.role === 'COLLECTEUR') {
-    switch (activeView) {
-      case 'dashboard':     return <DashboardCollecteur />
-      case 'contributions': return <Contributions />
-      case 'collecteurs':   return <Collecteurs />
-      case 'notifications': return <Notifications />
-      case 'journal':       return <Journal />
-      case 'mon-profil':    return <MonProfil />
-      default:              return <DashboardCollecteur />
-    }
-  }
-
-  // Vues avec contrôle d'accès par niveau
-  switch (activeView) {
-    case 'dashboard':            return <Dashboard />
-    case 'rubriques':            return level >= 1 ? <Rubriques />  : <AccessDenied />
-    case 'contributions':        return level >= 2 ? <Contributions /> : <AccessDenied />
-    case 'membres':              return level >= 2 ? <Membres />    : <AccessDenied />
-    case 'collecteurs':          return level >= 3 ? <Collecteurs /> : <AccessDenied />
-    case 'validations':          return level >= 2 ? <Validations /> : <AccessDenied />
-    case 'transfer-validations': return level >= 2 ? <TransferValidations /> : <AccessDenied />
-    // Collectes publiques : création/gestion Admin + Trésorier (+ Développeur) — rôles exacts, pas de niveau
-    case 'collectes-publiques':  return isAdmin || user?.role === 'TRESORIER' ? <CollectesPubliques /> : <AccessDenied />
-    case 'ged':                  return level >= 2 ? <Ged />        : <AccessDenied />
-    case 'prestations':          return level >= 2 ? <Prestations /> : <AccessDenied />
-    case 'litiges':              return level >= 3 ? <Litiges />    : <AccessDenied />
-    case 'statistiques':         return level >= 3 ? <Statistiques /> : <AccessDenied />
-    case 'rapports':             return level >= 3 ? <Rapports />   : <AccessDenied />
+  // Le contrôle d'accès est centralisé dans config/navigation.ts.
+  // Ce switch ne fait qu'associer une vue déjà autorisée à son composant.
+  switch (safeActiveView) {
+    case 'dashboard':            return user.role === 'COLLECTEUR' ? <DashboardCollecteur /> : <Dashboard />
+    case 'rubriques':            return <Rubriques />
+    case 'contributions':        return <Contributions />
+    case 'collecteurs':          return <Collecteurs />
+    case 'validations':          return <Validations />
+    case 'transfer-validations': return <TransferValidations />
+    case 'collectes-publiques':  return <CollectesPubliques />
+    case 'membres':              return <Membres />
+    case 'mes-contributions':    return <MesContributions />
+    case 'ged':                  return <Ged />
+    case 'prestations':          return <Prestations />
+    case 'litiges':              return <Litiges />
+    case 'statistiques':         return <Statistiques />
+    case 'rapports':             return <Rapports />
     case 'notifications':        return <Notifications />
     case 'journal':              return <Journal />
-    case 'parametres':           return level >= 5 ? <Parametres /> : <AccessDenied />
-    case 'utilisateurs':         return isAdmin     ? <GestionUtilisateurs /> : <AccessDenied />
-    // Panneau développeur — rôle DEVELOPER EXACT (jamais ADMIN, jamais level >= 5)
-    case 'developer':            return user?.role === 'DEVELOPER' ? <Developer /> : <AccessDenied />
+    case 'parametres':           return <Parametres />
+    case 'utilisateurs':         return <GestionUtilisateurs />
+    case 'developer':            return <Developer />
     case 'mon-profil':           return <MonProfil />
-    default:                     return <Dashboard />
+    default:                     return <ViewLoading />
   }
 }

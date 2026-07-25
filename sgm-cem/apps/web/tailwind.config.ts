@@ -41,15 +41,34 @@ export default {
         'icon-gestion':  '#8B5CF6',   // violet
         'icon-outils':   '#F59E0B',   // ambre
         'icon-systeme':  '#475569',   // gris foncé
+        // ── Dashboard interne (refonte SaaS fintech, clair/sombre via CSS vars) ──
+        dash: {
+          bg:         'rgb(var(--dash-bg-rgb) / <alpha-value>)',
+          sidebar:    'rgb(var(--dash-sidebar-rgb) / <alpha-value>)',
+          card:       'rgb(var(--dash-card-rgb) / <alpha-value>)',
+          cardHover:  'rgb(var(--dash-card-hover-rgb) / <alpha-value>)',
+          primary:    'rgb(var(--dash-primary-rgb) / <alpha-value>)',
+          success:    'rgb(var(--dash-success-rgb) / <alpha-value>)',
+          warning:    'rgb(var(--dash-warning-rgb) / <alpha-value>)',
+          danger:     'rgb(var(--dash-danger-rgb) / <alpha-value>)',
+          text:       'rgb(var(--dash-text-rgb) / <alpha-value>)',
+          textMuted:  'rgb(var(--dash-text-muted-rgb) / <alpha-value>)',
+          border:     'var(--dash-border)',
+        },
       },
       fontFamily: {
-        display: ['"Montserrat"', 'system-ui', 'sans-serif'],
-        body:    ['"Montserrat"', 'system-ui', 'sans-serif'],
+        display: ['"Inter"', 'system-ui', 'sans-serif'],
+        body:    ['"Inter"', 'system-ui', 'sans-serif'],
         mono:    ['"JetBrains Mono"', 'monospace'],
+        dash:    ['"Inter"', 'system-ui', 'sans-serif'],
       },
       borderRadius: {
         'xs': '4px', 'sm': '6px', 'md': '10px',
         'lg': '14px', 'xl': '18px', '2xl': '24px', '3xl': '28px',
+        'dash-card':  '20px',
+        'dash-btn':   '14px',
+        'dash-table': '18px',
+        'dash-pill':  '999px',
       },
       boxShadow: {
         'cem-sm':     '0 2px 8px rgba(26,107,26,0.12)',
@@ -58,13 +77,15 @@ export default {
         'cem-xl':     '0 20px 60px rgba(15,74,15,0.18)',
         'cem-yellow': '0 4px 20px rgba(245,196,0,0.35)',
         'inner-cem':  'inset 0 2px 8px rgba(26,107,26,0.06)',
+        'dash':       'var(--dash-shadow-rest)',
+        'dash-hover': 'var(--dash-shadow-hover)',
       },
       animation: {
         // 'backwards' (PAS 'both') : avec 'both', la valeur animée de transform reste
         // appliquée après l'animation (matrice identité ≠ none) → l'élément devient le
         // référentiel des position:fixed descendants → modals poussées hors écran.
         'page-enter':    'page-enter 0.4s cubic-bezier(0.4,0,0.2,1) backwards',
-        'slide-up':      'slide-up 0.35s cubic-bezier(0.4,0,0.2,1) both',
+        'slide-up':      'slide-up 0.35s cubic-bezier(0.4,0,0.2,1) backwards',
         'modal-in':      'modal-in 0.3s cubic-bezier(0.34,1.56,0.64,1)',
         'toast-in':      'toast-in 0.35s cubic-bezier(0.34,1.56,0.64,1)',
         'skeleton':      'skeleton 1.5s ease-in-out infinite',
@@ -76,11 +97,10 @@ export default {
         'shimmer':       'shimmer 2s linear infinite',
       },
       keyframes: {
-        // `to` DOIT finir sur transform:'none' : avec fill-mode `both`, un
-        // transform persistant sur un ancêtre transforme le position:fixed
-        // des modals en positionnement relatif au conteneur (popup mal placé).
+        // `to` DOIT finir sur transform:'none' pour éviter qu'un ancêtre
+        // transformé ne modifie le référentiel des modals en position:fixed.
         'page-enter':    { from: { opacity:'0', transform:'translateY(12px)' }, to: { opacity:'1', transform:'none' } },
-        'slide-up':      { from: { opacity:'0', transform:'translateY(20px)' }, to: { opacity:'1', transform:'translateY(0)' } },
+        'slide-up':      { from: { opacity:'0', transform:'translateY(20px)' }, to: { opacity:'1', transform:'none' } },
         'modal-in':      { from: { opacity:'0', transform:'translateY(40px) scale(0.97)' }, to: { opacity:'1', transform:'none' } },
         'toast-in':      { from: { opacity:'0', transform:'translateX(100%)' }, to: { opacity:'1', transform:'none' } },
         'skeleton':      { '0%': { backgroundPosition:'-200% 0' }, '100%': { backgroundPosition:'200% 0' } },

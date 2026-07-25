@@ -36,8 +36,8 @@ import { loadConfigCache, getConfig, getConfigBool } from './services/config.ser
 import { initSocketIO } from './lib/socket'
 
 const app = express()
-// Trust first proxy (Render, Heroku, etc.) — requis pour que
-// express-rate-limit utilise X-Forwarded-For et non l'IP du proxy.
+// Trust first proxy (reverse proxy devant l'API en production) — requis pour
+// que express-rate-limit utilise X-Forwarded-For et non l'IP du proxy.
 if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1)
 const PORT = process.env.PORT ?? 3001
 
@@ -98,7 +98,15 @@ app.use(
   express.static(path.join(process.cwd(), 'uploads'))
 )
 
-app.use(express.json({ limit: '10mb' }))
+// Conserver les octets JSON reçus pour les webhooks MTN/Orange montés plus bas.
+// La signature doit porter sur le payload exact, pas sur un JSON re-sérialisé.
+app.use(express.json({
+  limit: '10mb',
+  verify: (req, _res, buffer) => {
+    const rawBodyRequest = req as Request & { rawBody?: Buffer }
+    rawBodyRequest.rawBody = Buffer.from(buffer)
+  },
+}))
 app.use(express.urlencoded({ extended: true }))
 
 // Protection d'infrastructure — désactivée sous vitest : la suite partage une
@@ -180,7 +188,7 @@ app.use('/api/users', usersRouter) // gestion des comptes (ADMIN/DEVELOPER) — 
 app.use('/api/audit', auditRouter) // journal « qui a fait quoi » — périmètre filtré par rôle dans la route
 app.use('/api/public', publicRouter) // collecte publique — AUCUNE authentification, limiteurs par-route dans le fichier
 
-app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString(), version: process.env.RENDER_GIT_COMMIT?.substring(0, 7) ?? 'dev' }))
+app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString(), version: 'dev' }))
 
 app.use(errorHandler)
 

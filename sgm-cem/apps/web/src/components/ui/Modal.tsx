@@ -1,51 +1,89 @@
 'use client'
-import { useEffect } from 'react'
+import { Modal as AntModal } from 'antd'
 import { X } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import type { ReactNode } from 'react'
 
 interface ModalProps {
   open: boolean
   onClose: () => void
   title?: string
   description?: string
-  children: React.ReactNode
+  children: ReactNode
   size?: 'sm' | 'md' | 'lg'
 }
 
+const MODAL_WIDTHS = {
+  sm: 384,
+  md: 448,
+  lg: 672,
+} as const
+
 export function Modal({ open, onClose, title, description, children, size = 'md' }: ModalProps) {
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [open, onClose])
-
-  if (!open) return null
-
-  const sizes = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-2xl' }
-
   return (
-    <div className="fixed inset-0 z-[500] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-[fadein_0.15s_ease]" onClick={onClose} />
-      <div className={cn(
-        'relative w-full bg-white rounded-[20px] shadow-cem-xl animate-modal-in overflow-hidden',
-        sizes[size]
-      )}>
-        <div className="absolute inset-y-0 left-0 w-1 bg-[#F5C400]" />
-        <div className="pl-6 pr-5 pt-5 pb-4 flex items-start justify-between border-b border-gray-100">
-          <div className="min-w-0 pr-3">
-            {title && <h3 className="font-display font-semibold text-[#0F4A0F] text-xl">{title}</h3>}
-            {description && <p className="text-sm text-gray-500 mt-0.5">{description}</p>}
+    <AntModal
+      open={open}
+      onCancel={onClose}
+      title={
+        title || description ? (
+          <div className="min-w-0 pr-10">
+            {title && (
+              <h2 className="m-0 text-xl font-semibold leading-tight text-white">
+                {title}
+              </h2>
+            )}
+            {description && (
+              <p className="mb-0 mt-1 text-[13px] font-normal leading-relaxed text-[#94A3B8]">
+                {description}
+              </p>
+            )}
           </div>
-          <button
-            onClick={onClose}
-            className="shrink-0 w-8 h-8 flex items-center justify-center rounded-[8px] text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-          >
-            <X size={16} />
-          </button>
-        </div>
-        <div className="pl-6 pr-5 py-5">{children}</div>
-      </div>
-    </div>
+        ) : (
+          <span className="sr-only">Fenêtre de dialogue</span>
+        )
+      }
+      width={MODAL_WIDTHS[size]}
+      centered
+      footer={null}
+      destroyOnHidden
+      maskClosable
+      keyboard
+      focusTriggerAfterClose
+      closable={{ 'aria-label': 'Fermer la fenêtre' }}
+      closeIcon={<X aria-hidden="true" size={18} strokeWidth={1.8} />}
+      style={{
+        maxWidth: 'calc(100vw - 24px)',
+        margin: 0,
+        paddingBottom: 0,
+      }}
+      styles={{
+        mask: {
+          background: 'rgba(2, 8, 5, 0.78)',
+          backdropFilter: 'blur(8px)',
+        },
+        content: {
+          overflow: 'hidden',
+          padding: 0,
+          background: '#0E1C16',
+          border: '1px solid rgba(255,255,255,.06)',
+          borderLeft: '3px solid rgba(250,204,21,.72)',
+          borderRadius: 20,
+          boxShadow: '0 20px 40px rgba(0,0,0,.35)',
+        },
+        header: {
+          margin: 0,
+          padding: title || description ? '24px 24px 20px' : 0,
+          background: '#0E1C16',
+          borderBottom: title || description ? '1px solid rgba(255,255,255,.06)' : 'none',
+        },
+        body: {
+          maxHeight: 'min(72vh, calc(100dvh - 144px))',
+          overflowY: 'auto',
+          padding: 24,
+          color: '#FFFFFF',
+        },
+      }}
+    >
+      {children}
+    </AntModal>
   )
 }

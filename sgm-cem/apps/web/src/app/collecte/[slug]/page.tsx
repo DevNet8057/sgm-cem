@@ -14,7 +14,6 @@ import type { CollectePubliqueDef } from '@sgm-cem/shared'
 export default function CollectePubliquePage() {
   const params = useParams<{ slug: string }>()
   const slug = params.slug
-  const reduceMotion = useReducedMotion()
 
   const { data, isLoading, isError } = useQuery<CollectePubliqueDef>({
     queryKey: ['collecte-publique', slug],
@@ -23,13 +22,9 @@ export default function CollectePubliquePage() {
     retry: false,
   })
 
-  const animation = reduceMotion
-    ? undefined
-    : { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 } }
-
   if (isLoading) {
     return (
-      <PublicShell animation={animation}>
+      <PublicShell>
         <div className="space-y-5 p-5 sm:p-7" aria-busy="true" aria-label="Chargement de la collecte">
           <Skeleton.Avatar active size={56} shape="square" />
           <Skeleton active title={{ width: '58%' }} paragraph={{ rows: 3, width: ['100%', '88%', '64%'] }} />
@@ -41,7 +36,7 @@ export default function CollectePubliquePage() {
 
   if (isError || !data) {
     return (
-      <PublicShell animation={animation}>
+      <PublicShell>
         <Result
           status="error"
           title="Collecte introuvable"
@@ -62,7 +57,7 @@ export default function CollectePubliquePage() {
   }
 
   return (
-    <PublicShell animation={animation}>
+    <PublicShell>
       <div className="[&>div]:!min-h-0 [&>div]:!bg-transparent [&>div]:!p-0 [&>div>div]:!max-w-none [&>div>div]:!overflow-visible [&>div>div]:!rounded-none [&>div>div]:!border-0 [&>div>div]:!shadow-none">
         <PublicCollecteStepper collecte={data} slug={slug} />
       </div>
@@ -72,20 +67,17 @@ export default function CollectePubliquePage() {
 
 type PublicShellProps = {
   children: ReactNode
-  animation?: {
-    initial: { opacity: number; y: number }
-    animate: { opacity: number; y: number }
-  }
 }
 
-function PublicShell({ children, animation }: PublicShellProps) {
+function PublicShell({ children }: PublicShellProps) {
+  const reduceMotion = useReducedMotion()
   return (
     <main className="auth-public-background relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-8 sm:px-6">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-linear-to-b from-[#0f4a0f]/10 to-transparent" />
       <motion.div
-        initial={animation?.initial}
-        animate={animation?.animate}
-        transition={{ duration: 0.35, ease: 'easeOut' }}
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: reduceMotion ? 0 : 0.35, ease: 'easeOut' }}
         className="relative w-full max-w-md"
       >
         <Card

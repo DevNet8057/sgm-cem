@@ -80,9 +80,10 @@ services:
       YELII_BASE_URL: ${YELII_BASE_URL}
     env_file:
       - .env
-    # Monter le dossier uploads pour que les fichiers persistents (S3 hors prod)
+    # Persister séparément les fichiers publics et les preuves financières privées.
     volumes:
       - uploads:/app/apps/api/uploads
+      - private_uploads:/app/apps/api/private-uploads
     networks:
       - sgm-net
     healthcheck:
@@ -130,6 +131,8 @@ volumes:
     # Stocke le cache Redis
   uploads:
     # Stocke les fichiers uploadés par l'API
+  private_uploads:
+    # Stocke les preuves financières privées, jamais servies par /uploads
 
   # ── Réseau privé ────────────────────────────────────────────────────
   # Les conteneurs peuvent se parler par leur nom de service

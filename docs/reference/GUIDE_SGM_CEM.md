@@ -65,6 +65,24 @@ Chaque utilisateur est forcé de changer son mot de passe à la première connex
 
 ---
 
+### Interface premium et navigation
+
+L’espace connecté utilise un thème financier sombre commun à tous les rôles. La sidebar,
+la recherche du header et la navigation mobile n’affichent que les vues autorisées. La
+navigation mobile propose au plus cinq entrées et respecte la zone sûre des téléphones.
+
+- La recherche du header ouvre directement la première vue autorisée avec **Entrée**.
+- La cloche ouvre les notifications et conserve le compteur de messages non lus.
+- Le profil et la déconnexion sont accessibles depuis le header et la sidebar.
+- Le tableau de bord anime les montants et graphiques ; ces animations sont désactivées
+  automatiquement si le système demande une réduction des mouvements.
+- Les tableaux deviennent des cartes lisibles sur les petits écrans.
+
+Les règles détaillées de composition, de couleurs et de recette sont documentées dans
+[`DESIGN_SYSTEM_SGM_CEM.md`](DESIGN_SYSTEM_SGM_CEM.md).
+
+---
+
 ## 4. FLUX DE PAIEMENT — GUIDE COMPLET
 
 ### 4.1 Paiement en espèces (présentiel)

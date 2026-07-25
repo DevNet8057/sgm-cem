@@ -4,8 +4,11 @@ import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { TopBar } from '@/components/layout/TopBar'
 import { BottomNav } from '@/components/layout/BottomNav'
+import { DashboardThemeProvider } from '@/components/layout/DashboardThemeProvider'
 import { ToastContainer } from '@/components/ui/Toast'
 import { ChangePassword } from '@/components/views/ChangePassword'
+import { getNavigationForRole } from '@/config/navigation'
+import { useAppStore } from '@/store/appStore'
 import { useAuthStore } from '@/store/authStore'
 import { useOfflineSync } from '@/hooks/useOfflineSync'
 import { useSocket } from '@/hooks/useSocket'
@@ -113,25 +116,28 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   useSocket()
 
   return (
-    <div className="flex h-[100dvh] overflow-hidden">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <TopBar />
-        <ImpersonationBanner />
-        <PushPermissionBanner />
-        <OfflineBanner isOffline={isOffline} queuedCount={queuedCount} />
-        <main className="flex-1 overflow-y-auto scrollbar-thin page-transition">
-          {children}
-        </main>
-        <BottomNav />
+    <DashboardThemeProvider>
+      <div className="flex h-[100dvh] min-w-0 overflow-hidden bg-dash-bg font-['Inter',system-ui,sans-serif] text-dash-text">
+        <Sidebar />
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <TopBar />
+          <ImpersonationBanner />
+          <PushPermissionBanner />
+          <OfflineBanner isOffline={isOffline} queuedCount={queuedCount} />
+          <main className="page-transition min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-dash-bg pb-[calc(4rem+env(safe-area-inset-bottom))] text-dash-text scrollbar-thin lg:pb-0">
+            {children}
+          </main>
+          <BottomNav />
+        </div>
+        <ToastContainer />
       </div>
-      <ToastContainer />
-    </div>
+    </DashboardThemeProvider>
   )
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, mustChangePassword, fetchMe, logout } = useAuthStore()
+  const { isAuthenticated, mustChangePassword, fetchMe, logout, user } = useAuthStore()
+  const { activeView, setActiveView } = useAppStore()
   const router = useRouter()
 
   // Zustand persist rehydrate le localStorage de façon asynchrone.
@@ -140,6 +146,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // de restaurer la session — l'utilisateur est déconnecté à chaque refresh.
   const [hydrated, setHydrated] = useState(false)
   useEffect(() => { setHydrated(true) }, [])
+
+  useEffect(() => {
+    if (!hydrated || !isAuthenticated) return
+    document.body.classList.add('premium-app')
+    return () => document.body.classList.remove('premium-app')
+  }, [hydrated, isAuthenticated])
+
+  useEffect(() => {
+    if (!hydrated || !isAuthenticated || !user) return
+    const allowedViews = getNavigationForRole(user.role)
+    if (!allowedViews.some(item => item.id === activeView)) {
+      setActiveView(allowedViews[0]?.id ?? 'mon-profil')
+    }
+  }, [activeView, hydrated, isAuthenticated, setActiveView, user])
 
   useEffect(() => {
     if (!hydrated) return  // attendre la réhydratation avant toute décision de routage
@@ -171,7 +191,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Forcer le changement de mot de passe avant d'accéder à l'app
   if (mustChangePassword) {
-    return <ChangePassword />
+    return (
+      <DashboardThemeProvider>
+        <ChangePassword />
+      </DashboardThemeProvider>
+    )
   }
 
   return <AppLayoutInner>{children}</AppLayoutInner>

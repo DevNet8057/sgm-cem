@@ -1,11 +1,13 @@
 'use client'
 import { useMemo, useState } from 'react'
+import { Input as AntInput, Select as AntSelect, Upload as AntUpload } from 'antd'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Archive, Check, Download, FileText, FolderKanban, Plus, Search, Send, Upload, X } from 'lucide-react'
 import api, { getBaseURL } from '@/lib/api'
 import { cn, formatDate } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Modal } from '@/components/ui/Modal'
 import { SkeletonTableRow } from '@/components/ui/Skeleton'
 import type { ApiResponse, Commission, Document, DocumentStatut, TypeDocument } from '@/types'
 
@@ -36,7 +38,6 @@ export function Ged() {
   const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [motif, setMotif] = useState('')
   const [error, setError] = useState('')
-  const [dragOver, setDragOver] = useState(false)
 
   const { data: commissions = [] } = useQuery({
     queryKey: ['commissions'],
@@ -144,6 +145,24 @@ export function Ged() {
     setError(e.response?.data?.error?.message ?? 'Operation impossible')
   }
 
+  function selectDocument(file: File) {
+    setSelectedFile(file)
+    setForm(current => ({
+      ...current,
+      titre: current.titre || file.name.replace(/\.[^.]+$/, ''),
+    }))
+  }
+
+  function submitCreate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selectedFile || !form.commissionId || !form.typeCode || !form.titre.trim()) {
+      setError('Sélectionnez un fichier et renseignez tous les champs obligatoires.')
+      return
+    }
+    setError('')
+    create.mutate()
+  }
+
   return (
     <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter">
       <div className="relative overflow-hidden rounded-[18px] border border-[#0F4A0F]/10 bg-white mb-6">
@@ -169,65 +188,118 @@ export function Ged() {
       </div>
 
       {showCreate && (
-        <form onSubmit={e => { e.preventDefault(); create.mutate() }} className="mb-5 rounded-[18px] border border-gray-100 bg-white overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100" style={{ background: 'linear-gradient(135deg, #0F4A0F, #1A6B1A)' }}>
-            <h3 className="font-display font-semibold text-white text-sm">Nouvelle fiche document</h3>
+        <form
+          onSubmit={submitCreate}
+          className="mb-5 overflow-hidden rounded-[20px] border border-white/6 bg-[#0E1C16] shadow-[0_8px_30px_rgba(0,0,0,.25)]"
+        >
+          <div className="border-b border-white/6 bg-[linear-gradient(135deg,#0F4A0F,#1A6B1A)] px-5 py-4">
+            <h3 className="font-display text-sm font-semibold text-white">Nouvelle fiche document</h3>
           </div>
 
-          {/* Drag-and-drop zone */}
-          <div className="p-5 border-b border-gray-100">
-            <div
-              onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={e => {
-                e.preventDefault()
-                setDragOver(false)
-                const file = e.dataTransfer.files[0]
-                if (file) {
-                  setSelectedFile(file)
-                  setForm(f => ({ ...f, titre: f.titre || file.name.replace(/\.[^.]+$/, '') }))
-                }
+          <div className="border-b border-white/6 p-5">
+            <AntUpload.Dragger
+              name="file"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp"
+              multiple={false}
+              maxCount={1}
+              showUploadList={false}
+              beforeUpload={file => {
+                selectDocument(file)
+                return false
               }}
-              className={cn(
-                'rounded-[14px] border-2 border-dashed transition-all duration-200 p-8 text-center cursor-pointer relative',
-                dragOver
-                  ? 'border-[#1A6B1A] bg-[#F0FDF4] scale-[1.01]'
-                  : 'border-gray-300 hover:border-[#1A6B1A]/50 hover:bg-gray-50'
-              )}>
-              <div className={cn(
-                'w-12 h-12 rounded-[12px] flex items-center justify-center mx-auto mb-3 transition-colors',
-                dragOver ? 'bg-[#1A6B1A] text-white' : 'bg-gray-100 text-gray-400'
-              )}>
+              className="!rounded-[14px] !border-white/10 !bg-[#081A12] transition-all duration-250 hover:!border-[#2ECC71]/60"
+            >
+              <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-[12px] bg-white/6 text-[#94A3B8] transition-colors">
                 <Upload size={20} />
               </div>
-              <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp" className="absolute inset-0 opacity-0 cursor-pointer"
-                onChange={e => { const f = e.target.files?.[0]; if (f) { setSelectedFile(f); setForm(fm => ({ ...fm, titre: fm.titre || f.name.replace(/\.[^.]+$/, '') })) } }} />
-              <p className="text-sm font-semibold text-gray-700 mb-1">
+              <p className="mb-1 text-sm font-semibold text-white">
                 {selectedFile ? selectedFile.name : 'Glissez votre fichier ici ou cliquez'}
               </p>
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-[#94A3B8]">
                 {selectedFile
                   ? `${(selectedFile.size / 1024).toFixed(1)} Ko · ${selectedFile.type}`
                   : 'PDF, Word, Excel, Image — max 20 Mo'}
               </p>
               {selectedFile && (
-                <button type="button" onClick={e => { e.stopPropagation(); setSelectedFile(null) }}
-                  className="mt-2 text-xs text-gray-400 hover:text-red-500 transition-colors">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={event => {
+                    event.stopPropagation()
+                    setSelectedFile(null)
+                  }}
+                  className="mt-2"
+                >
                   Retirer le fichier
-                </button>
+                </Button>
               )}
-            </div>
+            </AntUpload.Dragger>
           </div>
 
-          <div className="p-5 grid grid-cols-1 md:grid-cols-4 gap-3">
-            <Select label="Commission" value={form.commissionId} onChange={value => setForm({ ...form, commissionId: value })} required options={commissions.map(c => ({ value: c.id, label: c.nom }))} />
-            <Select label="Type de document" value={form.typeCode} onChange={value => setForm({ ...form, typeCode: value })} required options={types.map(t => ({ value: t.code, label: t.libelle }))} />
-            <Input label="Titre" value={form.titre} onChange={titre => setForm({ ...form, titre })} required className="md:col-span-2" />
-            <Input label="Tags (virgule)" value={form.tags} onChange={tags => setForm({ ...form, tags })} />
-            <Input label="Description" value={form.description} onChange={description => setForm({ ...form, description })} className="md:col-span-3" />
-            <div className="md:col-span-4 flex justify-end gap-2 items-center">
-              {!selectedFile && <p className="text-xs text-amber-600">Sélectionnez un fichier avant de soumettre</p>}
-              <Button loading={create.isPending} disabled={!selectedFile}>Créer la fiche</Button>
+          <div className="grid grid-cols-1 gap-3 p-5 md:grid-cols-4">
+            <label className="block">
+              <span className="mb-1.5 block text-[13px] font-semibold text-slate-300">
+                Commission <span className="text-red-400">*</span>
+              </span>
+              <AntSelect
+                value={form.commissionId || undefined}
+                onChange={value => setForm({ ...form, commissionId: value })}
+                options={commissions.map(commission => ({ value: commission.id, label: commission.nom }))}
+                placeholder="Choisir"
+                showSearch
+                optionFilterProp="label"
+                aria-required="true"
+                className="w-full"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[13px] font-semibold text-slate-300">
+                Type de document <span className="text-red-400">*</span>
+              </span>
+              <AntSelect
+                value={form.typeCode || undefined}
+                onChange={value => setForm({ ...form, typeCode: value })}
+                options={types.map(type => ({ value: type.code, label: type.libelle }))}
+                placeholder="Choisir"
+                showSearch
+                optionFilterProp="label"
+                aria-required="true"
+                className="w-full"
+              />
+            </label>
+            <label className="block md:col-span-2">
+              <span className="mb-1.5 block text-[13px] font-semibold text-slate-300">
+                Titre <span className="text-red-400">*</span>
+              </span>
+              <AntInput
+                required
+                value={form.titre}
+                onChange={event => setForm({ ...form, titre: event.target.value })}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[13px] font-semibold text-slate-300">Tags (virgule)</span>
+              <AntInput
+                value={form.tags}
+                onChange={event => setForm({ ...form, tags: event.target.value })}
+              />
+            </label>
+            <label className="block md:col-span-3">
+              <span className="mb-1.5 block text-[13px] font-semibold text-slate-300">Description</span>
+              <AntInput
+                value={form.description}
+                onChange={event => setForm({ ...form, description: event.target.value })}
+              />
+            </label>
+            <div className="flex items-center justify-end gap-2 md:col-span-4">
+              {!selectedFile && <p className="text-xs text-amber-400">Sélectionnez un fichier avant de soumettre</p>}
+              <Button
+                loading={create.isPending}
+                disabled={!selectedFile || !form.commissionId || !form.typeCode || !form.titre.trim()}
+              >
+                Créer la fiche
+              </Button>
             </div>
           </div>
         </form>
@@ -256,16 +328,22 @@ export function Ged() {
 
         <section className="rounded-[18px] border border-gray-100 bg-white overflow-hidden">
           <div className="p-4 border-b border-gray-100 flex flex-col md:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un document..."
-                className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30" />
-            </div>
-            <select value={statut} onChange={e => setStatut(e.target.value)}
-              className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30">
-              <option value="">Tous les statuts</option>
-              {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
+            <AntInput
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              placeholder="Rechercher un document..."
+              prefix={<Search aria-hidden="true" size={14} />}
+              allowClear
+              className="flex-1"
+            />
+            <AntSelect
+              value={statut || undefined}
+              onChange={value => setStatut(value ?? '')}
+              options={Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))}
+              placeholder="Tous les statuts"
+              allowClear
+              className="w-full md:w-52"
+            />
           </div>
 
           <div className="overflow-x-auto">
@@ -300,20 +378,28 @@ export function Ged() {
         </section>
       </div>
 
-      {rejectingId && (
-        <div className="fixed inset-0 z-500 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4">
-          <form onSubmit={e => { e.preventDefault(); reject.mutate() }} className="w-full max-w-md rounded-[18px] bg-white p-5 shadow-cem-xl">
-            <h3 className="font-display font-semibold text-[#0F4A0F] mb-3">Rejeter le document</h3>
-            <textarea value={motif} onChange={e => setMotif(e.target.value)} rows={4} required
+      <Modal
+        open={Boolean(rejectingId)}
+        onClose={() => setRejectingId(null)}
+        title="Rejeter le document"
+        description="Précisez le motif qui sera communiqué à la commission."
+        size="md"
+      >
+          <form onSubmit={e => { e.preventDefault(); reject.mutate() }}>
+            <AntInput.TextArea
+              value={motif}
+              onChange={event => setMotif(event.target.value)}
+              rows={4}
+              required
               placeholder="Motif du rejet"
-              className="w-full px-3 py-2 border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30" />
+              aria-label="Motif du rejet"
+            />
             <div className="mt-4 flex justify-end gap-2">
               <Button type="button" variant="ghost" onClick={() => setRejectingId(null)}>Annuler</Button>
               <Button variant="danger" loading={reject.isPending}>Rejeter</Button>
             </div>
           </form>
-        </div>
-      )}
+      </Modal>
     </div>
   )
 }
@@ -375,40 +461,3 @@ function Status({ status }: { status: DocumentStatut }) {
     status === 'ARCHIVE' ? 'bg-gray-100 text-gray-500' : 'bg-blue-100 text-blue-800'
   return <span className={cn('inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold', tone)}>{STATUS_LABELS[status]}</span>
 }
-
-function Input({ label, value, onChange, type = 'text', required, className }: {
-  label: string
-  value: string
-  onChange: (value: string) => void
-  type?: string
-  required?: boolean
-  className?: string
-}) {
-  return (
-    <label className={cn('block', className)}>
-      <span className="text-xs font-semibold text-gray-600">{label}</span>
-      <input type={type} required={required} value={value} onChange={e => onChange(e.target.value)}
-        className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30" />
-    </label>
-  )
-}
-
-function Select({ label, value, onChange, options, required }: {
-  label: string
-  value: string
-  onChange: (value: string) => void
-  options: Array<{ value: string; label: string }>
-  required?: boolean
-}) {
-  return (
-    <label className="block">
-      <span className="text-xs font-semibold text-gray-600">{label}</span>
-      <select required={required} value={value} onChange={e => onChange(e.target.value)}
-        className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-[10px] text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30">
-        <option value="">Choisir</option>
-        {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-      </select>
-    </label>
-  )
-}
-
