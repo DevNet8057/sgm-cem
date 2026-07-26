@@ -143,6 +143,18 @@ describe('Contributions routes — auth guard', () => {
   })
 })
 
+describe('Payments routes — garde d\'authentification', () => {
+  it('GET /api/payments/status/nonexistent sans authentification est refusé', async () => {
+    const res = await request(app).get('/api/payments/status/nonexistent')
+    expect([401, 403]).toContain(res.status)
+  })
+
+  it('GET /api/payments/config sans authentification est refusé', async () => {
+    const res = await request(app).get('/api/payments/config')
+    expect([401, 403]).toContain(res.status)
+  })
+})
+
 describe('Funds routes — auth guard', () => {
   it('GET /api/funds/overview requires auth', async () => {
     const res = await request(app).get('/api/funds/overview')

@@ -21,6 +21,20 @@ Ce document remplace tout ancien flow de paiement Mobile Money dans le projet. L
 
 ---
 
+## ÉTAT RÉEL CONSTATÉ EN TEST — 2026-07-25
+
+Tests effectués en conditions réelles (100 FCFA, numéro 680154116) via le stepper « Guidé » de `/contributions` :
+
+- **MTN MoMo : OK de bout en bout.** Collecte initiée, confirmée quasi immédiatement (`paymentStatus: SUCCESS`), montant majoré correctement calculé et débité, reçu PDF conforme.
+- **Orange Money : échec systématique côté Yelii**, message renvoyé tel quel par leur API : *« Collecte indisponible pour le moment. Réessayez plus tard. »* (deux tentatives, même résultat). Rien à corriger côté SGM-CEM — le code envoie la bonne requête (`channel: "orange_money"`), c'est Yelii qui refuse. À surveiller / relancer un test plus tard ou contacter le support Yelii si ça persiste.
+- **Carte bancaire (CinetPay) : bloqué avant tout appel** — message applicatif *« CinetPay non configuré — CINETPAY_API_KEY et CINETPAY_SITE_ID requis »*. Ces clés ne sont donc pas renseignées (ni en base `system_configs`, ni en `.env`) dans cet environnement. Rien n'a pu être testé au-delà de ce point (et ça n'aurait de toute façon pas dû aller plus loin qu'un contrôle automatisé, la saisie d'une vraie carte bancaire n'étant pas quelque chose qu'un agent doit faire).
+- **Espèces : OK.** Encaissement direct (collecteur en présentiel) confirmé immédiatement, reçu PDF conforme, aucun frais affiché (normal, pas de commission Yelii sur ce mode).
+- **Taux de commission Yelii réel confirmé : 3 %** au 2026-07-25 (100 FCFA dû → 104 FCFA débités), pas 2,5 % comme l'affichaient jusqu'ici le reçu PDF et les exemples de ce document (voir section 1bis) — le taux est lu dynamiquement via `getConfigNumber('YELII_COMMISSION_RATE', ...)`, donc les **valeurs numériques (5 129 FCFA, 128,225 FCFA, etc.) de ce document sont des exemples pédagogiques à 2,5 %, pas la réalité de production actuelle**. Le reçu PDF (`apps/api/src/services/receipt.ts`) a été corrigé le même jour pour ne plus afficher de pourcentage figé (il n'existe pas de champ stockant le taux appliqué par transaction, donc afficher un chiffre fixe aurait dérivé à chaque changement de taux).
+
+**Bug UI trouvé (non corrigé) :** le formulaire « Rapide » (ajout rapide de contribution, bouton en haut de `/contributions`) a des champs illisibles — le texte tapé dans « Montant », « Telephone paiement », « Reference » est invisible (texte blanc sur fond blanc, `Input.tsx` ne fixe pas de couleur de texte explicite et hérite du thème sombre du reste du tableau de bord), et le menu déroulant des champs « Membre »/« Rubrique »/« Mode » (`SearchableSelect.tsx`) existe dans le DOM mais ne s'affiche pas visuellement (clic sur une option = interprété comme un clic extérieur, donc inutilisable à la souris). Contournement utilisé pendant les tests : taper la recherche puis flèche bas + Entrée au clavier, qui fonctionne car piloté par l'état React indépendamment du rendu visuel. Le stepper « Guidé » (bouton à côté de « Rapide ») n'a pas ce problème et est recommandé en attendant un correctif. Cette dette est cohérente avec celle déjà notée pour `Input.tsx`/`Button.tsx`/etc. lors de la refonte thème sombre (voir mémoire `project-sgm-cem`).
+
+---
+
 ## 1. IDENTIFIANTS ET CONFIGURATION
 
 ### Clé API et URL de base

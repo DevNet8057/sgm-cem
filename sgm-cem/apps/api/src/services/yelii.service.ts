@@ -21,6 +21,20 @@ export interface YeliiPaymentResult {
 }
 
 /**
+ * Statut distant d'une transaction Yelii.
+ * 'unknown' = impossible de savoir (réseau, HTTP non-OK, clé absente) —
+ * distinct de 'failed' : ne doit JAMAIS déclencher d'écriture en base.
+ */
+export type YeliiRemoteStatus = 'processing' | 'success' | 'failed' | 'unknown'
+
+/** Statut distant enrichi — `amount` et `netCredited` sont absents si Yelii ne les fournit pas. */
+export interface YeliiTransactionStatus {
+  status: YeliiRemoteStatus
+  amount?: number
+  netCredited?: number
+}
+
+/**
  * Vérifie qu'un webhook entrant vient vraiment de Yelii.
  * À appeler EN PREMIER dans le handler webhook, avant tout traitement.
  */
@@ -144,28 +158,68 @@ export async function retryYeliiCallback(transactionId: string): Promise<{ sent:
 }
 
 /**
- * Consulte le statut d'une transaction Yelii.
- * Utilisé en fallback si le webhook n'est pas reçu.
+ * Consulte le statut d'une transaction Yelii, avec les montants associés
+ * (`amount`, `netCredited`) quand Yelii les fournit — nécessaire à l'appelant
+ * pour vérifier la cohérence du montant avant de confirmer un paiement
+ * (contrôle anti-fraude, cf. webhooks/yelii.webhook.ts).
+ * Utilisé en fallback si le webhook n'est pas reçu (polling toutes les 5s).
+ * 'unknown' en cas d'incident (réseau, timeout, HTTP non-OK, clé absente,
+ * échec applicatif Yelii) : l'appelant ne doit jamais interpréter une simple
+ * micro-coupure comme un échec de paiement.
  */
-export async function getYeliiStatus(transactionId: string): Promise<'processing' | 'success' | 'failed' | 'cancelled'> {
-  try {
-    const { baseUrl, apiKey } = getYeliiConfig()
-    if (!apiKey) return 'failed'
-
-    const response = await fetch(
-      `${baseUrl}/collect/status/${transactionId}`,
-      { headers: { 'X-Collect-Api-Key': apiKey } }
-    )
-
-    if (!response.ok) return 'failed'
-
-    const payload = (await response.json()) as { data?: { status?: string }; status?: string }
-    const s: string = String(payload?.data?.status ?? payload?.status ?? 'processing').toLowerCase()
-
-    if (s === 'success' || s === 'successful' || s === 'completed') return 'success'
-    if (s === 'failed' || s === 'cancelled') return 'failed'
-    return 'processing'
-  } catch {
-    return 'failed'
+export async function getYeliiTransaction(transactionId: string): Promise<YeliiTransactionStatus> {
+  const { baseUrl, apiKey } = getYeliiConfig()
+  if (!apiKey) {
+    console.warn('[Yelii] Clé API absente — statut indéterminé')
+    return { status: 'unknown' }
   }
+
+  let response: Response
+  try {
+    response = await fetch(
+      `${baseUrl}/collect/status/${transactionId}`,
+      { headers: { 'X-Collect-Api-Key': apiKey }, signal: AbortSignal.timeout(8000) }
+    )
+  } catch (err) {
+    console.warn('[Yelii] Erreur réseau ou délai dépassé lors de la consultation du statut — statut indéterminé', err)
+    return { status: 'unknown' }
+  }
+
+  if (!response.ok) {
+    console.warn(`[Yelii] Réponse HTTP ${response.status} — statut indéterminé`)
+    return { status: 'unknown' }
+  }
+
+  const payload = await response.json().catch(() => null) as {
+    success?: boolean
+    message?: string
+    data?: { status?: string; amount?: number; netCredited?: number }
+    status?: string
+  } | null
+  if (!payload) {
+    console.warn('[Yelii] Corps de réponse illisible — statut indéterminé')
+    return { status: 'unknown' }
+  }
+
+  if (payload.success === false) {
+    console.warn('[Yelii] Échec applicatif signalé par Yelii — statut indéterminé', payload.message)
+    return { status: 'unknown' }
+  }
+
+  const s: string = String(payload?.data?.status ?? payload?.status ?? 'processing').toLowerCase()
+  const amount = typeof payload?.data?.amount === 'number' ? payload.data.amount : undefined
+  const netCredited = typeof payload?.data?.netCredited === 'number' ? payload.data.netCredited : undefined
+
+  if (s === 'success' || s === 'successful' || s === 'completed') return { status: 'success', amount, netCredited }
+  if (s === 'failed' || s === 'cancelled') return { status: 'failed', amount, netCredited }
+  return { status: 'processing', amount, netCredited }
+}
+
+/**
+ * Consulte le statut d'une transaction Yelii (sans les montants).
+ * Utilisé par jobs/payment-reconciliation.ts — mince adaptateur au-dessus
+ * de getYeliiTransaction pour conserver une signature publique stable.
+ */
+export async function getYeliiStatus(transactionId: string): Promise<YeliiRemoteStatus> {
+  return (await getYeliiTransaction(transactionId)).status
 }

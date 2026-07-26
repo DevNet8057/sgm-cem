@@ -20,6 +20,7 @@ import { audit } from '../services/audit.service'
 import { getConfigBool, getConfigNumber } from '../services/config.service'
 import { initiateYeliiPayment } from '../services/yelii.service'
 import { initiateCinetpayPayment } from '../services/cinetpay.service'
+import { syncYeliiContributionStatus, CONTRIBUTION_SYNC_SELECT } from '../services/payment-status.service'
 import {
   buildDynamicSchema,
   generateDraftToken,
@@ -404,18 +405,23 @@ router.get('/payments/:contributionId/status', statusLimiter, async (req, res) =
 
   const contribution = await prisma.contribution.findUnique({
     where: { id: contributionId },
-    select: { id: true, statut: true, paymentStatus: true, receiptUrl: true },
+    select: CONTRIBUTION_SYNC_SELECT,
   })
 
   if (!contribution) throw draftNotFoundError()
 
+  // Repli direct sur Yelii : en dev le webhook n'arrive jamais et le job de
+  // réconciliation n'agit qu'après 15 min — sans ça l'écran d'attente du
+  // contributeur reste figé sur un statut périmé.
+  const synced = await syncYeliiContributionStatus(contribution)
+
   res.json({
     success: true,
     data: {
-      id: contribution.id,
-      statut: contribution.statut,
-      paymentStatus: contribution.paymentStatus,
-      receiptUrl: contribution.receiptUrl ?? null,
+      id: synced.id,
+      statut: synced.statut,
+      paymentStatus: synced.paymentStatus,
+      receiptUrl: synced.receiptUrl ?? null,
     },
   })
 })

@@ -1,6 +1,6 @@
 // Collecte publique (P2) — routes /api/public/*, SANS authentification.
 // Le paiement Yelii est MOCKÉ : ces tests ne doivent jamais toucher le réseau.
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest'
 import request from 'supertest'
 import { Prisma } from '@prisma/client'
 import app from '../src/index'
@@ -345,6 +345,18 @@ describe('5. Idempotence — anti double-clic', () => {
 })
 
 describe('6. GET /payments/:id/status — polling lié au brouillon', () => {
+  // La route de statut interroge désormais Yelii en repli (syncYeliiContributionStatus) :
+  // on interdit tout appel réseau sortant depuis la suite de tests en faisant échouer
+  // fetch — getYeliiStatus retombe alors sur 'unknown' et ne modifie rien, ce qui
+  // reproduit exactement le comportement observé jusqu'ici (Yelii injoignable en test).
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('réseau interdit en test')))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('avec le bon token → 200', async () => {
     const res = await request(app)
       .get(`/api/public/payments/${contributionId}/status`)

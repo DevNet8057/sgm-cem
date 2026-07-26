@@ -115,8 +115,12 @@ async function processYeliiWebhook(envelope: YeliiEnvelope) {
   }
 
   if (SUCCESS_STATUSES.has(status)) {
-    await prisma.contribution.update({
-      where: { id: contribution.id },
+    // Écriture conditionnelle : la route de polling (payment-status.service.ts,
+    // appelée toutes les 5s) peut confirmer la contribution entre le findFirst
+    // ci-dessus et cette écriture. La condition sur statut='EN_ATTENTE_CONFIRMATION'
+    // rend l'opération atomique et évite un double reçu/double notification.
+    const { count } = await prisma.contribution.updateMany({
+      where: { id: contribution.id, statut: 'EN_ATTENTE_CONFIRMATION' },
       data: {
         statut: 'CONFIRME',
         confirmedAt: new Date(), // RB-01 : horodatage serveur
@@ -128,6 +132,11 @@ async function processYeliiWebhook(envelope: YeliiEnvelope) {
         localisationFonds: 'REMIS_TRESORIER',
       },
     })
+
+    if (count === 0) {
+      console.info(`[Yelii] ${transactionId} — déjà confirmé par un autre chemin (polling/réconciliation), webhook ignoré`)
+      return
+    }
 
     const receiptUrl = await generateReceiptPDF(contribution.id)
     const msg = `CEM Melen - Paiement confirmé\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${contribution.rubrique.title}\nMerci pour votre contribution !`
@@ -143,10 +152,17 @@ async function processYeliiWebhook(envelope: YeliiEnvelope) {
 
     console.info(`[Yelii] ✅ ${transactionId} — confirmé (net: ${netCredited} FCFA)`)
   } else if (FAILED_STATUSES.has(status)) {
-    await prisma.contribution.update({
-      where: { id: contribution.id },
+    // Même garde que la branche succès : évite une double notification d'échec
+    // si le polling a déjà tranché le statut entre-temps.
+    const { count } = await prisma.contribution.updateMany({
+      where: { id: contribution.id, statut: 'EN_ATTENTE_CONFIRMATION' },
       data: { statut: 'ANNULE', paymentStatus: 'FAILED' },
     })
+
+    if (count === 0) {
+      console.info(`[Yelii] ${transactionId} — déjà confirmé par un autre chemin (polling/réconciliation), webhook ignoré`)
+      return
+    }
 
     if (memberPhone) {
       const failedMsg = `CEM Melen - Paiement échoué\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${contribution.rubrique.title}\nRéessayez ou contactez un collecteur.`

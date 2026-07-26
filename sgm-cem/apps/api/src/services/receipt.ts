@@ -153,7 +153,7 @@ export async function generateReceiptHtml(contributionId: string): Promise<strin
       </tr>
       ${hasCommission ? `
       <tr class="commission">
-        <td class="desc">Frais de transaction Mobile Money (2,5&#37;, à charge du contributeur)</td>
+        <td class="desc">Frais de transaction Mobile Money (à charge du contributeur)</td>
         <td class="num">+ ${formatXAF(contribution.commissionPaidByPayer ?? 0)}</td>
       </tr>` : ''}
     </tbody>

@@ -62,17 +62,26 @@ export async function runPaymentReconciliation(): Promise<{ checked: number; con
     if (!contribution.externalTransactionId) continue
 
     const status = await getYeliiStatus(contribution.externalTransactionId)
-    if (status === 'processing') continue // toujours en attente, on revérifiera au prochain passage
+    // 'unknown' = Yelii injoignable : on ne conclut RIEN, on revérifiera au prochain passage.
+    if (status === 'processing' || status === 'unknown') continue // toujours en attente, on revérifiera au prochain passage
 
     const memberPhone = contribution.membre?.user.whatsappPhone ?? contribution.membre?.user.phone
     const memberName = contribution.membre?.user.fullName ?? 'Membre'
     const montantStr = contribution.montant.toLocaleString('fr-FR')
 
     if (status === 'success') {
-      await prisma.contribution.update({
-        where: { id: contribution.id },
+      // Garde atomique : le polling de statut (payment-status.service) peut avoir déjà
+      // confirmé cette contribution entre le findMany ci-dessus et cette écriture. On ne
+      // transitionne que si elle est toujours EN_ATTENTE_CONFIRMATION, pour éviter un
+      // second reçu PDF / second WhatsApp et un double comptage.
+      const { count } = await prisma.contribution.updateMany({
+        where: { id: contribution.id, statut: 'EN_ATTENTE_CONFIRMATION' },
         data: { statut: 'CONFIRME', confirmedAt: new Date(), paymentStatus: 'SUCCESS', localisationFonds: 'REMIS_TRESORIER' },
       })
+      if (count === 0) {
+        console.info(`[Reconciliation] ${contribution.externalTransactionId} — déjà traité par un autre chemin (polling), ignoré`)
+        continue
+      }
 
       const receiptUrl = await generateReceiptPDF(contribution.id)
       const msg = `CEM Melen - Paiement confirmé\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${contribution.rubrique.title}\nMerci pour votre contribution !`
@@ -85,10 +94,16 @@ export async function runPaymentReconciliation(): Promise<{ checked: number; con
       console.info(`[Reconciliation] ✅ ${contribution.externalTransactionId} — confirmé via polling`)
       confirmed++
     } else {
-      await prisma.contribution.update({
-        where: { id: contribution.id },
+      // Même garde atomique que pour la branche succès : évite d'annuler une contribution
+      // déjà confirmée entre-temps par le polling.
+      const { count } = await prisma.contribution.updateMany({
+        where: { id: contribution.id, statut: 'EN_ATTENTE_CONFIRMATION' },
         data: { statut: 'ANNULE', paymentStatus: 'FAILED' },
       })
+      if (count === 0) {
+        console.info(`[Reconciliation] ${contribution.externalTransactionId} — déjà traité par un autre chemin (polling), ignoré`)
+        continue
+      }
 
       if (memberPhone) {
         await sendWhatsApp(memberPhone, `CEM Melen - Paiement échoué\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${contribution.rubrique.title}\nRéessayez ou contactez un collecteur.`)

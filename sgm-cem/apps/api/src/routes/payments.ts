@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
+import { AppError } from '../middleware/errorHandler'
 import { initiateYeliiPayment, retryYeliiCallback } from '../services/yelii.service'
 import { initiateCinetpayPayment } from '../services/cinetpay.service'
 import { generateReceiptPDF } from '../services/receipt'
@@ -9,6 +10,7 @@ import { calculateAmountWithCommission, YELII_COMMISSION_RATE } from '@sgm-cem/s
 import { getPrisma } from '../lib/prisma'
 import { getConfigBool, getConfigNumber } from '../services/config.service'
 import { audit } from '../services/audit.service'
+import { syncYeliiContributionStatus, CONTRIBUTION_SYNC_SELECT } from '../services/payment-status.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -225,6 +227,9 @@ router.get('/config', authenticate, async (_req, res) => {
  * GET /api/payments/status/:id
  * Polling du statut par ID de contribution (le frontend envoie contrib.id).
  * Accepte aussi externalTransactionId en fallback.
+ * Repli direct sur Yelii avant de répondre : en dev local le webhook n'arrive
+ * jamais, et le job de réconciliation n'agit qu'après 15 min, bien au-delà
+ * des 5 min de polling du stepper — sans ce repli l'écran resterait figé.
  */
 router.get('/status/:id', authenticate, requireLevel(2), async (req, res) => {
   const id = String(req.params.id)
@@ -236,26 +241,20 @@ router.get('/status/:id', authenticate, requireLevel(2), async (req, res) => {
         { externalTransactionId: id },
       ],
     },
-    select: {
-      id: true,
-      statut: true,
-      paymentStatus: true,
-      montant: true,
-      receiptUrl: true,
-    },
+    select: CONTRIBUTION_SYNC_SELECT,
   })
 
-  if (!contribution) {
-    return res.status(404).json({ success: false, error: 'Contribution inconnue' })
-  }
+  if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
+
+  const synced = await syncYeliiContributionStatus(contribution)
 
   res.json({
     success: true,
     data: {
-      id: contribution.id,
-      statut: contribution.statut,
-      paymentStatus: contribution.paymentStatus,
-      receiptUrl: contribution.receiptUrl ?? null,
+      id: synced.id,
+      statut: synced.statut,
+      paymentStatus: synced.paymentStatus,
+      receiptUrl: synced.receiptUrl ?? null,
     },
   })
 })
