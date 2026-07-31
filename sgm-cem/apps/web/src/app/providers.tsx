@@ -7,6 +7,7 @@ import { MotionConfig } from 'framer-motion'
 import { useState, useEffect } from 'react'
 import { initCsrf } from '@/lib/api'
 import { lightTheme } from '@/lib/antd-theme'
+import { SplashScreen } from '@/components/ui/SplashScreen'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
@@ -29,6 +30,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     // jamais changer le rendu initial SSR — évite le mismatch d'hydratation
     // que provoquerait un branchement manuel (initial={reduceMotion ? false : …}).
     <MotionConfig reducedMotion="user">
+      <SplashScreen />
       <AntdRegistry layer>
         <ConfigProvider locale={fr_FR} theme={lightTheme}>
           <App>

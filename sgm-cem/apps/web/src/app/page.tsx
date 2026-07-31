@@ -263,7 +263,7 @@ export default function LoginPage() {
           style={{ background: 'radial-gradient(circle,#F5C400,transparent)', opacity: 0.08 }} />
 
         <div className="relative z-10 w-full max-w-[520px]">
-          <BrandMark size={48} variant="compact" alt="Logo CEM" className="mb-6" />
+          <BrandMark size={48} variant="compact" alt="Logo CEM" className="mb-6" priority />
           <h1 className="font-display text-white text-[clamp(32px,3vw,36px)] font-semibold leading-tight mb-4">
             Système de Gestion<br />du Ministère
           </h1>
@@ -292,7 +292,7 @@ export default function LoginPage() {
         <Card className="!rounded-none !border-0 shadow-none sm:!rounded-3xl sm:!border-white/80 sm:shadow-[0_24px_70px_rgba(15,74,15,0.12)]" styles={{ body: { padding: 'clamp(20px, 5vw, 36px)' } }}>
           {/* Logo mobile */}
           <div className="lg:hidden flex justify-center mb-6">
-            <BrandMark size={56} variant="compact" alt="Logo CEM" />
+            <BrandMark size={56} variant="compact" alt="Logo CEM" priority />
           </div>
 
           <Typography.Title level={2} className="!mb-1 !text-[#0F4A0F]">Connexion</Typography.Title>

@@ -11,6 +11,7 @@ interface BrandMarkProps {
   label?: string
   alt?: string
   decorative?: boolean
+  priority?: boolean
 }
 
 const VARIANTS: Record<BrandMarkVariant, string> = {
@@ -26,6 +27,7 @@ export function BrandMark({
   label,
   alt = 'SGM-CEM',
   decorative = false,
+  priority = false,
 }: BrandMarkProps) {
   const accessibleAlt = decorative ? '' : alt
 
@@ -43,6 +45,7 @@ export function BrandMark({
         height={size}
         alt={accessibleAlt}
         aria-hidden={decorative || undefined}
+        priority={priority}
         className="shrink-0 rounded-full object-cover"
       />
       {label && variant !== 'compact' ? (

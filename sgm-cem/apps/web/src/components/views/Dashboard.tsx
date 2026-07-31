@@ -61,8 +61,12 @@ export function Dashboard() {
   const years = Array.from({ length: 7 }, (_, index) => currentYear - 4 + index)
   const motionProps = { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.35 } }
 
+  // flex/gap plutôt que space-y (margin-based) : antd réinitialise margin-bottom
+  // sur .ant-card, ce qui annule silencieusement l'espacement Tailwind entre les
+  // Card/Panel du dashboard et l'élément suivant — gap sur un conteneur flex ne
+  // peut pas être écrasé par la marge d'un enfant.
   return (
-    <motion.div {...motionProps} className="space-y-4 p-4 pb-20 md:space-y-6 md:p-6 lg:pb-6">
+    <motion.div {...motionProps} className="flex flex-col gap-4 p-4 pb-20 md:gap-6 md:p-6 lg:pb-6">
       <Card
         variant="borderless"
         className="overflow-hidden shadow-lg"
