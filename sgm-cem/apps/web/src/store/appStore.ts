@@ -5,6 +5,11 @@ interface Toast extends ToastOptions {
   id: string
 }
 
+interface FocusTarget {
+  view: string
+  id?: string
+}
+
 interface AppState {
   activeView: string
   setActiveView: (v: string) => void
@@ -20,6 +25,12 @@ interface AppState {
   removeToast: (id: string) => void
   pendingTransfersCount: number
   setPendingTransfersCount: (count: number) => void
+  // Redirection contextuelle au clic sur une notification (voir Notification.targetView/targetId).
+  // Un seul mécanisme générique consommé par les vues via le hook useFocusHighlight —
+  // pas de logique par type de notification à maintenir côté frontend.
+  focusTarget: FocusTarget | null
+  navigateToNotification: (n: { targetView?: string; targetId?: string }) => void
+  clearFocusTarget: () => void
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -54,4 +65,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   pendingTransfersCount: 0,
   setPendingTransfersCount: (count) => set({ pendingTransfersCount: count }),
+
+  focusTarget: null,
+  navigateToNotification: (n) => {
+    if (!n.targetView) return
+    set({ activeView: n.targetView, sidebarOpen: false, focusTarget: { view: n.targetView, id: n.targetId } })
+  },
+  clearFocusTarget: () => set({ focusTarget: null }),
 }))

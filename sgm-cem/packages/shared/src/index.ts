@@ -10,3 +10,11 @@ export {
   type CollectePubliqueDef,
   type ContributeurExterneInfo,
 } from './collectes'
+
+export {
+  resolveDueAmount,
+  calculateRemainingBalance,
+  type ProfilFinancier,
+  type RubriqueAmounts,
+  type RemainingBalance,
+} from './contribution-balance'

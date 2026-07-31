@@ -18,7 +18,7 @@ const TYPE_CONFIG: Record<string, { label: string; color: string }> = {
 
 export function Notifications() {
   const queryClient = useQueryClient()
-  const { setNotifications, markRead, markAllRead } = useAppStore()
+  const { setNotifications, markRead, markAllRead, navigateToNotification } = useAppStore()
 
   const { data = [], isLoading } = useQuery({
     queryKey: ['notifications'],
@@ -50,6 +50,11 @@ export function Notifications() {
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
     },
   })
+
+  function openNotification(notification: Notification) {
+    if (!notification.isRead) readOne.mutate(notification.id)
+    if (notification.targetView) navigateToNotification(notification)
+  }
 
   return (
     <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter">
@@ -104,9 +109,14 @@ export function Notifications() {
             return (
               <article
                 key={notification.id}
+                onClick={() => openNotification(notification)}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNotification(notification) } }}
+                role={notification.targetView ? 'button' : undefined}
+                tabIndex={notification.targetView ? 0 : undefined}
                 className={cn(
                   'interactive flex flex-col gap-3 rounded-[14px] border border-gray-100 bg-white p-4 hover:shadow-cem-sm sm:flex-row sm:items-start sm:justify-between',
-                  !notification.isRead ? 'bg-[#F2FFF4]' : 'hover:bg-gray-50/60'
+                  !notification.isRead ? 'bg-[#F2FFF4]' : 'hover:bg-gray-50/60',
+                  notification.targetView && 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/40'
                 )}
               >
                 <div className="flex gap-3">
@@ -135,7 +145,7 @@ export function Notifications() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => readOne.mutate(notification.id)}
+                    onClick={e => { e.stopPropagation(); readOne.mutate(notification.id) }}
                     loading={readOne.isPending}
                     className="self-start shrink-0"
                   >

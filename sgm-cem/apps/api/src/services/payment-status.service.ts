@@ -109,7 +109,8 @@ async function runSync(
           await alertTresoriers(
             'Montant incohérent — paiement Mobile Money',
             `${expectedCharged.toLocaleString('fr-FR')} FCFA attendu, ${remote.amount.toLocaleString('fr-FR')} FCFA reçu (transaction ${txId})`,
-            { contributionId: contribution.id, transactionId: txId, expectedAmount: expectedCharged, receivedAmount: remote.amount }
+            { contributionId: contribution.id, transactionId: txId, expectedAmount: expectedCharged, receivedAmount: remote.amount },
+            { view: 'contributions', id: contribution.id }
           )
           mismatchAlerted.add(txId)
         }

@@ -141,6 +141,7 @@ enum AuditAction {
   LOGIN
   LOGOUT
   CONFIRM
+  CONFIRM_OVERRIDE // confirmation par un rôle hiérarchique supérieur au collecteur désigné (traçabilité distincte)
   REJECT
   APPROVE
   TRANSFER
@@ -693,6 +694,15 @@ model Notification {
   title     String
   body      String
   type      String
+  // Redirection contextuelle au clic (notifications cliquables) : targetView
+  // réutilise exactement les valeurs de activeView (Sidebar/dashboard router,
+  // ex. 'validations', 'transfer-validations', 'mes-contributions') pour que
+  // le frontend n'ait qu'un seul gestionneur générique à maintenir — pas de
+  // logique par type. targetId = id de l'entité à focus une fois sur la vue
+  // (contributionId, transferId…). `data` reste pour du contexte additionnel
+  // non structurel (ex: broadcast admin, montants d'une alerte).
+  targetView String?
+  targetId   String?
   data      Json?
   isRead    Boolean            @default(false)
   statut    NotificationStatut @default(PENDING)

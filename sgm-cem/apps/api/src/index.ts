@@ -23,7 +23,6 @@ import { settingsRouter } from './routes/settings'
 import { notificationsRouter } from './routes/notifications'
 import { profileRouter } from './routes/profile'
 import { fundsRouter } from './routes/funds'
-import { webhooksRouter } from './routes/webhooks'
 import { developerRouter } from './routes/developer'
 import { usersRouter } from './routes/users'
 import { auditRouter } from './routes/audit'
@@ -174,7 +173,6 @@ app.use('/api/settings', settingsRouter)
 app.use('/api/notifications', notificationsRouter)
 app.use('/api/profile', profileRouter)
 app.use('/api/funds', fundsRouter)
-app.use('/api/webhooks', webhooksRouter)
 app.use('/api/developer', developerRouter) // panneau développeur — requireDeveloper strict
 app.use('/api/users', usersRouter) // gestion des comptes (ADMIN/DEVELOPER) — n'était jamais monté (fix 2026-07-05)
 app.use('/api/audit', auditRouter) // journal « qui a fait quoi » — périmètre filtré par rôle dans la route
@@ -194,8 +192,9 @@ if (process.env.NODE_ENV !== 'test') {
   // Charger la configuration technique depuis la base AVANT d'accepter du trafic
   // (DEVELOPER_PANEL_SGM_CEM.md §3 — la DB est la source de vérité à l'exécution)
   void loadConfigCache().finally(() => {
-    server.listen(PORT, () => {
-      console.log(`✅ SGM-CEM API running on port ${PORT}`)
+    const HOST = process.env.HOST ?? '0.0.0.0'
+    server.listen(Number(PORT), HOST, () => {
+      console.log(`✅ SGM-CEM API running on ${HOST}:${PORT}`)
     })
     schedulePaymentReconciliation()
     scheduleMonthlyCron()

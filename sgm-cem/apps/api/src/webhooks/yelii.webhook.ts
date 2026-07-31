@@ -3,7 +3,7 @@ import express from 'express'
 import { verifyYeliiSignature } from '../services/yelii.service'
 import { getPrisma } from '../lib/prisma'
 import { generateReceiptPDF } from '../services/receipt'
-import { sendWhatsAppDocument, sendWhatsApp, alertTresoriers } from '../services/notification'
+import { sendWhatsAppDocument, sendWhatsApp, alertTresoriers, notifyMemberConfirmed } from '../services/notification'
 import { broadcastToAll } from '../lib/socket'
 
 const router = Router()
@@ -70,7 +70,7 @@ async function processYeliiWebhook(envelope: YeliiEnvelope) {
     include: {
       membre: {
         include: {
-          user: { select: { id: true, phone: true, whatsappPhone: true, fullName: true } },
+          user: { select: { id: true, phone: true, whatsappPhone: true, fullName: true, email: true } },
         },
       },
       // contribution publique : pas de membre, notifier le contributeur externe
@@ -109,7 +109,8 @@ async function processYeliiWebhook(envelope: YeliiEnvelope) {
     await alertTresoriers(
       'Montant incohérent — paiement Mobile Money',
       `${memberName} · attendu ${expectedCharged.toLocaleString('fr-FR')} FCFA, reçu ${amount.toLocaleString('fr-FR')} FCFA (transaction ${transactionId})`,
-      { contributionId: contribution.id, transactionId, expectedAmount: expectedCharged, receivedAmount: amount }
+      { contributionId: contribution.id, transactionId, expectedAmount: expectedCharged, receivedAmount: amount },
+      { view: 'contributions', id: contribution.id }
     )
     return
   }
@@ -141,7 +142,28 @@ async function processYeliiWebhook(envelope: YeliiEnvelope) {
     const receiptUrl = await generateReceiptPDF(contribution.id)
     const msg = `CEM Melen - Paiement confirmé\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${contribution.rubrique.title}\nMerci pour votre contribution !`
 
-    if (memberPhone) {
+    // Membre avec compte : notifyMemberConfirmed regroupe in-app (cliquable,
+    // targetView='mes-contributions') + WhatsApp + email en un seul appel —
+    // avant cet ajout, seul un WhatsApp partait ici, sans notification in-app.
+    // Contributeur externe (collecte publique, pas de compte User) : WhatsApp
+    // seul, comportement inchangé, notifyMemberConfirmed ne s'applique pas
+    // (elle exige un userId).
+    if (contribution.membre) {
+      try {
+        await notifyMemberConfirmed({
+          userId: contribution.membre.user.id,
+          memberPhone,
+          memberEmail: contribution.membre.user.email,
+          memberName,
+          montant: contribution.montant,
+          rubriqueCode: contribution.rubrique.code,
+          receiptUrl,
+          contributionId: contribution.id,
+        })
+      } catch (e) {
+        console.error('[Notification] Échec notification membre (webhook Yelii):', e)
+      }
+    } else if (memberPhone) {
       let sent = false
       if (receiptUrl) sent = await sendWhatsAppDocument(memberPhone, receiptUrl, msg)
       if (!sent) await sendWhatsApp(memberPhone, msg)

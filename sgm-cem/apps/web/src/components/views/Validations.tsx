@@ -9,6 +9,9 @@ import { Button } from '@/components/ui/Button'
 import { SkeletonTableRow } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Modal } from '@/components/ui/Modal'
+import { ReceiptSuccessModal } from '@/components/contributions/ReceiptSuccessModal'
+import { useFocusHighlight } from '@/hooks/useFocusHighlight'
+import { cn } from '@/lib/utils'
 import type { Contribution } from '@/types'
 
 export function Validations() {
@@ -16,6 +19,14 @@ export function Validations() {
   const [disputeId, setDisputeId] = useState<string | null>(null)
   const [motif, setMotif] = useState('')
   const [motifError, setMotifError] = useState('')
+  const [confirmError, setConfirmError] = useState('')
+  const [receiptTarget, setReceiptTarget] = useState<{
+    contributionId: string
+    initialReceiptUrl: string | null
+    memberName?: string
+    amount?: number
+    rubriqueLabel?: string
+  } | null>(null)
 
   const { data, isLoading } = useQuery<Contribution[]>({
     queryKey: ['validations'],
@@ -25,7 +36,24 @@ export function Validations() {
 
   const confirm = useMutation({
     mutationFn: async (id: string) => api.patch(`/contributions/${id}/confirm`),
-    onSuccess: refreshCore,
+    onSuccess: (res, id) => {
+      const contribution = data?.find(item => item.id === id)
+
+      setConfirmError('')
+      setReceiptTarget({
+        contributionId: id,
+        initialReceiptUrl: res.data.data.receiptUrl ?? null,
+        memberName: contribution?.membre?.user.fullName,
+        amount: contribution?.montant,
+        rubriqueLabel: contribution?.rubrique?.title,
+      })
+      void refreshCore()
+    },
+    onError: () => {
+      setConfirmError(
+        'Impossible de confirmer ce paiement. Vérifiez votre connexion puis réessayez.'
+      )
+    },
   })
 
   const dispute = useMutation({
@@ -53,6 +81,11 @@ export function Validations() {
     setMotifError('')
   }
 
+  function confirmContribution(id: string) {
+    setConfirmError('')
+    confirm.mutate(id)
+  }
+
   function submitDispute() {
     if (motif.trim().length < 10) {
       setMotifError('Le motif doit faire au moins 10 caractères')
@@ -63,6 +96,7 @@ export function Validations() {
 
   const validations = data ?? []
   const total = validations.reduce((sum, c) => sum + c.montant, 0)
+  const highlightedId = useFocusHighlight(validations.map(c => c.id))
 
   return (
     <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter">
@@ -86,6 +120,16 @@ export function Validations() {
           )}
         </div>
       </div>
+
+      {confirmError && (
+        <div
+          className="mb-4 flex items-start gap-2 rounded-[14px] border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          role="alert"
+        >
+          <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+          <p>{confirmError}</p>
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-white rounded-[18px] border border-gray-100 overflow-hidden shadow-[0_2px_12px_rgba(15,74,15,0.06)]">
@@ -117,7 +161,10 @@ export function Validations() {
                 </td></tr>
               ) : (
                 validations.map(c => (
-                  <tr key={c.id} className="border-b border-gray-50 hover:bg-[#1A6B1A]/4 transition-colors">
+                  <tr key={c.id} data-focus-id={c.id} className={cn(
+                    'border-b border-gray-50 hover:bg-[#1A6B1A]/4 transition-colors',
+                    highlightedId === c.id && 'bg-[#FFFBEB] ring-2 ring-inset ring-[#F5C400]'
+                  )}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
                         <Avatar name={c.membre?.user.fullName ?? '—'} size="sm" />
@@ -149,7 +196,7 @@ export function Validations() {
                         <Button
                           size="sm"
                           loading={confirm.isPending}
-                          onClick={() => confirm.mutate(c.id)}
+                          onClick={() => confirmContribution(c.id)}
                         >
                           <CheckCircle2 size={13} />
                           Confirmer
@@ -217,6 +264,18 @@ export function Validations() {
           </div>
         </div>
       </Modal>
+
+      {receiptTarget && (
+        <ReceiptSuccessModal
+          open={!!receiptTarget}
+          contributionId={receiptTarget.contributionId}
+          initialReceiptUrl={receiptTarget.initialReceiptUrl}
+          memberName={receiptTarget.memberName}
+          amount={receiptTarget.amount}
+          rubriqueLabel={receiptTarget.rubriqueLabel}
+          onClose={() => setReceiptTarget(null)}
+        />
+      )}
 
       {/* KPI footer */}
       {validations.length > 0 && (

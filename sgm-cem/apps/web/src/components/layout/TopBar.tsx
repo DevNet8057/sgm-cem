@@ -2,7 +2,7 @@
 import { useRef } from 'react'
 import { Bell, ChevronDown, LogOut, Menu as MenuIcon, UserCircle } from 'lucide-react'
 import { Badge, Button, Dropdown, Tooltip, type MenuProps } from 'antd'
-import { motion, useReducedMotion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import api from '@/lib/api'
 import { useAppStore } from '@/store/appStore'
@@ -85,7 +85,6 @@ function playNotifSound() {
 export function TopBar() {
   const { setSidebarOpen, setActiveView, setNotifications, addToast, activeView, unreadCount } = useAppStore()
   const { user, logout } = useAuthStore()
-  const reduceMotion = useReducedMotion()
   const seenIds = useRef<Set<string>>(new Set())
   const firstLoad = useRef(true)
 
@@ -134,22 +133,20 @@ export function TopBar() {
     <header
       className="sticky top-0 z-[200] flex h-16 items-center gap-2 border-b border-slate-200/80 bg-white/85 px-3 shadow-[0_1px_0_rgba(15,74,15,0.03)] backdrop-blur-xl sm:gap-3 sm:px-5"
     >
-      <Tooltip title="Ouvrir le menu" placement="bottom">
-        <Button
-          type="text"
-          shape="circle"
-          icon={<MenuIcon size={20} />}
-          onClick={() => setSidebarOpen(true)}
-          className="h-11! w-11! shrink-0 text-slate-600! hover:bg-emerald-50! hover:text-[#0F4A0F]! lg:hidden!"
-          aria-label="Ouvrir le menu de navigation"
-        />
-      </Tooltip>
+      <Button
+        type="text"
+        shape="circle"
+        icon={<MenuIcon size={20} />}
+        onClick={() => setSidebarOpen(true)}
+        className="h-11! w-11! shrink-0 text-slate-600! hover:bg-emerald-50! hover:text-[#0F4A0F]! lg:hidden!"
+        aria-label="Ouvrir le menu de navigation"
+      />
 
       <motion.div
         key={activeView}
-        initial={reduceMotion ? false : { opacity: 0, y: -4 }}
+        initial={{ opacity: 0, y: -4 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: reduceMotion ? 0 : 0.2 }}
+        transition={{ duration: 0.2 }}
         className="min-w-0 flex-1"
       >
         <p className="hidden text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 sm:block">SGM-CEM</p>

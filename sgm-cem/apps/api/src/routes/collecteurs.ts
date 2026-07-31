@@ -14,12 +14,6 @@ const transferSchema = z.object({
   note: z.string().max(500).optional(),
 })
 
-const transferToUserSchema = z.object({
-  contributionIds: z.array(z.string()).min(1).max(100),
-  toUserId: z.string().min(1),
-  note: z.string().max(500).optional(),
-})
-
 const claimSchema = z.object({
   contributionIds: z.array(z.string()).min(1).max(100),
   note: z.string().max(500).optional(),
@@ -150,6 +144,22 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
   })
 })
 
+router.get('/eligible-for-declaration', authenticate, requireLevel(1), async (_req, res) => {
+  const users = await prisma.user.findMany({
+    where: {
+      isActive: true,
+      role: { in: ['COLLECTEUR', 'TRESORIER'] },
+    },
+    select: { id: true, fullName: true, role: true },
+    orderBy: [
+      { fullName: 'asc' },
+      { role: 'asc' },
+    ],
+  })
+
+  res.json({ success: true, data: users })
+})
+
 router.patch('/transfer', authenticate, requireLevel(3), async (req, res) => {
   const data = transferSchema.parse(req.body)
 
@@ -191,79 +201,6 @@ router.patch('/transfer', authenticate, requireLevel(3), async (req, res) => {
           note: data.note,
           actorUserId: req.user!.userId,
           actorUserRole: req.user!.role,
-        },
-      })),
-    })
-
-    return result
-  })
-
-  res.json({ success: true, data: { updated: updated.count } })
-})
-
-router.patch('/transfer-to-user', authenticate, async (req, res) => {
-  const data = transferToUserSchema.parse(req.body)
-  const myRole = req.user!.role as 'DEVELOPER' | 'ADMIN' | 'TRESORIER' | 'RESPONSABLE' | 'ADJOINT_RESPONSABLE' | 'COLLECTEUR' | 'MEMBRE'
-  const myUserId = req.user!.userId
-
-  const targetUser = await prisma.user.findFirst({
-    where: {
-      id: data.toUserId,
-      isActive: true,
-      role: { in: ['TRESORIER', 'COLLECTEUR'] },
-    },
-    select: { id: true, fullName: true, role: true },
-  })
-  if (!targetUser) {
-    throw new AppError('INVALID_TARGET', 'Destinataire invalide', 400)
-  }
-
-  const where: Record<string, unknown> = {
-    id: { in: data.contributionIds },
-    statut: 'CONFIRME',
-    localisationFonds: 'CHEZ_COLLECTEUR',
-  }
-  if (myRole === 'COLLECTEUR') {
-    ;(where as { collecteurId?: string }).collecteurId = myUserId
-  }
-
-  const contributions = await prisma.contribution.findMany({
-    where,
-    select: { id: true, montant: true, collecteurId: true },
-  })
-  if (contributions.length !== data.contributionIds.length) {
-    throw new AppError('BUSINESS_RULE', "Transfert refuse : contributions invalides ou non autorisees", 403)
-  }
-
-  const nextLocation = targetUser.role === 'TRESORIER' ? 'EN_CAISSE' : 'CHEZ_COLLECTEUR'
-
-  const updated = await prisma.$transaction(async tx => {
-    const result = await tx.contribution.updateMany({
-      where: { id: { in: data.contributionIds } },
-      data: {
-        localisationFonds: nextLocation,
-        collecteurId: targetUser.id,
-      },
-    })
-
-    await tx.auditLog.createMany({
-      data: contributions.map(contribution => ({
-        userId: myUserId,
-        userName: req.user!.email,
-        action: 'TRANSFER',
-        entityType: 'Contribution',
-        entityId: contribution.id,
-        details: {
-          contributionId: contribution.id,
-          fromUserId: contribution.collecteurId,
-          fromUserName: req.user!.email,
-          toUserId: targetUser.id,
-          toUserName: targetUser.fullName,
-          toRole: targetUser.role,
-          toLocation: nextLocation,
-          note: data.note,
-          actorUserId: myUserId,
-          actorUserRole: myRole,
         },
       })),
     })

@@ -26,15 +26,48 @@ const initiateSchema = z.object({
 
 /**
  * POST /api/payments/initiate
- * Initie un paiement selon le mode choisi (espèces, mobile money, carte).
+ * Initie un paiement selon le mode choisi (mobile money, carte — staff uniquement
+ * pour espèces, voir plus bas).
+ *
+ * Deux appelants possibles :
+ *  - Staff (level ≥ 2) : `membreId` du body est celui d'un membre quelconque,
+ *    `collecteurId` = le staff qui traite le paiement (comportement historique).
+ *  - MEMBRE (level 1, self-service) : `membreId` du body DOIT correspondre au
+ *    membre connecté — toute autre valeur est explicitement rejetée (403), plutôt
+ *    que silencieusement substituée, pour ne jamais masquer une tentative de payer
+ *    "pour" un autre membre. ESPECES est refusé ici : un paiement en espèces déclaré par un
+ *    membre doit passer par POST /contributions/declare (double validation —
+ *    un collecteur humain doit confirmer avoir reçu l'argent). `collecteurId`
+ *    reste `null` (aucun staff n'a traité ce paiement digital) — pattern déjà
+ *    établi par les collectes publiques (routes/public.ts), voir le bucket
+ *    "sans-collecteur" dans GET /api/collecteurs.
  */
-router.post('/initiate', authenticate, requireLevel(2), async (req, res) => {
+router.post('/initiate', authenticate, requireLevel(1), async (req, res) => {
   const data = initiateSchema.parse(req.body)
+  const isSelfService = req.user!.role === 'MEMBRE'
+
+  if (isSelfService && data.modePaiement === 'ESPECES') {
+    throw new AppError(
+      'BUSINESS_RULE',
+      "Un paiement en espèces doit être déclaré via 'Déclarer un paiement en espèces' — un collecteur doit confirmer l'avoir reçu.",
+      400
+    )
+  }
+
+  let membreId = data.membreId
+  if (isSelfService) {
+    const membre = await prisma.membre.findFirst({ where: { userId: req.user!.userId }, select: { id: true } })
+    if (!membre) throw new AppError('NOT_FOUND', 'Profil membre introuvable pour ce compte', 404)
+    if (data.membreId !== membre.id) {
+      throw new AppError('ACCESS_DENIED', 'Vous ne pouvez initier un paiement que pour vous-même', 403)
+    }
+    membreId = membre.id
+  }
 
   // Protection double-clic : si une contribution PROCESSING existe déjà, la retourner
   const existingProcessing = await prisma.contribution.findFirst({
     where: {
-      membreId: data.membreId,
+      membreId,
       rubriqueId: data.rubriqueId,
       paymentStatus: 'PROCESSING',
     },
@@ -61,11 +94,13 @@ router.post('/initiate', authenticate, requireLevel(2), async (req, res) => {
 
   const contribution = await prisma.contribution.create({
     data: {
-      membreId: data.membreId,
+      membreId,
       rubriqueId: data.rubriqueId,
       montant: data.montant,
       modePaiement: storedMode,
-      collecteurId: req.user!.userId,
+      // Self-service (MEMBRE) : aucun staff n'a traité ce paiement digital —
+      // collecteurId reste null (déjà le cas pour les collectes publiques).
+      collecteurId: isSelfService ? null : req.user!.userId,
       statut: 'EN_ATTENTE_CONFIRMATION',
       paymentStatus: 'PENDING',
       localisationFonds: data.modePaiement === 'ESPECES' ? 'CHEZ_COLLECTEUR' : 'EN_TRANSIT',
@@ -149,10 +184,10 @@ router.post('/initiate', authenticate, requireLevel(2), async (req, res) => {
         paymentStatus: 'SUCCESS',
       },
     })
-    await generateReceiptPDF(contribution.id)
+    const receiptUrl = await generateReceiptPDF(contribution.id)
     return res.json({
       success: true,
-      data: { contributionId: contribution.id, status: 'SUCCESS' },
+      data: { contributionId: contribution.id, status: 'SUCCESS', receiptUrl },
     })
   }
 
@@ -160,7 +195,7 @@ router.post('/initiate', authenticate, requireLevel(2), async (req, res) => {
   if (data.modePaiement === 'CARTE_VISA') {
     const [membre, rubrique] = await Promise.all([
       prisma.membre.findUnique({
-        where: { id: data.membreId },
+        where: { id: membreId },
         include: { user: { select: { firstName: true, lastName: true } } },
       }),
       prisma.rubrique.findUnique({
@@ -231,7 +266,7 @@ router.get('/config', authenticate, async (_req, res) => {
  * jamais, et le job de réconciliation n'agit qu'après 15 min, bien au-delà
  * des 5 min de polling du stepper — sans ce repli l'écran resterait figé.
  */
-router.get('/status/:id', authenticate, requireLevel(2), async (req, res) => {
+router.get('/status/:id', authenticate, requireLevel(1), async (req, res) => {
   const id = String(req.params.id)
 
   const contribution = await prisma.contribution.findFirst({
@@ -245,6 +280,15 @@ router.get('/status/:id', authenticate, requireLevel(2), async (req, res) => {
   })
 
   if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
+
+  // MEMBRE : uniquement le suivi de son propre paiement.
+  if (req.user!.role === 'MEMBRE') {
+    const owner = await prisma.contribution.findUnique({ where: { id: contribution.id }, select: { membreId: true } })
+    const membre = await prisma.membre.findFirst({ where: { userId: req.user!.userId }, select: { id: true } })
+    if (!membre || owner?.membreId !== membre.id) {
+      throw new AppError('INSUFFICIENT_PERMISSIONS', 'Vous ne pouvez consulter que vos propres paiements', 403)
+    }
+  }
 
   const synced = await syncYeliiContributionStatus(contribution)
 

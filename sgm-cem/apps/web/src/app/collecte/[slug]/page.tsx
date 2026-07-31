@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import { useParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { Alert, Card, Result, Skeleton, Typography } from 'antd'
-import { motion, useReducedMotion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import api from '@/lib/api'
 import { PublicCollecteStepper } from '@/components/public/PublicCollecteStepper'
 import { BrandMark } from '@/components/ui/BrandMark'
@@ -14,7 +14,6 @@ import type { CollectePubliqueDef } from '@sgm-cem/shared'
 export default function CollectePubliquePage() {
   const params = useParams<{ slug: string }>()
   const slug = params.slug
-  const reduceMotion = useReducedMotion()
 
   const { data, isLoading, isError } = useQuery<CollectePubliqueDef>({
     queryKey: ['collecte-publique', slug],
@@ -23,9 +22,7 @@ export default function CollectePubliquePage() {
     retry: false,
   })
 
-  const animation = reduceMotion
-    ? undefined
-    : { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 } }
+  const animation = { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 } }
 
   if (isLoading) {
     return (

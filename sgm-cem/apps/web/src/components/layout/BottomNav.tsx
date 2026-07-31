@@ -1,7 +1,7 @@
 'use client'
 import { Bell, CreditCard, LayoutDashboard, Users, FolderOpen } from 'lucide-react'
 import { Badge } from 'antd'
-import { motion, useReducedMotion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useAppStore } from '@/store/appStore'
 import { useAuthStore } from '@/store/authStore'
 import { cn } from '@/lib/utils'
@@ -23,13 +23,13 @@ const TABS_COLLECTEUR = [
 
 const TABS_MEMBRE = [
   { id: 'mes-contributions', icon: CreditCard,       label: 'Mes dons'  },
+  { id: 'rubriques',         icon: FolderOpen,        label: 'Rubriques' },
   { id: 'notifications',     icon: Bell,              label: 'Notifs'    },
 ]
 
 export function BottomNav() {
   const { activeView, setActiveView, unreadCount } = useAppStore()
   const { user } = useAuthStore()
-  const reduceMotion = useReducedMotion()
 
   const tabs =
     user?.role === 'MEMBRE'     ? TABS_MEMBRE :
@@ -70,7 +70,7 @@ export function BottomNav() {
                 className="relative z-10 leading-none"
               >
                 <motion.span
-                  animate={reduceMotion ? undefined : { y: active ? -1 : 0, scale: active ? 1.05 : 1 }}
+                  animate={{ y: active ? -1 : 0, scale: active ? 1.05 : 1 }}
                   transition={{ duration: 0.18 }}
                   className="relative flex h-8 w-10 items-center justify-center"
                   aria-hidden="true"
@@ -78,7 +78,7 @@ export function BottomNav() {
                   {active && (
                     <motion.span
                       layoutId="bottom-nav-active"
-                      transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 420, damping: 34 }}
+                      transition={{ type: 'spring', stiffness: 420, damping: 34 }}
                       className="absolute inset-0 rounded-xl bg-[#EAF6EC]"
                     />
                   )}

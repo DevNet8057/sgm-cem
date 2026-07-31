@@ -114,6 +114,19 @@ router.get('/search', authenticate, requireLevel(2), async (req, res) => {
   res.json({ success: true, data: membres })
 })
 
+// ─── GET /membres/me — profil membre du compte connecté (level 1) ─────
+// Réutilise MEMBRE_INCLUDE (même forme que GET /:id) pour que le résultat
+// soit directement consommable par les composants existants (PaymentStepper)
+// sans transformation ni type divergent.
+router.get('/me', authenticate, requireLevel(1), async (req, res) => {
+  const membre = await prisma.membre.findFirst({
+    where: { userId: req.user!.userId },
+    include: MEMBRE_INCLUDE,
+  })
+  if (!membre) throw new AppError('NOT_FOUND', 'Profil membre introuvable pour ce compte', 404)
+  res.json({ success: true, data: membre })
+})
+
 // ─── GET /membres/:id ─────────────────────────────────────────────────
 router.get('/:id', authenticate, requireLevel(2), async (req, res) => {
   const membre = await prisma.membre.findUnique({

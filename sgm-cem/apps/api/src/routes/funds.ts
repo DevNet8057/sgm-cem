@@ -216,6 +216,7 @@ router.post('/transfer', authenticate, requireLevel(2), async (req, res) => {
       totalAmount: result.totalAmount,
       count: contributions.length,
       transferType: result.transferType,
+      transferId: result.id,
     })
   } catch (e) {
     console.error('[Notification] Failed to notify receiver:', e)
@@ -360,6 +361,7 @@ router.patch('/transfers/:id/confirm', authenticate, requireLevel(2), async (req
       totalAmount: transfer.totalAmount,
       count: transfer.contributions.length,
       borderauUrl,
+      transferId: transfer.id,
     })
   } catch (e) {
     console.error('[Notification] Failed to notify sender:', e)
@@ -435,6 +437,7 @@ router.patch('/transfers/:id/refuse', authenticate, requireLevel(2), async (req,
       receiverName: transfer.sender.fullName,
       totalAmount: transfer.totalAmount,
       reason: data.reason,
+      transferId: transfer.id,
     })
   } catch (e) {
     console.error('[Notification] Failed to notify refusal:', e)
@@ -507,12 +510,17 @@ function amountFor(
 }
 
 // Services de notification (simples pour l'instant)
+// targetView : 'transfer-validations' pour le récepteur (écran où il confirme/refuse
+// réellement) ; 'collecteurs' pour l'expéditeur (Fonds Collecteurs — c'est là
+// qu'apparaît le suivi/traçabilité de SES transferts, pas un écran d'action puisque
+// le transfert est déjà résolu à ce stade).
 async function notifyTransferInitiated(p: {
   receiverId: string
   senderName: string
   totalAmount: number
   count: number
   transferType: string
+  transferId: string
 }): Promise<void> {
   const transferTypeLabel: Record<string, string> = {
     ESPECES_EN_MAIN: 'En main propre',
@@ -528,6 +536,8 @@ async function notifyTransferInitiated(p: {
       body: `${p.senderName} vous a transféré ${formatAmount(p.totalAmount)} FCFA (${p.count} contribution(s)). Ouvrez l'application pour confirmer.`,
       type: 'TRANSFER',
       isRead: false,
+      targetView: 'transfer-validations',
+      targetId: p.transferId,
     },
   })
 }
@@ -538,6 +548,7 @@ async function notifyTransferConfirmed(p: {
   totalAmount: number
   count: number
   borderauUrl?: string
+  transferId: string
 }): Promise<void> {
   await prisma.notification.create({
     data: {
@@ -546,6 +557,8 @@ async function notifyTransferConfirmed(p: {
       body: `${p.receiverName} a confirmé la réception de ${formatAmount(p.totalAmount)} FCFA (${p.count} contribution(s)).`,
       type: 'TRANSFER',
       isRead: false,
+      targetView: 'collecteurs',
+      targetId: p.transferId,
     },
   })
 }
@@ -555,6 +568,7 @@ async function notifyTransferRefused(p: {
   receiverName: string
   totalAmount: number
   reason: string
+  transferId: string
 }): Promise<void> {
   await prisma.notification.create({
     data: {
@@ -563,6 +577,8 @@ async function notifyTransferRefused(p: {
       body: `${p.receiverName} a refusé votre transfert de ${formatAmount(p.totalAmount)} FCFA. Motif: ${p.reason}`,
       type: 'TRANSFER',
       isRead: false,
+      targetView: 'collecteurs',
+      targetId: p.transferId,
     },
   })
 }

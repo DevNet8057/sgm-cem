@@ -10,10 +10,12 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { SkeletonTableRow } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ContributionStepper } from '@/components/views/ContributionStepper'
+import { ReceiptSuccessModal } from '@/components/contributions/ReceiptSuccessModal'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { Modal } from '@/components/ui/Modal'
 import { queueContribution } from '@/lib/offlineQueue'
 import { Avatar } from '@/components/ui/Avatar'
+import { useFocusHighlight } from '@/hooks/useFocusHighlight'
 import type { Contribution, Membre, ModePaiement, Rubrique } from '@/types'
 
 // getBaseURL() garantit le suffixe /api quel que soit l'environnement
@@ -55,6 +57,13 @@ export function Contributions() {
   const [receiptLoading, setReceiptLoading] = useState<string | null>(null)
   const [timelineId, setTimelineId] = useState<string | null>(null)
   const [proofUploading, setProofUploading] = useState<string | null>(null)
+  const [receiptTarget, setReceiptTarget] = useState<{
+    contributionId: string
+    initialReceiptUrl: string | null
+    memberName?: string
+    amount?: number
+    rubriqueLabel?: string
+  } | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['contributions', page, statusFilter, modeFilter, rubriqueFilter, search],
@@ -115,7 +124,17 @@ export function Contributions() {
       referencePaiement: form.referencePaiement || undefined,
       directCollection: form.directCollection,
     }),
-    onSuccess: async () => {
+    onSuccess: async (res) => {
+      const data = res.data.data
+      if (data.statut === 'CONFIRME') {
+        setReceiptTarget({
+          contributionId: data.id,
+          initialReceiptUrl: data.receiptUrl ?? null,
+          memberName: data.membre?.user.fullName ?? selectedMembre?.user.fullName,
+          amount: data.montant,
+          rubriqueLabel: data.rubrique?.title ?? selectedRubrique?.title,
+        })
+      }
       setForm(initialForm)
       setShowForm(false)
       setError('')
@@ -221,6 +240,7 @@ export function Contributions() {
   const pagination = data?.pagination
   const pending = contributions.filter(c => c.statut === 'EN_ATTENTE_CONFIRMATION').length
   const litiges = contributions.filter(c => c.statut === 'LITIGE').length
+  const highlightedId = useFocusHighlight(contributions.map(c => c.id))
 
   return (
     <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter">
@@ -490,7 +510,10 @@ export function Contributions() {
                 <tr><td colSpan={7}><EmptyState icon={CreditCard} title="Aucune contribution" description="Les contributions enregistrees apparaitront ici" /></td></tr>
               ) : (
                 contributions.map(c => (
-                  <tr key={c.id} className="border-b border-gray-50 hover:bg-[#1A6B1A]/4 transition-colors group">
+                  <tr key={c.id} data-focus-id={c.id} className={cn(
+                    'border-b border-gray-50 hover:bg-[#1A6B1A]/4 transition-colors group',
+                    highlightedId === c.id && 'bg-[#E8F5E8] ring-2 ring-inset ring-[#1A6B1A]'
+                  )}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
                         <Avatar name={c.membre?.user.fullName ?? '—'} size="sm" />
@@ -592,7 +615,18 @@ export function Contributions() {
           membres={membresData ?? []}
           rubriques={rubriquesData ?? []}
           onClose={() => setShowStepper(false)}
-          onSuccess={() => setShowStepper(false)}
+        />
+      )}
+
+      {receiptTarget && (
+        <ReceiptSuccessModal
+          open={!!receiptTarget}
+          contributionId={receiptTarget.contributionId}
+          initialReceiptUrl={receiptTarget.initialReceiptUrl}
+          memberName={receiptTarget.memberName}
+          amount={receiptTarget.amount}
+          rubriqueLabel={receiptTarget.rubriqueLabel}
+          onClose={() => setReceiptTarget(null)}
         />
       )}
 

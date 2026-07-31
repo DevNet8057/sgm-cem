@@ -21,6 +21,7 @@ import { Prestations }          from '@/components/views/Prestations'
 import { Ged }                  from '@/components/views/Ged'
 import { GestionUtilisateurs }  from '@/components/views/GestionUtilisateurs'
 import { MesContributions }     from '@/components/views/MesContributions'
+import { RubriquesMembre }      from '@/components/views/RubriquesMembre'
 import { MonProfil }            from '@/components/views/MonProfil'
 import { Developer }            from '@/components/views/Developer'
 import { Journal }              from '@/components/views/Journal'
@@ -50,6 +51,7 @@ export default function AppPage() {
     switch (activeView) {
       case 'mes-contributions':
       case 'dashboard':     return <MesContributions />
+      case 'rubriques':     return <RubriquesMembre />
       case 'notifications': return <Notifications />
       case 'journal':       return <Journal />
       case 'mon-profil':    return <MonProfil />
@@ -63,6 +65,7 @@ export default function AppPage() {
       case 'dashboard':     return <DashboardCollecteur />
       case 'contributions': return <Contributions />
       case 'collecteurs':   return <Collecteurs />
+      case 'validations':   return <Validations />
       case 'notifications': return <Notifications />
       case 'journal':       return <Journal />
       case 'mon-profil':    return <MonProfil />

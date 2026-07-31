@@ -8,8 +8,8 @@ import { AppError } from '../middleware/errorHandler'
 import { initiateYeliiPayment } from '../services/yelii.service'
 import { generateReceiptPDF, generateReceiptPdf } from '../services/receipt'
 import { getFileStream } from '../services/storage'
-import { calculateAmountWithCommission, YELII_COMMISSION_RATE } from '@sgm-cem/shared'
-import { notifyCollecteurNewContribution } from '../services/notification'
+import { calculateAmountWithCommission, YELII_COMMISSION_RATE, resolveDueAmount, calculateRemainingBalance } from '@sgm-cem/shared'
+import { notifyCollecteurNewContribution, notifyInApp, notifyMemberConfirmed } from '../services/notification'
 import { syncYeliiContributionStatus, CONTRIBUTION_SYNC_SELECT } from '../services/payment-status.service'
 
 // Modes réglés via Yelii Pro Pay (Mobile Money). "YELII" est l'option générique
@@ -110,6 +110,100 @@ router.get('/litiges', authenticate, requireLevel(3), async (_req, res) => {
   res.json({ success: true, data: contributions })
 })
 
+/**
+ * GET /api/contributions/me
+ * Portail membre — historique STRICTEMENT scopé au membre connecté (jamais
+ * les contributions d'un autre membre, quel que soit le paramètre membreId
+ * envoyé par le client : il est ignoré, on résout toujours via req.user).
+ * Filtre optionnel montant min/max (?montantMin=&montantMax=).
+ */
+router.get('/me', authenticate, requireLevel(1), async (req, res) => {
+  const membre = await prisma.membre.findFirst({
+    where: { userId: req.user!.userId },
+    select: { id: true },
+  })
+  if (!membre) throw new AppError('NOT_FOUND', 'Profil membre introuvable pour ce compte', 404)
+
+  const { page = '1', limit = '20', montantMin, montantMax } = req.query as Record<string, string>
+  const currentPage = Math.max(1, parseInt(page, 10) || 1)
+  const pageSize = Math.min(100, Math.max(1, parseInt(limit, 10) || 20))
+  const skip = (currentPage - 1) * pageSize
+
+  const montantFilter: { gte?: number; lte?: number } = {}
+  if (montantMin) montantFilter.gte = parseInt(montantMin, 10)
+  if (montantMax) montantFilter.lte = parseInt(montantMax, 10)
+
+  const where = {
+    membreId: membre.id,
+    ...(Object.keys(montantFilter).length > 0 && { montant: montantFilter }),
+  }
+
+  const [contributions, total] = await Promise.all([
+    prisma.contribution.findMany({
+      where,
+      skip,
+      take: pageSize,
+      include: {
+        rubrique: { select: { title: true, code: true } },
+        collecteur: { select: { fullName: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.contribution.count({ where }),
+  ])
+
+  res.json({
+    success: true,
+    data: contributions,
+    pagination: { page: currentPage, limit: pageSize, total, totalPages: Math.ceil(total / pageSize) },
+  })
+})
+
+/**
+ * GET /api/contributions/me/balance
+ * Reste à payer par rubrique ouverte pour le membre connecté, calculé via
+ * la fonction partagée resolveDueAmount/calculateRemainingBalance
+ * (packages/shared) — même logique que la création de contribution, jamais
+ * dupliquée. Le montant "en attente" est affiché séparément, jamais déduit
+ * du solde restant (seul un statut CONFIRME réduit le reste à payer).
+ */
+router.get('/me/balance', authenticate, requireLevel(1), async (req, res) => {
+  const membre = await prisma.membre.findFirst({
+    where: { userId: req.user!.userId },
+    select: { id: true, profilFinancier: true },
+  })
+  if (!membre) throw new AppError('NOT_FOUND', 'Profil membre introuvable pour ce compte', 404)
+
+  const [rubriques, aggregates] = await Promise.all([
+    prisma.rubrique.findMany({
+      where: { status: 'OUVERTE' },
+      orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
+    }),
+    prisma.contribution.groupBy({
+      by: ['rubriqueId', 'statut'],
+      where: { membreId: membre.id, statut: { in: ['CONFIRME', 'EN_ATTENTE_CONFIRMATION'] } },
+      _sum: { montant: true },
+    }),
+  ])
+
+  const balances = rubriques.map(rubrique => {
+    const confirmedAmount = aggregates.find(a => a.rubriqueId === rubrique.id && a.statut === 'CONFIRME')?._sum.montant ?? 0
+    const pendingAmount = aggregates.find(a => a.rubriqueId === rubrique.id && a.statut === 'EN_ATTENTE_CONFIRMATION')?._sum.montant ?? 0
+    // calculateRemainingBalance attend des contributions individuelles ; on lui passe les
+    // sommes déjà agrégées en base (groupBy) sous forme de deux "contributions" virtuelles,
+    // pour éviter de recharger chaque contribution individuellement.
+    const virtualContributions: { montant: number; statut: 'CONFIRME' | 'EN_ATTENTE_CONFIRMATION' }[] = []
+    if (confirmedAmount > 0) virtualContributions.push({ montant: confirmedAmount, statut: 'CONFIRME' })
+    if (pendingAmount > 0) virtualContributions.push({ montant: pendingAmount, statut: 'EN_ATTENTE_CONFIRMATION' })
+    return {
+      rubrique: { id: rubrique.id, code: rubrique.code, title: rubrique.title, priority: rubrique.priority },
+      ...calculateRemainingBalance(membre.profilFinancier, rubrique, virtualContributions),
+    }
+  })
+
+  res.json({ success: true, data: balances })
+})
+
 router.post('/', authenticate, requireLevel(2), async (req, res) => {
   const data = createSchema.parse(req.body)
   const { directCollection, paymentChannel, ...contributionData } = data
@@ -126,10 +220,7 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
     throw new AppError('NOT_FOUND', 'Membre introuvable ou inactif', 404)
   }
 
-  const montantAttendu =
-    membre.profilFinancier === 'ETUDIANT' ? rubrique.amountEtudiant :
-    membre.profilFinancier === 'COUPLE' ? rubrique.amountCouple :
-    rubrique.amountTravailleur
+  const montantAttendu = resolveDueAmount(membre.profilFinancier, rubrique)
 
   // B1 — encaissement en présentiel : confirmation immédiate, sans double validation.
   const isDirectCash = data.modePaiement === 'ESPECES' && directCollection === true
@@ -151,8 +242,9 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
     }
   })
 
+  let receiptUrl = contribution.receiptUrl
   if (isDirectCash) {
-    await generateReceiptPDF(contribution.id)
+    receiptUrl = await generateReceiptPDF(contribution.id)
   }
 
   if ((YELII_MODES as readonly string[]).includes(data.modePaiement) && data.mobileMoneyPhone) {
@@ -205,10 +297,21 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
     }
   })
 
-  res.status(201).json({ success: true, data: contribution })
+  res.status(201).json({ success: true, data: { ...contribution, receiptUrl } })
 })
 
-router.post('/declare', authenticate, requireLevel(2), async (req, res) => {
+/**
+ * POST /api/contributions/declare
+ * Deux usages distincts selon le rôle de l'appelant :
+ *  - MEMBRE (level 1) : déclaration personnelle — "j'ai remis X FCFA en
+ *    espèces au collecteur Y" → rattachée à SON membreId, visible dans son
+ *    historique. Double validation : reste EN_ATTENTE_CONFIRMATION tant que
+ *    ce collecteur précis n'a pas confirmé depuis son propre compte (voir
+ *    PATCH /:id/confirm) — jamais avant.
+ *  - Collecteur/Trésorier (level ≥ 2) : flow existant "remise groupée",
+ *    sans membreId (montant remis en bloc, non affecté à un membre).
+ */
+router.post('/declare', authenticate, requireLevel(1), async (req, res) => {
   const data = declareSchema.parse(req.body)
 
   const [rubrique, collecteur] = await Promise.all([
@@ -226,8 +329,21 @@ router.post('/declare', authenticate, requireLevel(2), async (req, res) => {
     throw new AppError('NOT_FOUND', 'Collecteur introuvable ou rôle non éligible', 404)
   }
 
+  let membreId: string | undefined
+  let declarantName = `Remise groupée déclarée par ${req.user!.email}`
+  if (req.user!.role === 'MEMBRE') {
+    const membre = await prisma.membre.findFirst({
+      where: { userId: req.user!.userId },
+      select: { id: true, user: { select: { fullName: true } } },
+    })
+    if (!membre) throw new AppError('NOT_FOUND', 'Profil membre introuvable pour ce compte', 404)
+    membreId = membre.id
+    declarantName = membre.user.fullName
+  }
+
   const contribution = await prisma.contribution.create({
     data: {
+      membreId,
       rubriqueId: data.rubriqueId,
       collecteurId: data.collecteurId,
       montant: data.montant,
@@ -251,7 +367,11 @@ router.post('/declare', authenticate, requireLevel(2), async (req, res) => {
       action: 'CREATE',
       entityType: 'Contribution',
       entityId: contribution.id,
-      details: { montant: contribution.montant, statut: contribution.statut, declaredForCollecteurId: data.collecteurId, viaDeclare: true },
+      details: {
+        montant: contribution.montant, statut: contribution.statut,
+        declaredForCollecteurId: data.collecteurId, viaDeclare: true,
+        ...(membreId && { selfDeclaredByMembre: true }),
+      },
     },
   })
 
@@ -259,9 +379,10 @@ router.post('/declare', authenticate, requireLevel(2), async (req, res) => {
     await notifyCollecteurNewContribution({
       collecteurId: data.collecteurId,
       collecteurPhone: collecteur.whatsappPhone ?? collecteur.phone,
-      memberName: `Remise groupée déclarée par ${req.user!.email}`,
+      memberName: declarantName,
       montant: contribution.montant,
       rubriqueCode: contribution.rubrique.code,
+      contributionId: contribution.id,
     })
   } catch (e) {
     console.error('[Notification] Échec notification collecteur (declare):', e)
@@ -283,11 +404,34 @@ router.get('/:id/payment-status', authenticate, requireLevel(2), async (req, res
 
 router.patch('/:id/confirm', authenticate, requireLevel(2), async (req, res) => {
   const id = String(req.params.id)
-  const contribution = await prisma.contribution.findUnique({ where: { id } })
+  const contribution = await prisma.contribution.findUnique({
+    where: { id },
+    include: {
+      membre: { include: { user: { select: { id: true, fullName: true, phone: true, whatsappPhone: true, email: true } } } },
+      rubrique: { select: { code: true } },
+    },
+  })
   if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
+  if (req.user!.role === 'COLLECTEUR' && contribution.collecteurId !== req.user!.userId) {
+    throw new AppError('INSUFFICIENT_PERMISSIONS', 'Vous ne pouvez confirmer que vos propres contributions', 403)
+  }
+  // RB-02 : un paiement Mobile Money/carte ne doit JAMAIS être confirmé manuellement —
+  // seul un webhook Yelii vérifié ou une vérification live du statut peut le faire.
+  if (contribution.modePaiement !== 'ESPECES') {
+    throw new AppError('BUSINESS_RULE', 'Seules les contributions en espèces peuvent être confirmées manuellement', 400)
+  }
   if (contribution.statut !== 'EN_ATTENTE_CONFIRMATION') {
     throw new AppError('BUSINESS_RULE', 'Cette contribution ne peut pas etre confirmee')
   }
+
+  // Override hiérarchique : un rôle ≥ TRESORIER peut confirmer à la place du
+  // collecteur désigné (débloquer un paiement si celui-ci est indisponible —
+  // autorisé, mais tracé distinctement de la confirmation par le collecteur
+  // assigné lui-même, et celui-ci en est notifié).
+  const isOverride = !!contribution.collecteurId && contribution.collecteurId !== req.user!.userId
+  const assignedCollecteur = isOverride
+    ? await prisma.user.findUnique({ where: { id: contribution.collecteurId! }, select: { id: true, fullName: true } })
+    : null
 
   const updated = await prisma.contribution.update({
     where: { id },
@@ -298,22 +442,74 @@ router.patch('/:id/confirm', authenticate, requireLevel(2), async (req, res) => 
     data: {
       userId: req.user!.userId,
       userName: req.user!.email,
-      action: 'CONFIRM',
+      action: isOverride ? 'CONFIRM_OVERRIDE' : 'CONFIRM',
       entityType: 'Contribution',
       entityId: updated.id,
-      details: { montant: updated.montant },
+      details: {
+        montant: updated.montant,
+        ...(isOverride && {
+          overrideByRole: req.user!.role,
+          overrideByName: req.user!.email,
+          assignedCollecteurId: contribution.collecteurId,
+          assignedCollecteurName: assignedCollecteur?.fullName ?? null,
+        }),
+      },
     }
   })
 
-  await generateReceiptPDF(updated.id)
+  if (isOverride && assignedCollecteur) {
+    try {
+      await notifyInApp(
+        assignedCollecteur.id,
+        'Contribution confirmée à votre place',
+        `${req.user!.email} (${req.user!.role}) a confirmé à votre place une contribution de ${updated.montant.toLocaleString('fr-FR')} FCFA qui vous était assignée.`,
+        'CONTRIBUTION',
+        { contributionId: updated.id, overrideByUserId: req.user!.userId },
+        { view: 'contributions', id: updated.id }
+      )
+    } catch (e) {
+      console.error('[Notification] Échec notification override collecteur:', e)
+    }
+  }
 
-  res.json({ success: true, data: updated })
+  const receiptUrl = await generateReceiptPDF(updated.id)
+
+  // "Contribution confirmée" côté membre — n'existait nulle part pour ce
+  // chemin (confirmation manuelle espèces) avant cet ajout. Rien à notifier
+  // si la contribution n'est pas rattachée à un membre (remise groupée sans
+  // membreId — flow staff existant, inchangé).
+  if (contribution.membre) {
+    try {
+      await notifyMemberConfirmed({
+        userId: contribution.membre.user.id,
+        memberPhone: contribution.membre.user.whatsappPhone ?? contribution.membre.user.phone,
+        memberEmail: contribution.membre.user.email,
+        memberName: contribution.membre.user.fullName,
+        montant: updated.montant,
+        rubriqueCode: contribution.rubrique.code,
+        receiptUrl,
+        contributionId: updated.id,
+      })
+    } catch (e) {
+      console.error('[Notification] Échec notification membre (confirm espèces):', e)
+    }
+  }
+
+  res.json({ success: true, data: { ...updated, receiptUrl } })
 })
 
 router.patch('/:id/litige', authenticate, requireLevel(2), async (req, res) => {
   const { motif } = z.object({ motif: z.string().min(10) }).parse(req.body)
+  const id = String(req.params.id)
+
+  const contribution = await prisma.contribution.findUnique({ where: { id } })
+  if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
+  if (req.user!.role === 'COLLECTEUR' && contribution.collecteurId !== req.user!.userId) {
+    throw new AppError('INSUFFICIENT_PERMISSIONS', 'Vous ne pouvez contester que vos propres contributions', 403)
+  }
+
   const updated = await prisma.contribution.update({
-    where: { id: String(req.params.id) },
+    where: { id },
     data: { statut: 'LITIGE', litigeMotif: motif }
   })
 
@@ -363,11 +559,12 @@ router.patch('/:id/resolve-litige', authenticate, requireLevel(3), async (req, r
     }
   })
 
+  let receiptUrl = updated.receiptUrl
   if (resolution === 'CONFIRME') {
-    await generateReceiptPDF(updated.id)
+    receiptUrl = await generateReceiptPDF(updated.id)
   }
 
-  res.json({ success: true, data: updated })
+  res.json({ success: true, data: { ...updated, receiptUrl } })
 })
 
 /**
@@ -377,10 +574,20 @@ router.patch('/:id/resolve-litige', authenticate, requireLevel(3), async (req, r
  * génère à la volée (auto-guérison pour les contributions confirmées avant
  * la mise en place de la génération automatique).
  */
-router.get('/:id/receipt', authenticate, requireLevel(2), async (req, res) => {
+router.get('/:id/receipt', authenticate, requireLevel(1), async (req, res) => {
   const id = String(req.params.id)
   const contribution = await prisma.contribution.findUnique({ where: { id } })
   if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
+
+  // MEMBRE : uniquement son propre reçu. Les rôles ≥ COLLECTEUR gardent
+  // l'accès existant à n'importe quel reçu (déjà le cas avant ce changement).
+  if (req.user!.role === 'MEMBRE') {
+    const membre = await prisma.membre.findFirst({ where: { userId: req.user!.userId }, select: { id: true } })
+    if (!membre || contribution.membreId !== membre.id) {
+      throw new AppError('INSUFFICIENT_PERMISSIONS', 'Vous ne pouvez consulter que vos propres reçus', 403)
+    }
+  }
+
   if (contribution.statut !== 'CONFIRME') {
     throw new AppError('BUSINESS_RULE', 'Le reçu est disponible uniquement pour les contributions confirmées', 400)
   }

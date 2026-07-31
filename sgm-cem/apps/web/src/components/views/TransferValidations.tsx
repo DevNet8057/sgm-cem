@@ -1,11 +1,12 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle, Clock, XCircle, Loader2, ChevronDown } from 'lucide-react'
 import api, { getBaseURL } from '@/lib/api'
-import { formatAmount, formatDateTime, TRANSFER_TYPE_EMOJI, TRANSFER_TYPE_LABELS } from '@/lib/utils'
+import { cn, formatAmount, formatDateTime, TRANSFER_TYPE_EMOJI, TRANSFER_TYPE_LABELS } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { useFocusHighlight } from '@/hooks/useFocusHighlight'
 import type { FundsTransfer } from '@/types'
 
 // getBaseURL() garantit le suffixe /api quel que soit l'environnement
@@ -39,6 +40,13 @@ export function TransferValidations() {
   })
 
   const transfers = data ?? []
+  const highlightedId = useFocusHighlight(transfers.map(t => t.id))
+
+  // Le transfert visé par la notification mérite d'être déjà déplié — pas
+  // seulement surligné — puisque son détail est justement ce qu'on est venu voir.
+  useEffect(() => {
+    if (highlightedId) setExpandedId(highlightedId)
+  }, [highlightedId])
 
   return (
     <div className="p-4 lg:p-6 pb-safe space-y-6 animate-page-enter">
@@ -59,7 +67,7 @@ export function TransferValidations() {
       ) : transfers.length === 0 ? (
         <EmptyState icon={CheckCircle} title="Aucune validation en attente" description="Tous les transferts ont été traités" />
       ) : (
-        <div className="space-y-4">{transfers.map(t => <TransferCard key={t.id} transfer={t} expanded={expandedId === t.id} onToggle={() => setExpandedId(expandedId === t.id ? null : t.id)} onConfirm={() => confirmMutation.mutate(t.id)} onRefuse={() => setRefuseModal({ open: true, transferId: t.id, reason: '' })} confirming={confirmMutation.isPending} />)}</div>
+        <div className="space-y-4">{transfers.map(t => <TransferCard key={t.id} transfer={t} expanded={expandedId === t.id} highlighted={highlightedId === t.id} onToggle={() => setExpandedId(expandedId === t.id ? null : t.id)} onConfirm={() => confirmMutation.mutate(t.id)} onRefuse={() => setRefuseModal({ open: true, transferId: t.id, reason: '' })} confirming={confirmMutation.isPending} />)}</div>
       )}
 
       {refuseModal.open && (
@@ -78,16 +86,20 @@ export function TransferValidations() {
   )
 }
 
-function TransferCard({ transfer, expanded, onToggle, onConfirm, onRefuse, confirming }: {
+function TransferCard({ transfer, expanded, highlighted, onToggle, onConfirm, onRefuse, confirming }: {
   transfer: FundsTransfer
   expanded: boolean
+  highlighted?: boolean
   onToggle: () => void
   onConfirm: () => void
   onRefuse: () => void
   confirming: boolean
 }) {
   return (
-    <div className="bg-white rounded-[18px] border-2 border-amber-200 p-4">
+    <div data-focus-id={transfer.id} className={cn(
+      'bg-white rounded-[18px] border-2 border-amber-200 p-4',
+      highlighted && 'ring-2 ring-[#1A6B1A] ring-offset-2'
+    )}>
       <div className="flex justify-between items-center mb-3">
         <div>
           <p className="font-semibold text-gray-900 text-sm">{transfer.senderName}</p>

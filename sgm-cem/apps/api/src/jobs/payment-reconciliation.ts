@@ -115,12 +115,19 @@ export async function runPaymentReconciliation(): Promise<{ checked: number; con
   }
 
   // Alerte Trésoriers si des transactions restent bloquées après 1h (webhook ET polling silencieux)
+  // veryStale vient de `stuck` (findMany ci-dessus) : chaque élément EST déjà une
+  // Contribution complète avec son .id — pas besoin de le "remonter" depuis
+  // transactionIds, il était disponible dès le départ, juste jamais capturé.
+  // Cible cliquable uniquement si une seule transaction est bloquée : au-delà,
+  // il n'y a pas UNE contribution à ouvrir, `data.transactionIds` reste la
+  // liste informative (contexte non structurel, comme prévu pour `data`).
   const veryStale = stuck.filter(c => Date.now() - c.createdAt.getTime() > 60 * 60 * 1000)
   if (veryStale.length > 0) {
     await alertTresoriers(
       'Paiements Mobile Money bloqués',
       `${veryStale.length} transaction(s) en PROCESSING depuis plus d'1h — vérification manuelle recommandée.`,
-      { transactionIds: veryStale.map(c => c.externalTransactionId) }
+      { transactionIds: veryStale.map(c => c.externalTransactionId) },
+      veryStale.length === 1 ? { view: 'contributions', id: veryStale[0].id } : undefined
     )
   }
 

@@ -106,6 +106,14 @@ export interface Contribution {
   fundsTransfer?: FundsTransfer
 }
 
+export interface RemainingBalance {
+  rubrique: { id: string; code: string; title: string; priority: RubriquePriority }
+  dueAmount: number | null
+  confirmedAmount: number
+  pendingAmount: number
+  remainingAmount: number | null
+}
+
 export interface FundsTransfer {
   id: string
   createdAt: string
@@ -262,6 +270,10 @@ export interface Notification {
   title: string
   body: string
   type: string
+  // Redirection contextuelle au clic — targetView réutilise les mêmes valeurs
+  // que activeView (Sidebar/dashboard router). Voir appStore.navigateToNotification.
+  targetView?: string
+  targetId?: string
   data?: Record<string, unknown>
   isRead: boolean
   statut?: 'PENDING' | 'SENT' | 'FAILED'

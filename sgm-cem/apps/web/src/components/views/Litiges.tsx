@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SkeletonTableRow } from '@/components/ui/Skeleton'
 import { Modal } from '@/components/ui/Modal'
+import { ReceiptSuccessModal } from '@/components/contributions/ReceiptSuccessModal'
 import type { Contribution } from '@/types'
 
 type Resolution = 'CONFIRME' | 'ANNULE'
@@ -17,6 +18,14 @@ export function Litiges() {
   const queryClient = useQueryClient()
   const [resolving, setResolving] = useState<{ id: string; resolution: Resolution } | null>(null)
   const [note, setNote] = useState('')
+  const [resolveError, setResolveError] = useState('')
+  const [receiptTarget, setReceiptTarget] = useState<{
+    contributionId: string
+    initialReceiptUrl: string | null
+    memberName?: string
+    amount?: number
+    rubriqueLabel?: string
+  } | null>(null)
 
   const { data, isLoading } = useQuery<Contribution[]>({
     queryKey: ['litiges'],
@@ -27,23 +36,42 @@ export function Litiges() {
   const resolve = useMutation({
     mutationFn: async ({ id, resolution, note }: { id: string; resolution: Resolution; note?: string }) =>
       api.patch(`/contributions/${id}/resolve-litige`, { resolution, note }),
-    onSuccess: async () => {
+    onSuccess: async (res, variables) => {
+      const contribution = data?.find(item => item.id === variables.id)
+
       setResolving(null)
       setNote('')
+      setResolveError('')
+      if (variables.resolution === 'CONFIRME') {
+        setReceiptTarget({
+          contributionId: variables.id,
+          initialReceiptUrl: res.data.data.receiptUrl ?? null,
+          memberName: contribution?.membre?.user.fullName,
+          amount: contribution?.montant,
+          rubriqueLabel: contribution?.rubrique?.title,
+        })
+      }
       await queryClient.invalidateQueries({ queryKey: ['litiges'] })
       await queryClient.invalidateQueries({ queryKey: ['contributions'] })
       await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
       await queryClient.invalidateQueries({ queryKey: ['collecteurs'] })
+    },
+    onError: () => {
+      setResolveError(
+        'Impossible de résoudre ce litige. Vérifiez votre connexion puis réessayez.'
+      )
     },
   })
 
   function openResolve(id: string, resolution: Resolution) {
     setResolving({ id, resolution })
     setNote('')
+    setResolveError('')
   }
 
   function submitResolve() {
     if (!resolving) return
+    setResolveError('')
     resolve.mutate({ id: resolving.id, resolution: resolving.resolution, note: note.trim() || undefined })
   }
 
@@ -160,7 +188,7 @@ export function Litiges() {
       {/* Modal résolution */}
       <Modal
         open={resolving !== null}
-        onClose={() => { setResolving(null); setNote('') }}
+        onClose={() => { setResolving(null); setNote(''); setResolveError('') }}
         title={resolving?.resolution === 'CONFIRME' ? 'Confirmer la contribution' : 'Annuler la contribution'}
         description={resolving?.resolution === 'CONFIRME'
           ? 'La contribution sera marquée comme confirmée et le litige clôturé.'
@@ -187,8 +215,17 @@ export function Litiges() {
               className="w-full px-3 py-2.5 border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30 resize-none transition-colors"
             />
           </div>
+          {resolveError && (
+            <div
+              className="flex items-start gap-2 rounded-[10px] border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+              role="alert"
+            >
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+              <p>{resolveError}</p>
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
-            <Button variant="ghost" onClick={() => { setResolving(null); setNote('') }}>
+            <Button variant="ghost" onClick={() => { setResolving(null); setNote(''); setResolveError('') }}>
               Annuler
             </Button>
             <Button
@@ -203,6 +240,18 @@ export function Litiges() {
           </div>
         </div>
       </Modal>
+
+      {receiptTarget && (
+        <ReceiptSuccessModal
+          open={!!receiptTarget}
+          contributionId={receiptTarget.contributionId}
+          initialReceiptUrl={receiptTarget.initialReceiptUrl}
+          memberName={receiptTarget.memberName}
+          amount={receiptTarget.amount}
+          rubriqueLabel={receiptTarget.rubriqueLabel}
+          onClose={() => setReceiptTarget(null)}
+        />
+      )}
     </div>
   )
 }

@@ -13,11 +13,14 @@ import { calculateAmountWithCommission, YELII_COMMISSION_RATE } from '@sgm-cem/s
 import type { ChampPersonnalise, CollectePubliqueDef } from '@sgm-cem/shared'
 
 type PayStatus = 'idle' | 'submitting' | 'waiting' | 'redirected' | 'confirmed' | 'failed' | 'timeout'
+type ReceiptStatus = 'checking' | 'delayed'
 type ModePaiement = 'YELII' | 'CARTE_VISA'
 type Channel = 'orange_money' | 'mtn_money'
 type ValeursChamps = Record<string, string | boolean>
 
 const STEPS = ['Vos informations', 'Montant', 'Paiement', 'Résultat']
+const RECEIPT_RETRY_MAX = 5
+const RECEIPT_RETRY_DELAY = 1_500
 
 export interface PublicCollecteStepperProps {
   collecte: CollectePubliqueDef
@@ -63,6 +66,8 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
   const [contribId, setContribId] = useState<string | null>(null)
   const [cinetpayUrl, setCinetpayUrl] = useState<string | null>(null)
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null)
+  const [receiptStatus, setReceiptStatus] = useState<ReceiptStatus>('checking')
+  const [receiptRetryCycle, setReceiptRetryCycle] = useState(0)
   const [failReason, setFailReason] = useState('')
   const [countdown, setCountdown] = useState(USSD_TIMEOUT)
 
@@ -211,6 +216,51 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
     return () => clearInterval(iv)
   }, [payStatus, contribId, poll])
 
+  // Le reçu peut être généré quelques secondes après la confirmation du paiement.
+  useEffect(() => {
+    const draftToken = draftTokenRef.current
+    if (payStatus !== 'confirmed' || receiptUrl || !contribId || !draftToken) return
+
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let attempts = 0
+    const controller = new AbortController()
+
+    const checkReceipt = async () => {
+      attempts += 1
+      try {
+        const res = await api.get(`/public/payments/${contribId}/status`, {
+          headers: { 'X-Draft-Token': draftToken },
+          signal: controller.signal,
+        })
+        if (cancelled) return
+
+        const nextReceiptUrl = res.data.data.receiptUrl as string | null
+        if (nextReceiptUrl) {
+          setReceiptUrl(nextReceiptUrl)
+          return
+        }
+      } catch {
+        if (cancelled || controller.signal.aborted) return
+      }
+
+      if (attempts >= RECEIPT_RETRY_MAX) {
+        setReceiptStatus('delayed')
+        return
+      }
+      timer = setTimeout(() => { void checkReceipt() }, RECEIPT_RETRY_DELAY)
+    }
+
+    setReceiptStatus('checking')
+    void checkReceipt()
+
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+      controller.abort()
+    }
+  }, [payStatus, receiptUrl, contribId, receiptRetryCycle])
+
   // ── Mutation : initier le paiement ───────────────────────────────────────
   const initiate = useMutation({
     mutationFn: async () => {
@@ -326,6 +376,10 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
     setFailReason('')
     setStep(2)
     setError('')
+  }
+
+  function retryReceipt() {
+    setReceiptRetryCycle(cycle => cycle + 1)
   }
 
   // ── Rendu ─────────────────────────────────────────────────────────────────
@@ -676,9 +730,16 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
                     >
                       <FileText size={14} /> Voir le reçu
                     </a>
-                  ) : (
+                  ) : receiptStatus === 'checking' ? (
                     <div className="flex items-center justify-center gap-2 text-xs text-gray-400">
                       <Loader2 size={12} className="animate-spin" /> Génération du reçu…
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-xs text-gray-500">Reçu en finalisation</p>
+                      <button onClick={retryReceipt} className="flex items-center gap-2 mx-auto text-sm text-[#1A6B1A] hover:underline">
+                        <RefreshCw size={13} /> Réessayer
+                      </button>
                     </div>
                   )}
                 </div>

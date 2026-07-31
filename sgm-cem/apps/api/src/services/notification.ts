@@ -109,13 +109,25 @@ export async function sendWhatsAppDocument(phone: string, pdfUrl: string, captio
   }
 }
 
+/**
+ * Cible de redirection au clic — réutilise exactement les valeurs de
+ * `activeView` (Sidebar/dashboard router), voir schema.prisma Notification.
+ */
+export interface NotificationTarget {
+  view: string
+  id?: string
+}
+
 export async function notifyInApp(
-  userId: string, title: string, body: string, type = 'INFO', data?: Record<string, unknown>
+  userId: string, title: string, body: string, type = 'INFO',
+  data?: Record<string, unknown>, target?: NotificationTarget
 ): Promise<void> {
   try {
     await prisma.notification.create({
       data: {
         userId, title, body, type, isRead: false,
+        targetView: target?.view,
+        targetId: target?.id,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ...(data ? { data: data as any } : {}),
       }
@@ -130,21 +142,24 @@ export async function notifyInApp(
  * Alerte tous les Trésoriers/Admin d'une anomalie nécessitant une résolution manuelle
  * (ex: montant incohérent entre l'initiation et la confirmation d'un paiement).
  */
-export async function alertTresoriers(title: string, body: string, data?: Record<string, unknown>): Promise<void> {
+export async function alertTresoriers(
+  title: string, body: string, data?: Record<string, unknown>, target?: NotificationTarget
+): Promise<void> {
   const tresoriers = await prisma.user.findMany({
     where: { role: { in: ['ADMIN', 'DEVELOPER', 'TRESORIER'] }, isActive: true },
     select: { id: true },
   })
-  await Promise.all(tresoriers.map(t => notifyInApp(t.id, title, body, 'ALERTE', data)))
+  await Promise.all(tresoriers.map(t => notifyInApp(t.id, title, body, 'ALERTE', data, target)))
 }
 
 export async function notifyCollecteurNewContribution(p: {
   collecteurId: string; collecteurPhone?: string | null
-  memberName: string; montant: number; rubriqueCode: string
+  memberName: string; montant: number; rubriqueCode: string; contributionId: string
 }): Promise<void> {
   const msg = `CEM Melen - Nouveau paiement a confirmer\nMembre: ${p.memberName}\nMontant: ${p.montant.toLocaleString('fr-FR')} FCFA\nRubrique: ${p.rubriqueCode}\nConnectez-vous sur SGM-CEM pour valider.`
   await notifyInApp(p.collecteurId, 'Paiement a confirmer',
-    `${p.memberName} - ${p.montant.toLocaleString('fr-FR')} FCFA (${p.rubriqueCode})`, 'CONTRIBUTION')
+    `${p.memberName} - ${p.montant.toLocaleString('fr-FR')} FCFA (${p.rubriqueCode})`, 'CONTRIBUTION',
+    undefined, { view: 'validations', id: p.contributionId })
   if (p.collecteurPhone) {
     const ok = await sendWhatsApp(p.collecteurPhone, msg)
     if (!ok) await sendSMS(p.collecteurPhone, msg.substring(0, 160))
@@ -153,11 +168,12 @@ export async function notifyCollecteurNewContribution(p: {
 
 export async function notifyMemberConfirmed(p: {
   userId: string; memberPhone?: string | null; memberEmail?: string | null
-  memberName: string; montant: number; rubriqueCode: string; receiptUrl?: string; contributionId?: string
+  memberName: string; montant: number; rubriqueCode: string; receiptUrl?: string | null; contributionId?: string
 }): Promise<void> {
   const msg = `CEM Melen - Paiement confirme\nMembre: ${p.memberName}\nMontant: ${p.montant.toLocaleString('fr-FR')} FCFA\nRubrique: ${p.rubriqueCode}\nMerci pour votre contribution !`
   await notifyInApp(p.userId, 'Paiement confirme',
-    `Votre contribution de ${p.montant.toLocaleString('fr-FR')} FCFA (${p.rubriqueCode}) a ete confirmee.`, 'CONTRIBUTION')
+    `Votre contribution de ${p.montant.toLocaleString('fr-FR')} FCFA (${p.rubriqueCode}) a ete confirmee.`, 'CONTRIBUTION',
+    undefined, { view: 'mes-contributions', id: p.contributionId })
 
   // WhatsApp avec document PDF si disponible
   if (p.memberPhone) {

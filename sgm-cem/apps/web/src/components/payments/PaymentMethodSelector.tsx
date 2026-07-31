@@ -8,6 +8,12 @@ export type MobileOperator = 'MTN' | 'ORANGE'
 interface Props {
   value: PayMode
   onChange: (mode: PayMode) => void
+  /**
+   * Masque l'option Espèces — utilisé en mode self-service (portail membre) :
+   * un paiement en espèces y passe par la déclaration à double validation
+   * (voir DeclareCashForm / POST /contributions/declare), pas par ce stepper.
+   */
+  hideEspeces?: boolean
 }
 
 const OPTIONS: Array<{
@@ -51,10 +57,11 @@ const OPTIONS: Array<{
   },
 ]
 
-export function PaymentMethodSelector({ value, onChange }: Props) {
+export function PaymentMethodSelector({ value, onChange, hideEspeces }: Props) {
+  const options = hideEspeces ? OPTIONS.filter(opt => opt.id !== 'ESPECES') : OPTIONS
   return (
-    <div className="grid grid-cols-3 gap-3">
-      {OPTIONS.map(opt => {
+    <div className={cn('grid gap-3', options.length === 2 ? 'grid-cols-2' : 'grid-cols-3')}>
+      {options.map(opt => {
         const selected = value === opt.id
         return (
           <button

@@ -5,7 +5,7 @@ import {
   Bell, Settings, LogOut, X, UserCog, CreditCard as CardIcon, UserCircle, Terminal, History, Globe,
 } from 'lucide-react'
 import { Badge, Drawer, Layout, Menu, type MenuProps } from 'antd'
-import { motion, useReducedMotion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useAppStore } from '@/store/appStore'
 import { useAuthStore } from '@/store/authStore'
 import { BrandMark } from '@/components/ui/BrandMark'
@@ -19,7 +19,7 @@ const NAV_ITEMS = [
   // ── Accueil ─────────────────────────────────────────────────────────
   { id: 'dashboard',       label: 'Tableau de Bord',    icon: LayoutDashboard, section: 'NAVIGATION',   minLevel: 1 },
   // ── Finances ────────────────────────────────────────────────────────
-  { id: 'rubriques',       label: 'Rubriques',           icon: FolderOpen,      section: 'FINANCES',     minLevel: 1, excludeRoles: ['MEMBRE'] },
+  { id: 'rubriques',       label: 'Rubriques',           icon: FolderOpen,      section: 'FINANCES',     minLevel: 1 },
   { id: 'contributions',   label: 'Contributions',       icon: CreditCard,      section: 'FINANCES',     minLevel: 2, excludeRoles: ['MEMBRE'] },
   { id: 'collecteurs',     label: 'Fonds Collecteurs',   icon: Wallet,          section: 'FINANCES',     minLevel: 2 },
   { id: 'validations',     label: 'Validations',         icon: UserCheck,      section: 'FINANCES',     minLevel: 2, excludeRoles: ['MEMBRE'] },
@@ -58,7 +58,6 @@ const SECTION_LABELS: Record<string, string> = {
 export function Sidebar() {
   const { activeView, setActiveView, sidebarOpen, setSidebarOpen, unreadCount, pendingTransfersCount } = useAppStore()
   const { user, logout } = useAuthStore()
-  const reduceMotion = useReducedMotion()
 
   const userLevel = ROLE_LEVELS[user?.role ?? ''] ?? 1
   const userRole  = user?.role ?? ''
@@ -124,9 +123,9 @@ export function Sidebar() {
       <div className="flex min-h-[76px] items-center justify-between border-b border-white/10 px-5 py-4">
         <div className="flex min-w-0 items-center gap-3">
           <motion.div
-            initial={reduceMotion ? false : { opacity: 0, scale: 0.92 }}
+            initial={{ opacity: 0, scale: 0.92 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: reduceMotion ? 0 : 0.25 }}
+            transition={{ duration: 0.25 }}
             className="shrink-0"
           >
             <BrandMark size={40} variant="compact" alt="Logo CEM" />

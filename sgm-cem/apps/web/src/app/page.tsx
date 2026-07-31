@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { Alert, Button, Card, Form, Input, Modal, Tabs, Typography } from 'antd'
-import { motion, useReducedMotion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useAuthStore } from '@/store/authStore'
 import { BrandMark } from '@/components/ui/BrandMark'
 import { cn } from '@/lib/utils'
@@ -82,7 +82,6 @@ function OtpInput({ value, onChange, disabled }: {
 
 /* ── Page Login ──────────────────────────────────────────────────── */
 export default function LoginPage() {
-  const reduceMotion = useReducedMotion()
   const [tab, setTab] = useState<'email' | 'phone'>('email')
   const [showPwd, setShowPwd]  = useState(false)
   const [apiError, setApiError] = useState('')
@@ -257,7 +256,7 @@ export default function LoginPage() {
     <main className="auth-public-background min-h-[100dvh] bg-[#f3f7f3] lg:grid lg:grid-cols-[minmax(380px,40%)_1fr]">
       {/* ── Panneau gauche (desktop) ── */}
       <aside
-        className="hidden lg:flex flex-col justify-center px-12 py-8 relative overflow-hidden cross-bg"
+        className="hidden lg:!flex flex-col justify-center px-12 py-8 relative overflow-hidden cross-bg"
         style={{ background: 'linear-gradient(160deg,#052005 0%,#0F4A0F 45%,#1A6B1A 100%)' }}
       >
         <div className="absolute bottom-0 left-0 w-72 h-72 rounded-full pointer-events-none"
@@ -287,12 +286,12 @@ export default function LoginPage() {
         </div>
       </aside>
 
-      {/* ── Formulaire droite — scrollable sur mobile, centré sur desktop ── */}
-      <section className="flex min-h-[100dvh] items-center justify-center overflow-y-auto px-4 py-6 sm:px-8 lg:py-8 [@media(max-height:700px)]:py-4">
-        <motion.div initial={reduceMotion ? false : { opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="w-full max-w-[460px]">
-        <Card className="!rounded-3xl !border-white/80 shadow-[0_24px_70px_rgba(15,74,15,0.12)]" styles={{ body: { padding: 'clamp(20px, 5vw, 36px)' } }}>
+      {/* ── Formulaire droite — plein écran ancré en haut sur mobile, carte centrée sur desktop ── */}
+      <section className="flex min-h-[100dvh] items-start justify-center overflow-y-auto px-0 pt-6 pb-10 sm:items-center sm:px-8 sm:py-10 lg:py-8 [@media(max-height:700px)]:py-4">
+        <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="w-full sm:max-w-[460px]">
+        <Card className="!rounded-none !border-0 shadow-none sm:!rounded-3xl sm:!border-white/80 sm:shadow-[0_24px_70px_rgba(15,74,15,0.12)]" styles={{ body: { padding: 'clamp(20px, 5vw, 36px)' } }}>
           {/* Logo mobile */}
-          <div className="lg:hidden flex justify-center mb-8">
+          <div className="lg:hidden flex justify-center mb-6">
             <BrandMark size={56} variant="compact" alt="Logo CEM" />
           </div>
 

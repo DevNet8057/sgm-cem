@@ -31,19 +31,3 @@ describe('Contributions API — unauthenticated guards', () => {
     expect([401, 403]).toContain(res.status)
   })
 })
-
-describe('Webhooks — no auth required', () => {
-  it('POST /api/webhooks/mtn with empty body returns 200 (silently ignored)', async () => {
-    const res = await request(app)
-      .post('/api/webhooks/mtn')
-      .send({})
-    expect(res.status).toBe(200)
-  })
-
-  it('POST /api/webhooks/orange with empty body returns 200 (silently ignored)', async () => {
-    const res = await request(app)
-      .post('/api/webhooks/orange')
-      .send({})
-    expect(res.status).toBe(200)
-  })
-})

@@ -3,7 +3,7 @@ import express from 'express'
 import { verifyCinetpaySignature } from '../services/cinetpay.service'
 import { getPrisma } from '../lib/prisma'
 import { generateReceiptPDF } from '../services/receipt'
-import { sendWhatsAppDocument, sendWhatsApp, alertTresoriers } from '../services/notification'
+import { sendWhatsAppDocument, sendWhatsApp, alertTresoriers, notifyMemberConfirmed } from '../services/notification'
 import { broadcastToAll } from '../lib/socket'
 
 const router = Router()
@@ -37,7 +37,7 @@ async function processCinetpayWebhook(body: Record<string, string>) {
     include: {
       membre: {
         include: {
-          user: { select: { phone: true, whatsappPhone: true, fullName: true } },
+          user: { select: { id: true, phone: true, whatsappPhone: true, fullName: true, email: true } },
         },
       },
       // contribution publique : pas de membre, notifier le contributeur externe
@@ -74,7 +74,8 @@ async function processCinetpayWebhook(body: Record<string, string>) {
     await alertTresoriers(
       'Montant incohérent — paiement Carte bancaire',
       `${memberName} · attendu ${contribution.montant.toLocaleString('fr-FR')} FCFA, reçu ${montantStr} FCFA (transaction ${cpm_trans_id})`,
-      { contributionId: contribution.id, transactionId: cpm_trans_id, expectedAmount: contribution.montant, receivedAmount: montantNum }
+      { contributionId: contribution.id, transactionId: cpm_trans_id, expectedAmount: contribution.montant, receivedAmount: montantNum },
+      { view: 'contributions', id: contribution.id }
     )
     return
   }
@@ -97,7 +98,27 @@ async function processCinetpayWebhook(body: Record<string, string>) {
     const receiptUrl = await generateReceiptPDF(contribution.id)
     const msg = `CEM Melen - Paiement par carte confirmé\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${contribution.rubrique.title}\nMerci pour votre contribution !`
 
-    if (memberPhone) {
+    // Membre avec compte : notifyMemberConfirmed regroupe in-app (cliquable,
+    // targetView='mes-contributions') + WhatsApp + email en un seul appel —
+    // avant cet ajout, seul un WhatsApp partait ici, sans notification in-app.
+    // Contributeur externe (collecte publique, pas de compte User) : WhatsApp
+    // seul, comportement inchangé.
+    if (contribution.membre) {
+      try {
+        await notifyMemberConfirmed({
+          userId: contribution.membre.user.id,
+          memberPhone,
+          memberEmail: contribution.membre.user.email,
+          memberName,
+          montant: contribution.montant,
+          rubriqueCode: contribution.rubrique.code,
+          receiptUrl,
+          contributionId: contribution.id,
+        })
+      } catch (e) {
+        console.error('[Notification] Échec notification membre (webhook CinetPay):', e)
+      }
+    } else if (memberPhone) {
       let sent = false
       if (receiptUrl) sent = await sendWhatsAppDocument(memberPhone, receiptUrl, msg)
       if (!sent) await sendWhatsApp(memberPhone, msg)

@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Alert, Button, Card, Empty, Progress, Segmented, Select, Skeleton, Statistic, Tag } from 'antd'
-import { motion, useReducedMotion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import {
   AlertTriangle, CheckCircle2, CreditCard, Crown, FileText, FolderOpen,
   TrendingUp, Users, Wallet,
@@ -41,7 +41,6 @@ const STATUS_LABELS: Record<string, string> = {
 export function Dashboard() {
   const { setActiveView } = useAppStore()
   const { user } = useAuthStore()
-  const reduceMotion = useReducedMotion()
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
   const [chartMode, setChartMode] = useState<'montants' | 'taux'>('montants')
@@ -60,9 +59,7 @@ export function Dashboard() {
   const monthlyData = monthlyQuery.data ?? []
   const monthlyTotal = useMemo(() => monthlyData.reduce((sum, item) => sum + item.total, 0), [monthlyData])
   const years = Array.from({ length: 7 }, (_, index) => currentYear - 4 + index)
-  const motionProps = reduceMotion
-    ? {}
-    : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.35 } }
+  const motionProps = { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.35 } }
 
   return (
     <motion.div {...motionProps} className="space-y-4 p-4 pb-20 md:space-y-6 md:p-6 lg:pb-6">

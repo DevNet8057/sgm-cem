@@ -2,13 +2,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button as AntButton, Form, Input, Modal, Progress, Result, Steps } from 'antd'
-import { motion, useReducedMotion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import {
   AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, CreditCard, ExternalLink,
-  FileText, Heart, Loader2, Printer, RefreshCw, Share2, X,
+  Heart, Loader2, RefreshCw, X,
 } from 'lucide-react'
 import api from '@/lib/api'
 import { cn, formatAmount } from '@/lib/utils'
+import { ReceiptSuccessContent } from '@/components/contributions/ReceiptSuccessModal'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { calculateAmountWithCommission, YELII_COMMISSION_RATE } from '@sgm-cem/shared'
 import { PaymentMethodSelector, OperatorSelector, type PayMode, type MobileOperator } from './PaymentMethodSelector'
@@ -26,14 +27,22 @@ export interface PaymentStepperProps {
   membres: Membre[]
   rubriques: Rubrique[]
   onClose: () => void
-  onSuccess: () => void
+  /**
+   * Portail membre : verrouille le paiement sur `membres[0]` (le membre
+   * connecté — jamais un autre), masque le sélecteur de membre et l'option
+   * Espèces (qui passe par la déclaration à double validation, pas ce
+   * stepper). MTN MoMo / Orange Money / Carte restent identiques au flow staff.
+   */
+  selfService?: boolean
+  /** Pré-sélection depuis la carte "Payer" d'une rubrique (RubriquesMembre). */
+  initialRubriqueId?: string
+  initialMontant?: number
 }
 
 const STEPS = ['Sélection', 'Mode', 'Récapitulatif', 'Résultat']
 
-export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: PaymentStepperProps) {
+export function PaymentStepper({ membres, rubriques, onClose, selfService, initialRubriqueId, initialMontant }: PaymentStepperProps) {
   const queryClient = useQueryClient()
-  const reduceMotion = useReducedMotion()
 
   // Taux de commission EFFECTIF servi par l'API (panneau développeur —
   // clé YELII_COMMISSION_RATE en base). Le taux compilé n'est qu'un fallback :
@@ -50,12 +59,13 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
   const [error, setError] = useState('')
 
   // Étape 1 — Sélection
-  const [membreId, setMembreId] = useState('')
-  const [rubriqueId, setRubriqueId] = useState('')
-  const [montant, setMontant] = useState('')
+  // Self-service : le membre ne choisit jamais un autre membre — verrouillé sur lui-même.
+  const [membreId, setMembreId] = useState(() => selfService ? (membres[0]?.id ?? '') : '')
+  const [rubriqueId, setRubriqueId] = useState(initialRubriqueId ?? '')
+  const [montant, setMontant] = useState(initialMontant != null ? String(initialMontant) : '')
 
-  // Étape 2 — Mode de paiement
-  const [mode, setMode] = useState<PayMode>('ESPECES')
+  // Étape 2 — Mode de paiement (Espèces n'a pas de sens en self-service — voir déclaration à double validation)
+  const [mode, setMode] = useState<PayMode>(selfService ? 'MOBILE_MONEY' : 'ESPECES')
   const [operator, setOperator] = useState<MobileOperator>('MTN')
   const [mobilePhone, setMobilePhone] = useState('')
 
@@ -128,7 +138,6 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
         if (rUrl) setReceiptUrl(rUrl)
         await queryClient.invalidateQueries({ queryKey: ['contributions'] })
         await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
-        setTimeout(onSuccess, 2500)
         return true
       }
       if (statut === 'ANNULE' || ps === 'FAILED') {
@@ -137,7 +146,7 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
       }
     } catch { /* le webhook mettra à jour */ }
     return false
-  }, [contribId, queryClient, onSuccess])
+  }, [contribId, queryClient])
 
   useEffect(() => {
     if ((payStatus !== 'waiting' && payStatus !== 'redirected') || !contribId) return
@@ -248,7 +257,7 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
       open
       title={(
         <div>
-          <h2 className="font-display text-xl font-semibold text-[#0F4A0F]">Enregistrer un paiement</h2>
+          <h2 className="font-display text-xl font-semibold text-[#0F4A0F]">{selfService ? 'Faire une contribution' : 'Enregistrer un paiement'}</h2>
           <p className="mt-1 text-xs font-normal text-gray-400">Étape {step + 1} sur {STEPS.length}</p>
         </div>
       )}
@@ -294,9 +303,9 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
       }}
       modalRender={modal => (
         <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 24, scale: 0.98 }}
+          initial={{ opacity: 0, y: 24, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: reduceMotion ? 0 : 0.2, ease: 'easeOut' }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
         >
           {modal}
         </motion.div>
@@ -332,9 +341,9 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
         {/* ── Contenu des étapes ── */}
         <motion.div
           key={step}
-          initial={reduceMotion ? false : { opacity: 0, x: 12 }}
+          initial={{ opacity: 0, x: 12 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: reduceMotion ? 0 : 0.18 }}
+          transition={{ duration: 0.18 }}
           className="px-4 py-5 sm:px-6"
         >
 
@@ -342,15 +351,17 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
           {step === 0 && (
             <Form layout="vertical" className="space-y-4">
               <div>
-                <SearchableSelect
-                  label="Membre"
-                  required
-                  placeholder="Rechercher par nom ou matricule…"
-                  value={membreId}
-                  onChange={setMembreId}
-                  options={membreOptions}
-                  emptyText="Aucun membre trouvé"
-                />
+                {!selfService && (
+                  <SearchableSelect
+                    label="Membre"
+                    required
+                    placeholder="Rechercher par nom ou matricule…"
+                    value={membreId}
+                    onChange={setMembreId}
+                    options={membreOptions}
+                    emptyText="Aucun membre trouvé"
+                  />
+                )}
                 {selectedMembre && (
                   <div className="mt-2 space-y-1.5">
                     <div className="flex items-center gap-2 rounded-[10px] bg-[#E8F5E8] border border-[#1A6B1A]/20 px-3 py-2">
@@ -426,7 +437,7 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
           {step === 1 && (
             <div className="space-y-4">
               <p className="text-sm text-gray-500">Choisissez le mode de règlement :</p>
-              <PaymentMethodSelector value={mode} onChange={m => { setMode(m); setError('') }} />
+              <PaymentMethodSelector value={mode} onChange={m => { setMode(m); setError('') }} hideEspeces={selfService} />
 
               {/* Choix opérateur + numéro — Mobile Money uniquement */}
               {isMobileMoney && (
@@ -613,59 +624,14 @@ export function PaymentStepper({ membres, rubriques, onClose, onSuccess }: Payme
               )}
 
               {/* Paiement confirmé — le reçu est PRÉSENTÉ (pas envoyé automatiquement) */}
-              {payStatus === 'confirmed' && (
-                <div className="py-6 text-center space-y-4">
-                  <div className="w-16 h-16 rounded-full bg-[#E8F5E8] flex items-center justify-center mx-auto">
-                    <CheckCircle2 size={32} className="text-[#1A6B1A]" />
-                  </div>
-                  <div>
-                    <h3 className="font-display font-semibold text-[#0F4A0F] text-xl mb-1">Paiement confirmé !</h3>
-                    <p className="text-sm text-gray-500">
-                      La contribution est enregistrée. Votre reçu est prêt ci-dessous.
-                    </p>
-                  </div>
-                  {receiptUrl ? (
-                    <div className="flex flex-wrap items-center justify-center gap-2">
-                      <AntButton
-                        type="primary"
-                        icon={<FileText size={14} />}
-                        href={receiptUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        Voir le reçu
-                      </AntButton>
-                      <AntButton
-                        icon={<Printer size={14} />}
-                        onClick={() => {
-                          const w = window.open(receiptUrl, '_blank', 'noopener,noreferrer')
-                          // PDF cross-origin : si print() est bloqué, le lecteur PDF
-                          // du navigateur permet d'imprimer (Ctrl+P)
-                          try { w?.addEventListener('load', () => { try { w.print() } catch { /* viewer */ } }) } catch { /* cross-origin */ }
-                        }}
-                      >
-                        Imprimer
-                      </AntButton>
-                      <AntButton
-                        icon={<Share2 size={14} />}
-                        onClick={async () => {
-                          const text = 'Reçu de contribution — CEM Melen'
-                          if (navigator.share) {
-                            try { await navigator.share({ title: 'Reçu CEM Melen', text, url: receiptUrl }); return } catch { /* partage annulé */ }
-                          }
-                          // Fallback : partage WhatsApp choisi PAR l'utilisateur (pas automatique)
-                          window.open(`https://wa.me/?text=${encodeURIComponent(`${text} : ${receiptUrl}`)}`, '_blank', 'noopener,noreferrer')
-                        }}
-                      >
-                        Partager
-                      </AntButton>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center gap-2 text-xs text-gray-400">
-                      <Loader2 size={12} className="animate-spin" /> Génération du reçu…
-                    </div>
-                  )}
-                </div>
+              {payStatus === 'confirmed' && contribId && (
+                <ReceiptSuccessContent
+                  contributionId={contribId}
+                  initialReceiptUrl={receiptUrl}
+                  memberName={selectedMembre?.user.fullName}
+                  amount={Number(montant)}
+                  rubriqueLabel={selectedRubrique?.title}
+                />
               )}
 
               {/* Paiement échoué */}

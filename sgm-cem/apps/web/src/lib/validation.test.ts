@@ -44,17 +44,31 @@ describe('validatePassword', () => {
   })
 
   it('returns errors for weak password', () => {
-    expect(validatePassword('test')).toEqual({
+    // Chaque exemple isole une seule règle violée — validatePassword vérifie
+    // les 3 règles indépendamment et cumule toutes les erreurs applicables,
+    // donc un mot de passe qui en viole plusieurs (ex: 'test') en renvoie autant.
+    expect(validatePassword('Ab1')).toEqual({
       valid: false,
       errors: ['Le mot de passe doit contenir au moins 8 caractères'],
     })
-    expect(validatePassword('abcdefgh')).toEqual({
+    expect(validatePassword('abcdefg1')).toEqual({
       valid: false,
       errors: ['Le mot de passe doit contenir au moins une majuscule'],
     })
     expect(validatePassword('Abcdefgh')).toEqual({
       valid: false,
       errors: ['Le mot de passe doit contenir au moins un chiffre'],
+    })
+  })
+
+  it('cumule toutes les erreurs applicables pour un mot de passe qui viole plusieurs règles', () => {
+    expect(validatePassword('test')).toEqual({
+      valid: false,
+      errors: [
+        'Le mot de passe doit contenir au moins 8 caractères',
+        'Le mot de passe doit contenir au moins une majuscule',
+        'Le mot de passe doit contenir au moins un chiffre',
+      ],
     })
   })
 })
