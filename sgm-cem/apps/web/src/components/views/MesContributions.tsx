@@ -1,7 +1,8 @@
 'use client'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CreditCard, HandCoins, Search, X } from 'lucide-react'
+import { motion, useReducedMotion } from 'framer-motion'
+import { AlertTriangle, ArrowRight, CreditCard, HandCoins, Search, Wallet, X } from 'lucide-react'
 import api from '@/lib/api'
 import { cn, formatAmount, formatDate, MODE_PAIEMENT_LABELS } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
@@ -12,15 +13,53 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ActivityCard } from '@/components/ui/ActivityCard'
 import { useFocusHighlight } from '@/hooks/useFocusHighlight'
-import type { Contribution, Rubrique } from '@/types'
+import type { Contribution, RemainingBalance, Rubrique } from '@/types'
 
 export function MesContributions() {
   const { user } = useAuthStore()
+  const { navigateToNotification } = useAppStore()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [montantMin, setMontantMin] = useState('')
   const [montantMax, setMontantMax] = useState('')
   const [showDeclareForm, setShowDeclareForm] = useState(false)
+
+  // Mêmes queryKeys que RubriquesMembre.tsx : react-query dédoublonne la requête
+  // si le membre visite les deux vues, sans logique de cache à maintenir ici.
+  const { data: openRubriques } = useQuery<Rubrique[]>({
+    queryKey: ['rubriques'],
+    queryFn: async () => (await api.get('/rubriques', { params: { status: 'OUVERTE' } })).data.data,
+  })
+  const { data: balances } = useQuery<RemainingBalance[]>({
+    queryKey: ['mes-soldes'],
+    queryFn: async () => (await api.get('/contributions/me/balance')).data.data,
+  })
+
+  // Rappels réels uniquement — jamais de compte à rebours ni de "X personnes ont
+  // déjà contribué" : soit un solde réellement dû (remainingAmount > 0), soit une
+  // rubrique déjà marquée URGENT/PRIORITAIRE en base (fait réel, pas fabriqué ici).
+  const reminders = useMemo(() => {
+    const balanceByRubrique = new Map((balances ?? []).map(b => [b.rubrique.id, b]))
+    const items = (openRubriques ?? [])
+      .map(r => ({ rubrique: r, balance: balanceByRubrique.get(r.id) }))
+      .filter(({ rubrique: r, balance: b }) =>
+        (b?.remainingAmount != null && b.remainingAmount > 0) ||
+        r.priority === 'URGENT' || r.priority === 'PRIORITAIRE'
+      )
+
+    const urgent = items
+      .filter(({ rubrique: r }) => r.priority === 'URGENT' || r.priority === 'PRIORITAIRE')
+      .sort((a, b) => {
+        if (a.rubrique.priority !== b.rubrique.priority) return a.rubrique.priority === 'URGENT' ? -1 : 1
+        if (!a.rubrique.closeDate && !b.rubrique.closeDate) return 0
+        if (!a.rubrique.closeDate) return 1
+        if (!b.rubrique.closeDate) return -1
+        return new Date(a.rubrique.closeDate).getTime() - new Date(b.rubrique.closeDate).getTime()
+      })
+    const calm = items.filter(({ rubrique: r }) => r.priority === 'NORMAL')
+
+    return { urgent, calm, total: items.length }
+  }, [openRubriques, balances])
 
   const { data, isLoading } = useQuery({
     queryKey: ['mes-contributions', page, montantMin, montantMax],
@@ -73,6 +112,10 @@ export function MesContributions() {
           </Button>
         </div>
       </div>
+
+      <ContributionReminderBanner reminders={reminders} onContribute={rubriqueId =>
+        navigateToNotification({ targetView: 'rubriques', targetId: rubriqueId })
+      } />
 
       {showDeclareForm && (
         <DeclareCashForm onDone={() => setShowDeclareForm(false)} />
@@ -220,6 +263,80 @@ export function MesContributions() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+type ReminderItem = { rubrique: Rubrique; balance?: RemainingBalance }
+
+/**
+ * Bannière proactive — visible dès la connexion (haut de "Mes contributions",
+ * l'écran d'accueil réel du MEMBRE), pas enterrée dans un sous-menu.
+ * URGENT/PRIORITAIRE réutilise exactement le style .badge-urgent /
+ * StatusBadge déjà défini (rouge, pulse) — aucune nouvelle palette. Le CTA
+ * mène vers RubriquesMembre (via le mécanisme générique navigateToNotification
+ * + useFocusHighlight, déjà utilisé pour les notifications) où vit le seul et
+ * unique moteur de paiement (PaymentStepper selfService) — rien n'est dupliqué
+ * ici, cette bannière ne fait qu'aiguiller.
+ * Rappels réels uniquement : ni compte à rebours, ni "X personnes ont déjà
+ * contribué" — seulement un solde réellement dû ou un statut de priorité déjà
+ * fixé en base par un responsable.
+ */
+function ContributionReminderBanner({ reminders, onContribute }: {
+  reminders: { urgent: ReminderItem[]; calm: ReminderItem[]; total: number }
+  onContribute: (rubriqueId: string) => void
+}) {
+  const reduceMotion = useReducedMotion()
+  const { urgent, calm, total } = reminders
+  if (total === 0) return null
+
+  const isUrgent = urgent.length > 0
+  const top = isUrgent ? urgent[0] : calm[0]
+  const extraCount = (isUrgent ? urgent.length : calm.length) - 1
+  const soldeLabel = top.balance?.dueAmount == null
+    ? 'Contribution libre — montant à votre convenance'
+    : `${formatAmount(top.balance.remainingAmount)} restant à payer`
+
+  return (
+    <div className={cn(
+      'relative overflow-hidden rounded-[18px] border p-5 mb-6 flex flex-col sm:flex-row sm:items-center gap-4',
+      isUrgent ? 'bg-[#FEF2F2] border-[#FCA5A5]' : 'bg-white border-gray-100'
+    )}>
+      <div className={cn(
+        'w-11 h-11 rounded-full flex items-center justify-center shrink-0',
+        isUrgent ? 'bg-[#7F1D1D]/10' : 'bg-[#E8F5E8]'
+      )}>
+        {isUrgent
+          ? <AlertTriangle size={20} className="text-[#7F1D1D] animate-[urgence-pulse_2s_ease-in-out_infinite]" />
+          : <Wallet size={20} className="text-[#1A6B1A]" />}
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <p className={cn('text-xs font-bold uppercase tracking-widest', isUrgent ? 'text-[#7F1D1D]' : 'text-[#1A6B1A]')}>
+          {isUrgent ? 'Rubrique urgente ou prioritaire' : 'Vous pouvez encore contribuer'}
+        </p>
+        <h3 className={cn('font-display font-semibold text-base', isUrgent ? 'text-[#7F1D1D]' : 'text-gray-800')}>
+          {top.rubrique.title}
+        </h3>
+        <p className="text-sm text-gray-600 mt-0.5">
+          {soldeLabel}
+          {top.rubrique.closeDate && ` · à régler avant le ${formatDate(top.rubrique.closeDate)}`}
+        </p>
+        {extraCount > 0 && (
+          <p className="text-xs text-gray-400 mt-1">+ {extraCount} autre{extraCount > 1 ? 's' : ''} rubrique{extraCount > 1 ? 's' : ''} ouverte{extraCount > 1 ? 's' : ''}</p>
+        )}
+      </div>
+
+      <motion.div
+        className="shrink-0"
+        animate={isUrgent && !reduceMotion ? { scale: [1, 1.03, 1] } : undefined}
+        transition={isUrgent && !reduceMotion ? { duration: 2, repeat: Infinity, ease: 'easeInOut' } : undefined}
+      >
+        <Button size="sm" onClick={() => onContribute(top.rubrique.id)}>
+          <ArrowRight size={13} />
+          {isUrgent ? 'Contribuer maintenant' : 'Voir mes rubriques'}
+        </Button>
+      </motion.div>
     </div>
   )
 }

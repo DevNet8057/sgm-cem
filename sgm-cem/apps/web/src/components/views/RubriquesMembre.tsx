@@ -9,6 +9,8 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { SkeletonCard } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { PaymentStepper } from '@/components/payments/PaymentStepper'
+import { useFocusHighlight } from '@/hooks/useFocusHighlight'
+import { cn } from '@/lib/utils'
 import type { Rubrique, RemainingBalance, Membre } from '@/types'
 
 /**
@@ -47,6 +49,10 @@ export function RubriquesMembre() {
   const isLoading = loadingRubriques || loadingBalances
   const balanceByRubrique = new Map((balances ?? []).map(b => [b.rubrique.id, b]))
   const list = rubriques ?? []
+  // Permet au CTA de la bannière dashboard (MesContributions) de rebondir ici
+  // et de scroller/surligner la rubrique visée — même mécanisme générique que
+  // pour les notifications (appStore.navigateToNotification + data-focus-id).
+  const highlightedId = useFocusHighlight(list.map(r => r.id))
 
   return (
     <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter">
@@ -72,6 +78,7 @@ export function RubriquesMembre() {
               key={r.id}
               rubrique={r}
               balance={balanceByRubrique.get(r.id)}
+              highlighted={highlightedId === r.id}
               onPay={montant => setPayingFor({ rubriqueId: r.id, montant })}
             />
           ))}
@@ -92,9 +99,10 @@ export function RubriquesMembre() {
   )
 }
 
-function RubriqueMembreCard({ rubrique: r, balance, onPay }: {
+function RubriqueMembreCard({ rubrique: r, balance, highlighted, onPay }: {
   rubrique: Rubrique
   balance?: RemainingBalance
+  highlighted?: boolean
   onPay: (montant?: number) => void
 }) {
   const isUrgentOrPriority = r.priority === 'URGENT' || r.priority === 'PRIORITAIRE'
@@ -102,10 +110,13 @@ function RubriqueMembreCard({ rubrique: r, balance, onPay }: {
     r.priority === 'PRIORITAIRE' ? 'from-orange-500 to-amber-400' : 'from-[#1A6B1A] to-[#2D8C2D]'
 
   return (
-    <div className={
-      'bg-white rounded-[18px] border overflow-hidden transition-all duration-200 ' +
-      (isUrgentOrPriority ? 'border-red-200 shadow-cem-sm' : 'border-gray-100')
-    }>
+    <div
+      data-focus-id={r.id}
+      className={cn(
+        'bg-white rounded-[18px] border overflow-hidden transition-all duration-200',
+        isUrgentOrPriority ? 'border-red-200 shadow-cem-sm' : 'border-gray-100',
+        highlighted && 'ring-2 ring-[#1A6B1A]'
+      )}>
       <div className={`h-1.5 bg-linear-to-r ${topColor}`} />
       <div className="p-5">
         <div className="flex items-start justify-between mb-3 gap-2">
