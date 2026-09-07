@@ -131,6 +131,10 @@ services:
         value: ""
       - key: CINETPAY_SITE_ID
         value: ""
+      - key: CINETPAY_SECRET_KEY
+        sync: false
+      - key: PAYMENT_RETURN_URL
+        sync: false
       # ── Notifications push web (VAPID) ──────────────────────────────────
       - key: VAPID_PUBLIC_KEY
         value: ""
