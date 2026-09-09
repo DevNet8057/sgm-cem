@@ -60,8 +60,11 @@ export async function storeFile(
     await client.send(
       new PutObjectCommand({ Bucket: bucket, Key: key, Body: buffer, ContentType: mimeType })
     )
+    const publicUrl = getConfig('S3_PUBLIC_URL')
     const endpoint = getConfig('S3_ENDPOINT')
-    const url = endpoint
+    const url = publicUrl
+      ? `${publicUrl.replace(/\/$/, '')}/${key}`
+      : endpoint
       ? `${endpoint.replace(/\/$/, '')}/${bucket}/${key}`
       : `https://${bucket}.s3.${getConfig('S3_REGION') ?? 'us-east-1'}.amazonaws.com/${key}`
     return { s3Key: key, s3Bucket: bucket, url, mode: 'S3' }
@@ -73,6 +76,19 @@ export async function storeFile(
   fs.writeFileSync(localPath, buffer)
   const apiUrl = getConfig('API_URL') ?? 'http://localhost:3001'
   return { s3Key: key, s3Bucket: 'local', url: `${apiUrl}/uploads/${key}`, mode: 'local' }
+}
+
+/** Retrouve une clé lorsqu'une URL a été produite par ce service. */
+export function getManagedStorageKey(url: string): string | null {
+  const apiUrl = getConfig('API_URL') ?? 'http://localhost:3001'
+  const localPrefix = `${apiUrl.replace(/\/$/, '')}/uploads/`
+  if (url.startsWith(localPrefix)) return url.slice(localPrefix.length)
+
+  const publicUrl = getConfig('S3_PUBLIC_URL')
+  const publicPrefix = publicUrl ? `${publicUrl.replace(/\/$/, '')}/` : null
+  if (publicPrefix && url.startsWith(publicPrefix)) return url.slice(publicPrefix.length)
+
+  return null
 }
 
 /** Stream a file from S3 or local disk. Returns null if not found. */

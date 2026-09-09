@@ -7,7 +7,7 @@ import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { formatAmount } from '../lib/utils'
 import { generateBorderauPdf, generateAndStoreBorderau } from '../services/borderau'
-import { getFileStream } from '../services/storage'
+import { getFileStream, getManagedStorageKey } from '../services/storage'
 
 const router = Router()
 const prisma = new PrismaClient()
@@ -698,10 +698,9 @@ router.get('/transfers/:id/borderau', authenticate, requireLevel(2), async (req,
   if (!canView) throw new AppError('ACCESS_DENIED', 'Accès refusé à ce bordereau', 403)
 
   let pdfBuffer: Buffer | null = null
-  const apiUrl = getConfig('API_URL') ?? 'http://localhost:3001'
+  const key = transfer.borderauUrl ? getManagedStorageKey(transfer.borderauUrl) : null
 
-  if (transfer.borderauUrl?.startsWith(`${apiUrl}/uploads/`)) {
-    const key = transfer.borderauUrl.replace(`${apiUrl}/uploads/`, '')
+  if (key) {
     const file = await getFileStream(key)
     if (file) {
       const chunks: Buffer[] = []

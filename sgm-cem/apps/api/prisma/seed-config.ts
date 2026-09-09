@@ -70,6 +70,7 @@ const initialConfigs: SeedConf[] = [
   { key: 'S3_SECRET_ACCESS_KEY', category: 'INTEGRATION_KEYS', label: 'S3 — Secret Access Key', isSecret: true },
   { key: 'S3_REGION', category: 'INTEGRATION_KEYS', label: 'S3 — Région' },
   { key: 'S3_ENDPOINT', category: 'INTEGRATION_KEYS', label: 'S3 — Endpoint (R2/MinIO)' },
+  { key: 'S3_PUBLIC_URL', category: 'INTEGRATION_KEYS', label: 'S3 — URL publique des objets', description: 'Base de lecture publique sans slash final. Pour Supabase : https://<project-ref>.supabase.co/storage/v1/object/public/<bucket>.' },
   { key: 'GOOGLE_CLIENT_ID', category: 'INTEGRATION_KEYS', label: 'Google OAuth — Client ID' },
   { key: 'SMTP_HOST', category: 'INTEGRATION_KEYS', label: 'SMTP — Hôte' },
   { key: 'SMTP_PORT', category: 'INTEGRATION_KEYS', label: 'SMTP — Port' },

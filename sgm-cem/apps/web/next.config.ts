@@ -5,9 +5,12 @@ import type { NextConfig } from 'next'
 // sous-domaines onrender.com seraient « cross-site » et sameSite: lax bloquerait
 // l'authentification). Inactif en dev local et en Docker Compose (variables absentes).
 // Voir DEPLOIEMENT_RENDER.md.
-const apiProxyTarget = process.env.API_PROXY_HOST
-  ? `http://${process.env.API_PROXY_HOST}:${process.env.API_PROXY_PORT ?? '10000'}`
-  : null
+// Netlify cible l'API Render externe en HTTPS. Les variables HOST/PORT gardent
+// la compatibilité avec l'ancien proxy interne Render.
+const apiProxyTarget = process.env.API_PROXY_URL
+  ?? (process.env.API_PROXY_HOST
+    ? `http://${process.env.API_PROXY_HOST}:${process.env.API_PROXY_PORT ?? '10000'}`
+    : null)
 
 const nextConfig: NextConfig = {
   transpilePackages: ['@sgm-cem/shared'],

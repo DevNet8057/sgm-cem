@@ -1,4 +1,3 @@
-import { getConfig } from '../services/config.service'
 import { Router } from 'express'
 import { z } from 'zod'
 import { PrismaClient } from '@prisma/client'
@@ -6,7 +5,7 @@ import multer from 'multer'
 import path from 'path'
 import { authenticate } from '../middleware/auth'
 import { AppError } from '../middleware/errorHandler'
-import { storeFile, deleteStoredFile } from '../services/storage'
+import { storeFile, deleteStoredFile, getManagedStorageKey } from '../services/storage'
 
 const router = Router()
 const prisma = new PrismaClient()
@@ -106,15 +105,11 @@ router.post('/photo', authenticate, upload.single('photo'), async (req, res) => 
 
   const result = await storeFile(key, req.file.buffer, req.file.mimetype)
 
-  // Supprimer l'ancienne photo si c'est un fichier local géré par nous
+  // Supprimer l'ancienne photo si elle est gérée par notre stockage.
   const user = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { photoUrl: true } })
   if (user?.photoUrl) {
-    // Extract key from old URL if it contains our API URL pattern
-    const apiUrl = getConfig('API_URL') ?? 'http://localhost:3001'
-    if (user.photoUrl.startsWith(`${apiUrl}/uploads/`)) {
-      const oldKey = user.photoUrl.replace(`${apiUrl}/uploads/`, '')
-      await deleteStoredFile(oldKey).catch(() => {})
-    }
+    const oldKey = getManagedStorageKey(user.photoUrl)
+    if (oldKey) await deleteStoredFile(oldKey).catch(() => {})
   }
 
   const updated = await prisma.user.update({
@@ -130,11 +125,8 @@ router.post('/photo', authenticate, upload.single('photo'), async (req, res) => 
 router.delete('/photo', authenticate, async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { photoUrl: true } })
   if (user?.photoUrl) {
-    const apiUrl = getConfig('API_URL') ?? 'http://localhost:3001'
-    if (user.photoUrl.startsWith(`${apiUrl}/uploads/`)) {
-      const key = user.photoUrl.replace(`${apiUrl}/uploads/`, '')
-      await deleteStoredFile(key).catch(() => {})
-    }
+    const key = getManagedStorageKey(user.photoUrl)
+    if (key) await deleteStoredFile(key).catch(() => {})
   }
   await prisma.user.update({ where: { id: req.user!.userId }, data: { photoUrl: null } })
   res.json({ success: true })
@@ -154,11 +146,8 @@ router.post('/:userId/photo', authenticate, upload.single('photo'), async (req, 
   const result = await storeFile(key, req.file.buffer, req.file.mimetype)
 
   if (target.photoUrl) {
-    const apiUrl = getConfig('API_URL') ?? 'http://localhost:3001'
-    if (target.photoUrl.startsWith(`${apiUrl}/uploads/`)) {
-      const oldKey = target.photoUrl.replace(`${apiUrl}/uploads/`, '')
-      await deleteStoredFile(oldKey).catch(() => {})
-    }
+    const oldKey = getManagedStorageKey(target.photoUrl)
+    if (oldKey) await deleteStoredFile(oldKey).catch(() => {})
   }
 
   const updated = await prisma.user.update({
