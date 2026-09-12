@@ -153,6 +153,10 @@ services:
     dockerContext: ./sgm-cem
     envVars:
       # Cible interne du proxy /api, /socket.io, /uploads (rewrites next.config.ts)
+      # Définie après création avec l'URL publique de l'API si le DNS interne
+      # Render n'est pas disponible pendant le build Docker.
+      - key: API_PROXY_URL
+        sync: false
       - key: API_PROXY_HOST
         fromService:
           type: web
