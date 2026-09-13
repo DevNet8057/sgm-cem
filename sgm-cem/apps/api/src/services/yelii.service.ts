@@ -7,7 +7,10 @@ import { getConfig } from './config.service'
 function getYeliiConfig() {
   return {
     baseUrl: getConfig('YELII_BASE_URL') ?? 'https://api.yelii.xyz/api/yelii-pro-pay/v1',
-    apiKey: getConfig('YELII_COLLECT_API_KEY'),
+    // Certains déploiements historiques ne disposent que de YELII_API_KEY.
+    // La clé de collecte reste prioritaire, mais un champ vide ne doit pas
+    // empêcher MTN/Orange de fonctionner si la clé historique est valide.
+    apiKey: getConfig('YELII_COLLECT_API_KEY') || getConfig('YELII_API_KEY'),
     webhookUrl: getConfig('YELII_WEBHOOK_URL') ?? `${getConfig('API_URL')}/webhooks/yelii`,
   }
 }
