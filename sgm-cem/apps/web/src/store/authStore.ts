@@ -25,6 +25,10 @@ export const useAuthStore = create<AuthState>()(
 
       login: async (email, password) => {
         // Tokens are set as HttpOnly cookies by the server — never touch localStorage
+        // Le jeton CSRF est requis dès la requête de connexion. L'initialisation
+        // globale est asynchrone : l'attendre ici évite un 403 si l'utilisateur
+        // soumet le formulaire avant la fin du chargement de la page.
+        await initCsrf()
         const res = await api.post('/auth/login', { email, password })
         const { user } = res.data.data
         // Le token CSRF est lié au cookie access_token : après login il faut le
@@ -34,6 +38,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       loginWithGoogle: async (idToken) => {
+        await initCsrf()
         const res = await api.post('/auth/google', { idToken })
         const { user } = res.data.data
         await initCsrf()
@@ -41,6 +46,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       loginWithPhone: async (phone, code) => {
+        await initCsrf()
         const res = await api.post('/auth/otp/verify', { phone, code })
         const { user } = res.data.data
         await initCsrf()
