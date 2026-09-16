@@ -50,6 +50,11 @@ Chaque utilisateur est forcé de changer son mot de passe à la première connex
 2. Sélectionner votre compte Google
 3. Si l'email n'est pas en base : message d'erreur → contacter l'administrateur
 
+### Accueil du membre après connexion
+Lorsqu'un utilisateur ayant le rôle **MEMBRE** se connecte, il arrive directement sur **Mes contributions**. Cette page présente ses contributions, leur statut et les reçus disponibles.
+
+Pour effectuer un nouveau paiement ou déclarer une remise d'espèces, cliquer sur **Faire une contribution**.
+
 ---
 
 ## 3. RÔLES ET NIVEAUX D'ACCÈS
@@ -61,61 +66,61 @@ Chaque utilisateur est forcé de changer son mot de passe à la première connex
 | **RESPONSABLE**       | 3      | Membres, GED, Prestations, Statistiques, Rapports         |
 | **ADJOINT_RESPONSABLE** | 3    | Même accès que Responsable                                |
 | **COLLECTEUR**        | 2      | Enregistrer paiements + confirmer ses fonds               |
-| **MEMBRE**            | 1      | Voir ses propres contributions + Notifications             |
+| **MEMBRE**            | 1      | Voir ses contributions, contribuer, déclarer des espèces et consulter ses reçus |
 
 ---
 
 ## 4. FLUX DE PAIEMENT — GUIDE COMPLET
 
-### 4.1 Paiement en espèces (présentiel)
+### 4.1 Faire une contribution en tant que membre
 
-```
-Donateur → saisit montant + rubrique → valide
-         ↓
-Collecteur reçoit notification WhatsApp + in-app
-         ↓
-Collecteur confirme la réception dans Validations
-         ↓
-Fonds localisés : CHEZ_COLLECTEUR (statut : CONFIRME)
-         ↓
-Trésorier transfère → CAISSE_PRINCIPALE ou BANQUE
-         ↓
-Membre reçoit notification de confirmation + WhatsApp
-```
+1. Depuis **Mes contributions**, cliquer sur **Faire une contribution**.
+2. Sélectionner la rubrique et saisir le montant.
+3. Choisir l'une des trois catégories proposées :
+   - **Mobile Money**, puis **MTN Mobile Money** ou **Orange Money** ;
+   - **Carte bancaire**, via la page de paiement sécurisée CinetPay ;
+   - **Espèces**, pour déclarer une somme remise à un collecteur.
+4. Suivre les instructions affichées selon le mode choisi.
 
-**Pour enregistrer un paiement espèces :**
-1. Aller dans **Contributions** → bouton **Guidé** (stepper 3 étapes)
-2. Étape 1 : Chercher le membre + sélectionner la rubrique
-3. Étape 2 : Choisir **Espèces** → sélectionner le collecteur
-4. Étape 3 : Vérifier le récapitulatif → **Confirmer**
-5. Le collecteur désigné reçoit une notification immédiate
+### 4.2 Mobile Money : MTN ou Orange
 
-### 4.2 Paiement MTN MoMo
+1. Choisir **Mobile Money**, puis sélectionner **MTN Mobile Money** ou **Orange Money**.
+2. Vérifier le numéro de téléphone utilisé pour le paiement.
+3. Valider la demande sur le téléphone avec les instructions de l'opérateur.
+4. L'application affiche le paiement en attente pendant la confirmation par le fournisseur.
+5. Après confirmation, la contribution apparaît comme confirmée et le reçu devient disponible dans **Mes contributions**.
 
-```
-Utilisateur saisit montant + numéro MoMo → valide
-         ↓
-Demande USSD envoyée sur le téléphone MTN
-         ↓
-Utilisateur entre son code PIN MoMo sur son téléphone
-         ↓
-Webhook MTN confirme → contribution CONFIRME automatiquement
-         ↓
-Membre reçoit WhatsApp + reçu PDF
-```
+### 4.3 Carte bancaire avec CinetPay
 
-**Pour payer via MTN MoMo :**
-1. Contributions → **Guidé**
-2. Étape 2 : Sélectionner **MTN MoMo**
-3. Saisir le numéro MoMo du payeur
-4. Valider → une demande USSD arrive sur le téléphone
-5. L'écran affiche « En attente de confirmation »
-6. Confirmer sur le téléphone → statut mis à jour automatiquement
+1. Choisir **Carte bancaire** et vérifier le montant ainsi que l'adresse email demandée.
+2. Continuer vers la page sécurisée CinetPay.
+3. Saisir les informations de la carte et valider le paiement sur cette page.
+4. Après le retour dans SGM-CEM, patienter pendant la vérification du paiement.
 
-### 4.3 Paiement Orange Money
-Même flux que MTN MoMo, avec le réseau Orange.
+> **Important :** le simple retour du navigateur dans SGM-CEM ne confirme jamais une contribution. Le paiement est confirmé uniquement après vérification auprès de CinetPay. Une fois cette vérification réussie, la contribution est confirmée et le reçu est généré puis rendu disponible dans **Mes contributions**.
 
-### 4.4 Transfert de fonds (Collecteur → Trésorier)
+### 4.4 Déclarer un paiement en espèces
+
+Cette option sert lorsqu'un membre a remis des espèces à un collecteur.
+
+1. Choisir **Espèces**.
+2. Sélectionner le collecteur concerné.
+3. Vérifier le montant et envoyer la déclaration.
+4. La contribution reste au statut **EN_ATTENTE_CONFIRMATION** tant que le collecteur n'a pas confirmé la réception des fonds.
+5. Après confirmation du collecteur, la contribution est confirmée et le reçu devient disponible.
+
+Une déclaration d'espèces ne constitue donc pas, à elle seule, une confirmation de paiement.
+
+### 4.5 Enregistrement présentiel par un collecteur
+
+Lorsqu'un collecteur enregistre lui-même un paiement reçu en présentiel :
+
+1. Aller dans **Contributions** → bouton **Guidé**.
+2. Chercher le membre et sélectionner la rubrique.
+3. Choisir **Espèces** et vérifier le récapitulatif.
+4. Confirmer l'encaissement.
+
+### 4.6 Transfert de fonds (Collecteur → Trésorier)
 
 1. Aller dans **Fonds Collecteurs**
 2. Sélectionner les contributions à transférer (case à cocher)

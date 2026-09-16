@@ -19,7 +19,7 @@ import { getPrisma } from '../lib/prisma'
 import { audit } from '../services/audit.service'
 import { getConfigBool, getConfigNumber } from '../services/config.service'
 import { initiateYeliiPayment } from '../services/yelii.service'
-import { initiateCinetpayPayment } from '../services/cinetpay.service'
+import { initiateCinetpayPayment, isCinetpayConfigured } from '../services/cinetpay.service'
 import { syncYeliiContributionStatus, CONTRIBUTION_SYNC_SELECT } from '../services/payment-status.service'
 import {
   buildDynamicSchema,
@@ -226,7 +226,7 @@ router.patch('/drafts', publicLimiter, async (req, res) => {
 const initiatePublicSchema = z.object({
   nom: z.string().min(2),
   phone: z.string().min(8),
-  email: z.string().email().optional(),
+  email: z.string().email('Adresse email invalide').optional(),
   montant: z.number().int().positive(),
   valeursChamps: z.unknown(),
   modePaiement: z.enum(['YELII', 'CARTE_VISA']),
@@ -237,6 +237,20 @@ const initiatePublicSchema = z.object({
       code: z.ZodIssueCode.custom,
       message: 'Le réseau mobile money (channel) est requis pour un paiement Yelii',
       path: ['channel'],
+    })
+  }
+  if (data.modePaiement === 'CARTE_VISA' && data.montant % 5 !== 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Le montant du paiement par carte doit être un multiple de 5 FCFA',
+      path: ['montant'],
+    })
+  }
+  if (data.modePaiement === 'CARTE_VISA' && !data.email) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Une adresse email valide est requise pour le paiement par carte',
+      path: ['email'],
     })
   }
 })
@@ -269,6 +283,23 @@ router.post('/collectes/:slug/initiate', publicLimiter, async (req, res) => {
 
   if (collecte.montantMin && data.montant < collecte.montantMin) {
     throw new AppError('BUSINESS_RULE', `Le montant minimum pour cette collecte est de ${collecte.montantMin} FCFA`)
+  }
+
+  if (data.modePaiement === 'CARTE_VISA') {
+    if (!getConfigBool('CARD_ENABLED', true)) {
+      throw new AppError(
+        'CARD_DISABLED',
+        'Le paiement par carte est temporairement désactivé. Choisissez un autre mode de paiement.',
+        403
+      )
+    }
+    if (!isCinetpayConfigured()) {
+      throw new AppError(
+        'CINETPAY_NOT_CONFIGURED',
+        'Le paiement par carte est indisponible car CinetPay n’est pas configuré. Veuillez choisir un autre mode de paiement.',
+        503
+      )
+    }
   }
 
   // Validation des champs personnalisés — schéma construit à la volée à partir
@@ -362,15 +393,26 @@ router.post('/collectes/:slug/initiate', publicLimiter, async (req, res) => {
   }
 
   // ── MODE CARTE BANCAIRE (CinetPay) — même flux que payments.ts ───────────
-  const txId = `SGM-${new Date().getFullYear()}-${contribution.id.substring(0, 8).toUpperCase()}`
+  const txId = `SGM${contribution.id.replace(/-/g, '').toUpperCase()}`
+  const customerNameParts = data.nom.trim().split(/\s+/).filter(Boolean)
+  const customerName = customerNameParts.shift() ?? 'Contributeur'
+  const customerSurname = customerNameParts.join(' ') || 'Contributeur'
 
   try {
     const result = await initiateCinetpayPayment({
       transactionId: txId,
       amount: data.montant,
       description: `Contribution — ${collecte.titre}`.trim(),
-      customerName: data.nom,
-      customerSurname: 'Public',
+      customerId: contributeur.id,
+      customerName,
+      customerSurname,
+      customerPhone: phone,
+      customerEmail: data.email!,
+      customerAddress: 'EEC Melen',
+      customerCity: 'Yaoundé',
+      customerCountry: 'CM',
+      customerState: 'CM',
+      customerZipCode: '00000',
     })
 
     await prisma.contribution.update({
@@ -383,10 +425,13 @@ router.post('/collectes/:slug/initiate', publicLimiter, async (req, res) => {
       success: true,
       data: { contributionId: contribution.id, paymentUrl: result.paymentUrl, status: 'PROCESSING' },
     })
-  } catch (err) {
+  } catch {
     await prisma.contribution.update({ where: { id: contribution.id }, data: { paymentStatus: 'FAILED' } })
-    const message = err instanceof Error ? err.message : 'Erreur CinetPay'
-    return res.status(500).json({ success: false, error: message })
+    throw new AppError(
+      'CINETPAY_ERROR',
+      'Le paiement par carte n’a pas pu être initialisé. Veuillez réessayer.',
+      502
+    )
   }
 })
 

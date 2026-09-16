@@ -715,3 +715,59 @@ model Notification {
   @@index([createdAt])
   @@map("notifications")
 }
+
+// ─── OBSERVABILITÉ ADMINISTRATEUR ───────────────────────────────────────
+
+model ActivitySession {
+  id              String   @id @default(cuid())
+  authSessionId   String   @unique
+  userId          String
+  authExpiresAt   DateTime
+  startedAt       DateTime @default(now())
+  lastSeenAt      DateTime @default(now())
+  lastActiveAt    DateTime?
+  lastAccountedAt DateTime @default(now())
+  endedAt         DateTime?
+  activeSeconds   Int      @default(0)
+
+  tabs           ActivityTab[]
+  pageAggregates ActivityPageAggregate[]
+
+  @@index([userId, startedAt])
+  @@index([lastSeenAt])
+  @@index([endedAt, authExpiresAt])
+  @@map("activity_sessions")
+}
+
+model ActivityTab {
+  id         String    @id @default(cuid())
+  sessionId  String
+  tabId      String    @db.Uuid
+  seq        Int
+  pageKey    String
+  isActive   Boolean
+  lastSeenAt DateTime  @default(now())
+  endedAt    DateTime?
+
+  session ActivitySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, tabId])
+  @@index([lastSeenAt])
+  @@map("activity_tabs")
+}
+
+model ActivityPageAggregate {
+  id            String   @id @default(cuid())
+  sessionId     String
+  pageKey       String
+  day           DateTime @db.Date
+  activeSeconds Int      @default(0)
+  firstSeenAt   DateTime @default(now())
+  lastSeenAt    DateTime @default(now())
+
+  session ActivitySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, pageKey, day])
+  @@index([day, pageKey])
+  @@map("activity_page_aggregates")
+}

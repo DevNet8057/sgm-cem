@@ -11,12 +11,26 @@ import api from '@/lib/api'
 import { cn, formatAmount } from '@/lib/utils'
 import { ReceiptSuccessContent } from '@/components/contributions/ReceiptSuccessModal'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
+import { extractDeclareErrorMessage, useDeclareCashContribution } from '@/hooks/useDeclareCashContribution'
 import { calculateAmountWithCommission, YELII_COMMISSION_RATE } from '@sgm-cem/shared'
 import { PaymentMethodSelector, OperatorSelector, type PayMode, type MobileOperator } from './PaymentMethodSelector'
 import { PendingScreen, USSD_TIMEOUT } from './PendingScreen'
 import type { Membre, Rubrique } from '@/types'
 
-type PayStatus = 'idle' | 'submitting' | 'waiting' | 'redirected' | 'confirmed' | 'failed' | 'timeout'
+type PayStatus = 'idle' | 'submitting' | 'waiting' | 'redirected' | 'confirmed' | 'declared' | 'failed' | 'timeout'
+
+interface PaymentConfig {
+  yeliiCommissionRate: number
+  mobileMoneyEnabled: boolean
+  cashEnabled: boolean
+  cardEnabled: boolean
+}
+
+interface EligibleCollector {
+  id: string
+  fullName: string
+  role: string
+}
 
 type MembreWithCouple = Membre & {
   couple?: { id: string; user: { fullName: string } }
@@ -29,9 +43,9 @@ export interface PaymentStepperProps {
   onClose: () => void
   /**
    * Portail membre : verrouille le paiement sur `membres[0]` (le membre
-   * connecté — jamais un autre), masque le sélecteur de membre et l'option
-   * Espèces (qui passe par la déclaration à double validation, pas ce
-   * stepper). MTN MoMo / Orange Money / Carte restent identiques au flow staff.
+   * connecté — jamais un autre) et masque le sélecteur de membre. Les espèces
+   * passent par la déclaration à double validation, les paiements numériques
+   * conservent le même flux que pour le staff.
    */
   selfService?: boolean
   /** Pré-sélection depuis la carte "Payer" d'une rubrique (RubriquesMembre). */
@@ -43,16 +57,24 @@ const STEPS = ['Sélection', 'Mode', 'Récapitulatif', 'Résultat']
 
 export function PaymentStepper({ membres, rubriques, onClose, selfService, initialRubriqueId, initialMontant }: PaymentStepperProps) {
   const queryClient = useQueryClient()
+  const declareCash = useDeclareCashContribution()
 
   // Taux de commission EFFECTIF servi par l'API (panneau développeur —
   // clé YELII_COMMISSION_RATE en base). Le taux compilé n'est qu'un fallback :
   // il peut être périmé si le développeur l'a changé sans redéploiement.
   const { data: paymentConfig } = useQuery({
     queryKey: ['payments-config'],
-    queryFn: async () => (await api.get('/payments/config')).data.data as { yeliiCommissionRate: number },
+    queryFn: async () => (await api.get('/payments/config')).data.data as PaymentConfig,
     staleTime: 60_000,
   })
   const commissionRate = paymentConfig?.yeliiCommissionRate ?? YELII_COMMISSION_RATE
+  const disabledModes = useMemo<PayMode[]>(() => {
+    const modes: PayMode[] = []
+    if (paymentConfig?.mobileMoneyEnabled === false) modes.push('MOBILE_MONEY')
+    if (paymentConfig?.cardEnabled === false) modes.push('CARTE_VISA')
+    if (paymentConfig?.cashEnabled === false) modes.push('ESPECES')
+    return modes
+  }, [paymentConfig])
 
   // Navigation
   const [step, setStep] = useState(0)
@@ -64,10 +86,12 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
   const [rubriqueId, setRubriqueId] = useState(initialRubriqueId ?? '')
   const [montant, setMontant] = useState(initialMontant != null ? String(initialMontant) : '')
 
-  // Étape 2 — Mode de paiement (Espèces n'a pas de sens en self-service — voir déclaration à double validation)
+  // Étape 2 — Mode de paiement
   const [mode, setMode] = useState<PayMode>(selfService ? 'MOBILE_MONEY' : 'ESPECES')
   const [operator, setOperator] = useState<MobileOperator>('MTN')
   const [mobilePhone, setMobilePhone] = useState('')
+  const [collecteurId, setCollecteurId] = useState('')
+  const [cashNote, setCashNote] = useState('')
 
   // Étape 4 — Résultat
   const [payStatus, setPayStatus] = useState<PayStatus>('idle')
@@ -101,6 +125,26 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
 
   const splitAmount = expectedAmount != null && isCouple ? Math.round(expectedAmount / 2) : null
   const isMobileMoney = mode === 'MOBILE_MONEY'
+  const isCard = mode === 'CARTE_VISA'
+  const isCashDeclaration = Boolean(selfService && mode === 'ESPECES')
+  const modeDisabled = disabledModes.includes(mode)
+
+  const {
+    data: eligibleCollectors = [],
+    isLoading: loadingCollectors,
+    isError: collectorsError,
+    refetch: refetchCollectors,
+  } = useQuery<EligibleCollector[]>({
+    queryKey: ['collecteurs-eligibles'],
+    queryFn: async () => (await api.get('/collecteurs/eligible-for-declaration')).data.data,
+    enabled: isCashDeclaration,
+  })
+  const selectedCollector = eligibleCollectors.find(collector => collector.id === collecteurId)
+
+  useEffect(() => {
+    const digits = selectedMembre?.phone?.replace(/\D/g, '') ?? ''
+    setMobilePhone(digits.slice(-9))
+  }, [selectedMembre?.id, selectedMembre?.phone])
 
   // §1bis — détail transparent de la commission Mobile Money (source unique @sgm-cem/shared).
   // Le contributeur paie le montant majoré ; le montant dû à la rubrique reste `montant`.
@@ -167,6 +211,7 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
         modePaiement: isMobileMoney ? 'YELII' : mode,
         mobileMoneyPhone: isMobileMoney ? mobilePhone : undefined,
         paymentChannel: isMobileMoney ? operator : undefined,
+        customerPhone: isCard ? `+237${mobilePhone}` : undefined,
       }),
     onSuccess: async (res) => {
       // Le backend renvoie HTTP 200 avec { success:false, error } quand
@@ -221,6 +266,25 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
   })
 
   // ── Navigation entre étapes ───────────────────────────────────────────────
+  function getModeValidationError(): string | null {
+    if (modeDisabled) return 'Ce mode de paiement est temporairement indisponible'
+    if (isCard && Number(montant) % 5 !== 0) {
+      return 'Le montant du paiement par carte doit être un multiple de 5 FCFA'
+    }
+    if ((isMobileMoney || isCard) && mobilePhone.length !== 9) {
+      return isMobileMoney
+        ? 'Renseignez un numéro Mobile Money valide à 9 chiffres'
+        : 'Renseignez un numéro de téléphone client valide à 9 chiffres'
+    }
+    if (isCashDeclaration) {
+      if (loadingCollectors) return 'Chargement des collecteurs en cours'
+      if (collectorsError) return 'Impossible de charger les collecteurs éligibles'
+      if (eligibleCollectors.length === 0) return 'Aucun collecteur éligible n’est disponible'
+      if (!collecteurId) return 'Sélectionnez le collecteur à qui vous avez remis l’argent'
+    }
+    return null
+  }
+
   function goNext() {
     setError('')
     if (step === 0) {
@@ -228,11 +292,44 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
       if (!rubriqueId){ setError('Sélectionnez une rubrique'); return }
       if (!montant || Number(montant) <= 0) { setError('Entrez un montant valide'); return }
     }
-    if (step === 1 && isMobileMoney && !mobilePhone) {
-      setError('Renseignez le numéro Mobile Money du payeur')
-      return
+    if (step === 1) {
+      const validationError = getModeValidationError()
+      if (validationError) {
+        setError(validationError)
+        return
+      }
     }
     setStep(s => s + 1)
+  }
+
+  function submit() {
+    setError('')
+    const validationError = getModeValidationError()
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
+    if (isCashDeclaration) {
+      declareCash.mutate(
+        {
+          rubriqueId,
+          collecteurId,
+          montant: Number(montant),
+          note: cashNote.trim() || undefined,
+        },
+        {
+          onSuccess: () => {
+            setStep(3)
+            setPayStatus('declared')
+          },
+          onError: err => setError(extractDeclareErrorMessage(err)),
+        }
+      )
+      return
+    }
+
+    pay.mutate()
   }
 
   function goPrev() {
@@ -249,7 +346,7 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
     setError('')
   }
 
-  const canClose = payStatus === 'idle' || payStatus === 'confirmed' || payStatus === 'failed'
+  const canClose = payStatus === 'idle' || payStatus === 'confirmed' || payStatus === 'declared' || payStatus === 'failed'
 
   // ── Rendu ─────────────────────────────────────────────────────────────────
   return (
@@ -273,16 +370,32 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
             </AntButton>
           ) : <span />}
           {step < 2 && (
-            <AntButton type="primary" icon={<ArrowRight size={14} />} iconPosition="end" onClick={goNext}>
+            <AntButton
+              type="primary"
+              icon={<ArrowRight size={14} />}
+              iconPosition="end"
+              disabled={step === 1 && modeDisabled}
+              onClick={goNext}
+            >
               Suivant
             </AntButton>
           )}
           {step === 2 && (
-            <AntButton type="primary" loading={pay.isPending} icon={<CreditCard size={14} />} onClick={() => pay.mutate()}>
-              {mode === 'ESPECES' ? 'Confirmer le paiement' : 'Payer maintenant'}
+            <AntButton
+              type="primary"
+              loading={isCashDeclaration ? declareCash.isPending : pay.isPending}
+              disabled={modeDisabled}
+              icon={isCashDeclaration ? <CheckCircle2 size={14} /> : <CreditCard size={14} />}
+              onClick={submit}
+            >
+              {isCashDeclaration
+                ? 'Envoyer la déclaration'
+                : mode === 'ESPECES'
+                  ? 'Confirmer le paiement'
+                  : 'Payer maintenant'}
             </AntButton>
           )}
-          {step === 3 && (payStatus === 'confirmed' || payStatus === 'failed' || payStatus === 'timeout') && (
+          {step === 3 && (payStatus === 'confirmed' || payStatus === 'declared' || payStatus === 'failed' || payStatus === 'timeout') && (
             <AntButton type="primary" onClick={onClose}>Fermer</AntButton>
           )}
         </div>
@@ -437,7 +550,11 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
           {step === 1 && (
             <div className="space-y-4">
               <p className="text-sm text-gray-500">Choisissez le mode de règlement :</p>
-              <PaymentMethodSelector value={mode} onChange={m => { setMode(m); setError('') }} hideEspeces={selfService} />
+              <PaymentMethodSelector
+                value={mode}
+                disabledModes={disabledModes}
+                onChange={m => { setMode(m); setError('') }}
+              />
 
               {/* Choix opérateur + numéro — Mobile Money uniquement */}
               {isMobileMoney && (
@@ -467,22 +584,93 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
 
               {/* Info carte */}
               {mode === 'CARTE_VISA' && (
-                <div className="rounded-[12px] bg-blue-50 border border-blue-200 p-3 space-y-1">
+                <div className="rounded-[12px] bg-blue-50 border border-blue-200 p-3 space-y-3">
                   <p className="text-xs font-semibold text-blue-800 flex items-center gap-1.5">
                     <ExternalLink size={12} /> Paiement sécurisé CinetPay
                   </p>
                   <p className="text-[11px] text-blue-700">
                     Vous serez redirigé vers la page CinetPay pour saisir vos informations de carte. Les données bancaires ne transitent jamais par SGM-CEM (certifié PCI-DSS).
                   </p>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-blue-800">
+                      Numéro de téléphone du client <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <span className="flex shrink-0 items-center rounded-[8px] border border-blue-300 bg-white px-3 py-2 font-mono text-sm text-gray-600">
+                        🇨🇲 +237
+                      </span>
+                      <Input
+                        value={mobilePhone}
+                        onChange={e => setMobilePhone(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                        placeholder="6XXXXXXXX"
+                        inputMode="numeric"
+                        aria-required="true"
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
 
               {/* Info espèces */}
-              {mode === 'ESPECES' && (
+              {mode === 'ESPECES' && !selfService && (
                 <div className="rounded-[12px] bg-[#E8F5E8] border border-[#1A6B1A]/20 p-3">
                   <p className="text-xs text-[#0F4A0F]">
                     La contribution sera enregistrée et confirmée immédiatement. Le reçu sera présenté à l&apos;écran — partage et impression possibles.
                   </p>
+                </div>
+              )}
+
+              {isCashDeclaration && (
+                <div className="space-y-3 rounded-[12px] border border-[#1A6B1A]/20 bg-[#E8F5E8] p-3">
+                  <p className="text-xs leading-relaxed text-[#0F4A0F]">
+                    Indiquez le collecteur à qui vous avez remis l&apos;argent. La contribution restera en attente jusqu&apos;à sa confirmation.
+                  </p>
+                  <label className="block">
+                    <span className="text-xs font-semibold text-gray-700">
+                      Collecteur <span className="text-red-500">*</span>
+                    </span>
+                    <select
+                      value={collecteurId}
+                      onChange={e => { setCollecteurId(e.target.value); setError('') }}
+                      required
+                      disabled={loadingCollectors || collectorsError}
+                      className="mt-1.5 min-h-10 w-full rounded-[10px] border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30 disabled:cursor-not-allowed disabled:bg-gray-100"
+                    >
+                      <option value="">
+                        {loadingCollectors ? 'Chargement des collecteurs…' : 'Sélectionner un collecteur'}
+                      </option>
+                      {eligibleCollectors.map(collector => (
+                        <option key={collector.id} value={collector.id}>
+                          {collector.fullName} ({collector.role === 'TRESORIER' ? 'Trésorier' : 'Collecteur'})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {collectorsError && (
+                    <Alert
+                      type="error"
+                      showIcon
+                      message="Impossible de charger les collecteurs éligibles"
+                      action={(
+                        <AntButton size="small" type="link" onClick={() => void refetchCollectors()}>
+                          Réessayer
+                        </AntButton>
+                      )}
+                    />
+                  )}
+                  {!loadingCollectors && !collectorsError && eligibleCollectors.length === 0 && (
+                    <p className="text-xs font-medium text-amber-700">Aucun collecteur éligible n’est disponible.</p>
+                  )}
+                  <label className="block">
+                    <span className="text-xs font-semibold text-gray-700">Note (facultative)</span>
+                    <Input.TextArea
+                      value={cashNote}
+                      onChange={e => setCashNote(e.target.value)}
+                      placeholder="Précision utile pour le collecteur"
+                      rows={2}
+                      className="mt-1.5"
+                    />
+                  </label>
                 </div>
               )}
             </div>
@@ -507,7 +695,12 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
                     '💵 Espèces'
                   }
                 />
-                {mobilePhone && <RecapRow label="Tél. payeur" value={`+237 ${mobilePhone}`} />}
+                {(isMobileMoney || isCard) && mobilePhone && (
+                  <RecapRow label={isCard ? 'Tél. client' : 'Tél. payeur'} value={`+237 ${mobilePhone}`} />
+                )}
+                {isCashDeclaration && (
+                  <RecapRow label="Collecteur" value={selectedCollector?.fullName ?? '—'} />
+                )}
               </div>
 
               {/* §1bis — Détail Mobile Money : montant / frais / total, jamais caché */}
@@ -550,10 +743,17 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
                 </div>
               )}
 
-              <div className="flex items-start gap-2 rounded-[12px] bg-[#E8F5E8] border border-[#1A6B1A]/20 px-3 py-2.5 text-xs text-[#0F4A0F]">
-                <CheckCircle2 size={13} className="mt-0.5 shrink-0" />
-                Un reçu PDF sera généré automatiquement après confirmation — vous pourrez le voir, le partager ou l&apos;imprimer.
-              </div>
+              {isCashDeclaration ? (
+                <div className="flex items-start gap-2 rounded-[12px] bg-amber-50 border border-amber-200 px-3 py-2.5 text-xs text-amber-800">
+                  <AlertCircle size={13} className="mt-0.5 shrink-0" />
+                  Aucun reçu n&apos;est généré avant la confirmation du collecteur.
+                </div>
+              ) : (
+                <div className="flex items-start gap-2 rounded-[12px] bg-[#E8F5E8] border border-[#1A6B1A]/20 px-3 py-2.5 text-xs text-[#0F4A0F]">
+                  <CheckCircle2 size={13} className="mt-0.5 shrink-0" />
+                  Un reçu PDF sera généré automatiquement après confirmation — vous pourrez le voir, le partager ou l&apos;imprimer.
+                </div>
+              )}
             </div>
           )}
 
@@ -632,6 +832,21 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
                   amount={Number(montant)}
                   rubriqueLabel={selectedRubrique?.title}
                 />
+              )}
+
+              {/* Espèces self-service — déclaration en attente de double validation */}
+              {payStatus === 'declared' && (
+                <div className="space-y-4 py-6 text-center">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#E8F5E8]">
+                    <CheckCircle2 size={30} className="text-[#1A6B1A]" />
+                  </div>
+                  <div>
+                    <h3 className="font-display text-xl font-semibold text-[#0F4A0F]">Déclaration envoyée</h3>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Votre contribution est en attente de confirmation par le collecteur.
+                    </p>
+                  </div>
+                </div>
               )}
 
               {/* Paiement échoué */}

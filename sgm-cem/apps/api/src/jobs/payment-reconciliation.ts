@@ -1,9 +1,8 @@
 import cron from 'node-cron'
 import { PrismaClient } from '@prisma/client'
-import { getYeliiStatus } from '../services/yelii.service'
-import { generateReceiptPDF } from '../services/receipt'
-import { sendWhatsAppDocument, sendWhatsApp, alertTresoriers } from '../services/notification'
+import { alertTresoriers } from '../services/notification'
 import { getConfigNumber } from '../services/config.service'
+import { CONTRIBUTION_SYNC_SELECT, syncPaymentContributionStatus } from '../services/payment-status.service'
 
 const prisma = new PrismaClient()
 
@@ -11,8 +10,8 @@ const STALE_AFTER_MS = 15 * 60 * 1000 // 15 minutes
 
 /**
  * I8 — Job de réconciliation failsafe (section 11 Cas 2 du doc paiements).
- * Vérifie directement chez Yelii les contributions Mobile Money bloquées en
- * PROCESSING depuis plus de 15 minutes (cas où le webhook n'est jamais arrivé).
+ * Vérifie les contributions Mobile Money et carte bloquées en PROCESSING
+ * depuis plus de 15 minutes (cas où le webhook n'est jamais arrivé).
  *
  * Fréquence DYNAMIQUE (panneau développeur, section E) : le cron tourne chaque
  * minute et n'exécute le job que si RECONCILIATION_INTERVAL_MINUTES se sont
@@ -45,13 +44,13 @@ export async function runPaymentReconciliation(): Promise<{ checked: number; con
   const stuck = await prisma.contribution.findMany({
     where: {
       paymentStatus: 'PROCESSING',
-      modePaiement: { in: ['MTN_MOMO', 'ORANGE_MONEY'] },
+      modePaiement: { in: ['MTN_MOMO', 'ORANGE_MONEY', 'CARTE_VISA'] },
       externalTransactionId: { not: null },
       createdAt: { lte: staleSince },
     },
-    include: {
-      membre: { include: { user: { select: { phone: true, whatsappPhone: true, fullName: true } } } },
-      rubrique: { select: { title: true, code: true } },
+    select: {
+      ...CONTRIBUTION_SYNC_SELECT,
+      createdAt: true,
     },
   })
 
@@ -59,57 +58,10 @@ export async function runPaymentReconciliation(): Promise<{ checked: number; con
   let failed = 0
 
   for (const contribution of stuck) {
-    if (!contribution.externalTransactionId) continue
-
-    const status = await getYeliiStatus(contribution.externalTransactionId)
-    // 'unknown' = Yelii injoignable : on ne conclut RIEN, on revérifiera au prochain passage.
-    if (status === 'processing' || status === 'unknown') continue // toujours en attente, on revérifiera au prochain passage
-
-    const memberPhone = contribution.membre?.user.whatsappPhone ?? contribution.membre?.user.phone
-    const memberName = contribution.membre?.user.fullName ?? 'Membre'
-    const montantStr = contribution.montant.toLocaleString('fr-FR')
-
-    if (status === 'success') {
-      // Garde atomique : le polling de statut (payment-status.service) peut avoir déjà
-      // confirmé cette contribution entre le findMany ci-dessus et cette écriture. On ne
-      // transitionne que si elle est toujours EN_ATTENTE_CONFIRMATION, pour éviter un
-      // second reçu PDF / second WhatsApp et un double comptage.
-      const { count } = await prisma.contribution.updateMany({
-        where: { id: contribution.id, statut: 'EN_ATTENTE_CONFIRMATION' },
-        data: { statut: 'CONFIRME', confirmedAt: new Date(), paymentStatus: 'SUCCESS', localisationFonds: 'REMIS_TRESORIER' },
-      })
-      if (count === 0) {
-        console.info(`[Reconciliation] ${contribution.externalTransactionId} — déjà traité par un autre chemin (polling), ignoré`)
-        continue
-      }
-
-      const receiptUrl = await generateReceiptPDF(contribution.id)
-      const msg = `CEM Melen - Paiement confirmé\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${contribution.rubrique.title}\nMerci pour votre contribution !`
-      if (memberPhone) {
-        let sent = false
-        if (receiptUrl) sent = await sendWhatsAppDocument(memberPhone, receiptUrl, msg)
-        if (!sent) await sendWhatsApp(memberPhone, msg)
-      }
-
-      console.info(`[Reconciliation] ✅ ${contribution.externalTransactionId} — confirmé via polling`)
+    const result = await syncPaymentContributionStatus(contribution)
+    if (contribution.statut !== 'CONFIRME' && result.statut === 'CONFIRME') {
       confirmed++
-    } else {
-      // Même garde atomique que pour la branche succès : évite d'annuler une contribution
-      // déjà confirmée entre-temps par le polling.
-      const { count } = await prisma.contribution.updateMany({
-        where: { id: contribution.id, statut: 'EN_ATTENTE_CONFIRMATION' },
-        data: { statut: 'ANNULE', paymentStatus: 'FAILED' },
-      })
-      if (count === 0) {
-        console.info(`[Reconciliation] ${contribution.externalTransactionId} — déjà traité par un autre chemin (polling), ignoré`)
-        continue
-      }
-
-      if (memberPhone) {
-        await sendWhatsApp(memberPhone, `CEM Melen - Paiement échoué\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${contribution.rubrique.title}\nRéessayez ou contactez un collecteur.`)
-      }
-
-      console.info(`[Reconciliation] ❌ ${contribution.externalTransactionId} — échoué via polling`)
+    } else if (contribution.statut !== 'ANNULE' && result.statut === 'ANNULE') {
       failed++
     }
   }
@@ -124,8 +76,8 @@ export async function runPaymentReconciliation(): Promise<{ checked: number; con
   const veryStale = stuck.filter(c => Date.now() - c.createdAt.getTime() > 60 * 60 * 1000)
   if (veryStale.length > 0) {
     await alertTresoriers(
-      'Paiements Mobile Money bloqués',
-      `${veryStale.length} transaction(s) en PROCESSING depuis plus d'1h — vérification manuelle recommandée.`,
+      'Paiements digitaux bloqués',
+      `${veryStale.length} paiement(s) Mobile Money/carte en PROCESSING depuis plus d'1h — vérification manuelle recommandée.`,
       { transactionIds: veryStale.map(c => c.externalTransactionId) },
       veryStale.length === 1 ? { view: 'contributions', id: veryStale[0].id } : undefined
     )

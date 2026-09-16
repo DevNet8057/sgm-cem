@@ -2,7 +2,7 @@
 import {
   LayoutDashboard, FolderOpen, CreditCard, Wallet, UserCheck, Shield,
   Users, Archive, Briefcase, AlertTriangle, BarChart3, FileText,
-  Bell, Settings, LogOut, X, UserCog, CreditCard as CardIcon, UserCircle, Terminal, History, Globe,
+  Bell, Settings, LogOut, X, UserCog, CreditCard as CardIcon, UserCircle, Terminal, History, Globe, Activity,
 } from 'lucide-react'
 import { Badge, Drawer, Layout, Menu, type MenuProps } from 'antd'
 import { motion } from 'framer-motion'
@@ -40,6 +40,7 @@ const NAV_ITEMS = [
   { id: 'notifications',   label: 'Notifications',       icon: Bell,            section: 'OUTILS',       minLevel: 1 },
   // Journal d'audit : chacun voit au moins sa propre activité (périmètre élargi par rôle côté API)
   { id: 'journal',         label: "Journal d'activité",  icon: History,         section: 'OUTILS',       minLevel: 1 },
+  { id: 'observabilite',   label: 'Observabilité',       icon: Activity,       section: 'OUTILS',       roles: ['ADMIN', 'DEVELOPER'] },
   // ── Système ─────────────────────────────────────────────────────────
   { id: 'utilisateurs',    label: 'Utilisateurs',        icon: UserCog,         section: 'SYSTEME',      roles: ['ADMIN', 'DEVELOPER'] },
   { id: 'parametres',      label: 'Paramètres',          icon: Settings,        section: 'SYSTEME',      roles: ['ADMIN', 'DEVELOPER'] },

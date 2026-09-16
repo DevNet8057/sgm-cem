@@ -11,6 +11,7 @@ import { getJwtSecret, getRefreshTokenSecret } from '../lib/security'
 import { sendSMS, sendWhatsApp } from '../services/notification'
 import { getConfig } from '../services/config.service'
 import { audit } from '../services/audit.service'
+import { closeActivitySessionForLogout } from '../services/activity-write.service'
 
 const router = Router()
 const prisma = new PrismaClient()
@@ -411,6 +412,11 @@ router.post('/refresh', async (req, res) => {
 router.post('/logout', authenticate, async (req, res) => {
   const refreshToken: string | undefined = req.cookies?.refresh_token
   if (refreshToken) {
+    const session = await prisma.userSession.findUnique({
+      where: { refreshToken },
+      select: { id: true },
+    })
+    if (session) await closeActivitySessionForLogout(session.id)
     await prisma.userSession.deleteMany({ where: { refreshToken } })
   }
 

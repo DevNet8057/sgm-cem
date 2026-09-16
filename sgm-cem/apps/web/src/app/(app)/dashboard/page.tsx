@@ -25,6 +25,7 @@ import { RubriquesMembre }      from '@/components/views/RubriquesMembre'
 import { MonProfil }            from '@/components/views/MonProfil'
 import { Developer }            from '@/components/views/Developer'
 import { Journal }              from '@/components/views/Journal'
+import { Observabilite }        from '@/components/views/Observabilite'
 
 function AccessDenied() {
   return (
@@ -91,6 +92,7 @@ export default function AppPage() {
     case 'rapports':             return level >= 3 ? <Rapports />   : <AccessDenied />
     case 'notifications':        return <Notifications />
     case 'journal':              return <Journal />
+    case 'observabilite':        return isAdmin ? <Observabilite /> : <AccessDenied />
     case 'parametres':           return level >= 5 ? <Parametres /> : <AccessDenied />
     case 'utilisateurs':         return isAdmin     ? <GestionUtilisateurs /> : <AccessDenied />
     // Panneau développeur — rôle DEVELOPER EXACT (jamais ADMIN, jamais level >= 5)

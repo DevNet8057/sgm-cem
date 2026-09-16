@@ -4,7 +4,7 @@
 
 ### Module 1: Authentification & Mots de Passe
 
-#### Test 1.1: Login avec PasswordInput ✅
+#### Test 1.1: Login avec PasswordInput
 ```
 Étapes:
 1. Naviguer vers page login
@@ -183,6 +183,185 @@ Résultat attendu:
 - Fonctionne si depuis localhost:3000
 ```
 
+#### Test 5.4: Webhook CinetPay — HMAC invalide ou forgé
+```
+Précondition:
+- Utiliser une contribution de test en attente, sans effectuer de paiement réel
+- Espionner l'appel de vérification distante CinetPay et les écritures en base
+
+Étapes:
+1. Envoyer un POST de test vers /webhooks/cinetpay sans en-tête x-token
+2. Répéter avec un x-token au format valide mais forgé
+3. Répéter avec un corps modifié après calcul d'un x-token de test
+4. Recharger la contribution de test
+
+Résultat attendu:
+- Chaque requête est rejetée avec le statut HTTP 401
+- L'API de vérification distante CinetPay n'est jamais appelée
+- La contribution, son statut et son montant restent inchangés
+- Aucun reçu et aucune confirmation ne sont générés
+```
+
+#### Test 5.5: Webhook CinetPay — montant ou devise incohérents
+```
+Précondition:
+- Utiliser une contribution de test en attente de 100 FCFA
+- Simuler une réponse serveur CinetPay ACCEPTED avec un HMAC de test valide
+- Ne saisir aucune vraie carte et ne déclencher aucun paiement réel
+
+Étapes:
+1. Simuler une vérification CinetPay avec un montant de 105 XAF
+2. Vérifier l'état de la contribution
+3. Recommencer avec un montant de 100 et une devise différente de XAF
+4. Vérifier les alertes destinées aux trésoriers
+
+Résultat attendu:
+- La contribution n'est jamais confirmée
+- Elle reste dans son état d'attente initial
+- Aucun reçu n'est généré
+- Une alerte signale le montant ou la devise incohérents aux trésoriers
+```
+
+### Module 6: Portail MEMBRE — contribution
+
+#### Test 6.1: Arrivée sur Mes contributions
+```
+Étapes:
+1. Se connecter avec un compte ayant le rôle MEMBRE
+2. Vérifier la vue affichée immédiatement après la connexion
+3. Vérifier la présence du bouton « Faire une contribution »
+4. Cliquer sur ce bouton
+
+Résultat attendu:
+- Le membre arrive directement sur Mes contributions
+- Seules ses propres contributions sont affichées
+- Le bouton « Faire une contribution » ouvre le parcours de contribution
+```
+
+#### Test 6.2: Trois catégories et réseaux Mobile Money
+```
+Étapes:
+1. Ouvrir le parcours « Faire une contribution »
+2. Vérifier les catégories proposées
+3. Sélectionner Mobile Money
+4. Vérifier les sous-choix disponibles
+5. Revenir au choix du mode sans perdre les données déjà saisies
+
+Résultat attendu:
+- Les catégories Mobile Money, Carte bancaire et Espèces sont visibles
+- Mobile Money propose MTN Mobile Money et Orange Money
+- Le changement de mode ne bloque pas le formulaire
+```
+
+#### Test 6.3: Disponibilité et redirection Carte bancaire
+```
+Étapes — configuration absente:
+1. Utiliser un environnement où la configuration CinetPay est incomplète
+2. Ouvrir « Faire une contribution »
+3. Vérifier l'état de la catégorie Carte bancaire
+4. Tenter également l'appel d'initiation côté API
+
+Résultat attendu — configuration absente:
+- La carte est désactivée ou clairement signalée comme indisponible
+- Le refus API contient un message français actionnable
+- Aucune contribution de paiement n'est créée
+
+Étapes — configuration de test présente:
+5. Activer une configuration CinetPay de test, sans vraie carte bancaire
+6. Saisir un montant multiple de 5 et une adresse email valide
+7. Valider le formulaire
+
+Résultat attendu — configuration présente:
+- La catégorie Carte bancaire est disponible
+- L'utilisateur est redirigé vers la page sécurisée CinetPay
+- Aucun secret de configuration n'est exposé dans le navigateur
+```
+
+#### Test 6.4: Confirmation Carte uniquement après vérification serveur
+```
+Précondition:
+- Utiliser une transaction et une réponse CinetPay simulées, sans paiement réel
+
+Étapes:
+1. Simuler uniquement le retour navigateur après la page CinetPay
+2. Consulter la contribution avant toute réponse serveur vérifiée
+3. Simuler ensuite une réponse serveur CinetPay ACCEPTED avec montant exact et devise XAF
+4. Recharger Mes contributions
+
+Résultat attendu:
+- Le retour navigateur seul ne confirme jamais la contribution
+- Aucun reçu n'est disponible avant la vérification serveur
+- La réponse serveur vérifiée confirme la contribution
+- Le statut affiché est rafraîchi sans double confirmation
+```
+
+#### Test 6.5: Déclaration d'espèces et confirmation du collecteur
+```
+Étapes:
+1. Choisir la catégorie Espèces
+2. Saisir une rubrique et un montant sans sélectionner de collecteur
+3. Tenter d'envoyer la déclaration
+4. Sélectionner ensuite un collecteur et valider
+5. Consulter Mes contributions avant l'action du collecteur
+6. Faire confirmer la réception par le collecteur désigné
+
+Résultat attendu:
+- Le collecteur est obligatoire et un message français l'indique s'il manque
+- La déclaration créée reste EN_ATTENTE_CONFIRMATION
+- Le membre ne peut pas la confirmer lui-même
+- Après confirmation du collecteur, la contribution passe à CONFIRME
+```
+
+#### Test 6.6: Erreurs et nouvelle tentative
+```
+Étapes:
+1. Simuler une indisponibilité lors de l'initiation Mobile Money
+2. Vérifier le message et l'état de l'écran
+3. Rétablir le service simulé et utiliser l'action de nouvelle tentative
+4. Recommencer avec une erreur d'initiation Carte bancaire
+
+Résultat attendu:
+- Chaque erreur est affichée en français avec une action possible
+- Aucun écran ne reste bloqué sur un chargement infini
+- La nouvelle tentative peut être lancée sans recharger toute l'application
+- Aucun doublon de contribution n'est créé
+```
+
+#### Test 6.7: Reçu après confirmation
+```
+Étapes:
+1. Ouvrir une contribution Mobile Money confirmée dans l'environnement de test
+2. Ouvrir une contribution Carte confirmée après vérification serveur simulée
+3. Ouvrir une déclaration d'espèces confirmée par son collecteur
+4. Télécharger ou afficher le reçu depuis Mes contributions
+
+Résultat attendu:
+- Aucun reçu n'est proposé avant confirmation
+- Un reçu est disponible après confirmation pour chaque mode
+- Le reçu correspond à la bonne contribution et au bon montant
+- En cas d'échec de chargement, un message français et une nouvelle tentative sont proposés
+```
+
+#### Test 6.8: Responsive mobile et bureau
+```
+Tailles à tester:
+- Mobile: 320 px, 360 px et 390 px de largeur
+- Bureau: largeur supérieure ou égale à 1280 px
+
+Étapes:
+1. Tester Mes contributions à chaque largeur
+2. Ouvrir « Faire une contribution » et parcourir les trois catégories
+3. Ouvrir les sous-choix MTN/Orange, les formulaires Carte et Espèces
+4. Afficher les états de chargement, d'erreur, vide et de confirmation
+
+Résultat attendu:
+- Aucun défilement horizontal ni contenu tronqué
+- Les boutons principaux restent visibles et utilisables
+- Les formulaires, messages et fenêtres de confirmation restent lisibles
+- Le parcours clavier et les zones tactiles restent utilisables
+- La mise en page bureau conserve une hiérarchie claire
+```
+
 ## 🐛 Scénarios de Dépannage
 
 ### Problème: Password field affiche "undefined"
@@ -272,6 +451,16 @@ Date: [À remplir]
 | 5.1 | Rate Limiting | ⏳ | - |
 | 5.2 | Security Headers | ⏳ | - |
 | 5.3 | CORS Protection | ⏳ | - |
+| 5.4 | Webhook CinetPay — HMAC invalide ou forgé | ⏳ | Non exécuté |
+| 5.5 | Webhook CinetPay — montant ou devise incohérents | ⏳ | Non exécuté |
+| 6.1 | Arrivée MEMBRE sur Mes contributions | ⏳ | Non exécuté |
+| 6.2 | Catégories et réseaux Mobile Money | ⏳ | Non exécuté |
+| 6.3 | Disponibilité et redirection Carte | ⏳ | Non exécuté |
+| 6.4 | Confirmation Carte après vérification serveur | ⏳ | Non exécuté |
+| 6.5 | Déclaration d'espèces et confirmation | ⏳ | Non exécuté |
+| 6.6 | Erreurs et nouvelle tentative | ⏳ | Non exécuté |
+| 6.7 | Reçu après confirmation | ⏳ | Non exécuté |
+| 6.8 | Responsive 320/360/390 et bureau | ⏳ | Non exécuté |
 
 ## 🎯 Signoff
 

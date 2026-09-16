@@ -15,11 +15,9 @@ import type { Rubrique, RemainingBalance, Membre } from '@/types'
 
 /**
  * Rubriques ouvertes — lecture seule pour le rôle MEMBRE, avec un bouton
- * "Payer" par rubrique qui ouvre PaymentStepper en mode self-service
- * (MTN MoMo / Orange Money / Carte — même composant et mêmes routes que le
- * flow staff, verrouillé sur le membre connecté). Le paiement en espèces
- * n'est PAS proposé ici : il passe par la déclaration à double validation
- * (bouton dédié dans MesContributions.tsx).
+ * "Contribuer" par rubrique qui ouvre PaymentStepper en mode self-service
+ * (Mobile Money MTN/Orange, carte ou espèces — même composant que le flow
+ * staff, verrouillé sur le membre connecté).
  * Réutilise GET /api/rubriques (déjà accessible level 1, déjà trié
  * [priority desc, createdAt desc] côté backend — ne pas re-trier ici) et
  * GET /api/contributions/me/balance (calcul partagé packages/shared) pour
@@ -155,8 +153,12 @@ function RubriqueMembreCard({ rubrique: r, balance, highlighted, onPay }: {
           <span className="text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-gray-100 text-gray-500 block mb-3 w-fit">Contribution libre</span>
         )}
 
-        <Button size="sm" className="w-full" onClick={() => onPay(balance?.remainingAmount && balance.remainingAmount > 0 ? balance.remainingAmount : undefined)}>
-          <Wallet size={13} />Payer (MTN, Orange, Carte)
+        <Button size="sm" className="w-full py-2" onClick={() => onPay(balance?.remainingAmount && balance.remainingAmount > 0 ? balance.remainingAmount : undefined)}>
+          <Wallet size={13} />
+          <span className="flex flex-col leading-tight">
+            <span>Contribuer</span>
+            <span className="text-[10px] font-normal opacity-80">Mobile Money (MTN/Orange) · Carte · Espèces</span>
+          </span>
         </Button>
       </div>
     </div>

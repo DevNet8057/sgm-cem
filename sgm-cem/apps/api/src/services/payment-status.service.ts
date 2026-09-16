@@ -1,25 +1,25 @@
 import type { Prisma } from '@prisma/client'
 import { getPrisma } from '../lib/prisma'
 import { getYeliiTransaction } from './yelii.service'
+import { verifyCinetpayTransaction } from './cinetpay.service'
 import { generateReceiptPDF } from './receipt'
 import { broadcastToAll } from '../lib/socket'
 import { sendWhatsApp, sendWhatsAppDocument, alertTresoriers } from './notification'
 import { audit } from './audit.service'
 
 /**
- * Synchronisation du statut d'une contribution Mobile Money avec Yelii — repli
- * du webhook (qui n'arrive jamais en dev local, et peut être en retard/perdu
- * en production). Consommé par les routes de polling `GET .../payment-status`.
+ * Synchronisation du statut d'une contribution digitale avec son fournisseur —
+ * repli des webhooks qui peuvent être en retard ou perdus. Consommé par les
+ * routes de polling `GET .../payment-status`.
  *
- * Arbitrages assumés, iso `yelii.webhook.ts` / ancien handler de `contributions.ts` :
+ * Arbitrages assumés, iso des webhooks Yelii et CinetPay :
  * - `audit()` en best-effort (`void`, ne bloque jamais la réponse) sur les transitions
- *   CONFIRME/ANNULE, avec un userId système dédié — cette route pouvait transitionner
- *   silencieusement une contribution alors qu'elle semblait en lecture seule.
+ *   CONFIRME/ANNULE, rattaché au vrai compte membre ou au compte système public.
  * - notification WhatsApp : ce service gagne quasi systématiquement la course
  *   contre le webhook (confirmation en ~5 s), qui sort alors sur sa garde
  *   d'idempotence sans rien notifier. Le gagnant du `updateMany` (`count === 1`)
  *   est donc l'unique émetteur légitime — c'est lui qui notifie ici, pas le webhook.
- * - pas de `getConfig()` ici : toute la config Yelii est encapsulée dans yelii.service.ts.
+ * - pas de `getConfig()` ici : chaque fournisseur encapsule sa propre configuration.
  * - pas de cache TTL : la garde « statut terminal » suffit, le client cesse de
  *   poller dès que la contribution passe CONFIRME/ANNULE/LITIGE.
  *
@@ -33,14 +33,14 @@ const prisma = getPrisma()
 
 const TERMINAL_STATUSES = new Set<string>(['CONFIRME', 'ANNULE', 'LITIGE'])
 const YELII_MODES = new Set<string>(['MTN_MOMO', 'ORANGE_MONEY', 'YELII'])
-// Déduplication des appels en vol : un même transactionId n'appelle jamais Yelii
-// deux fois en parallèle (plusieurs onglets ouverts sur le même paiement).
+const CINETPAY_MODE = 'CARTE_VISA'
+const CINETPAY_FAILED_STATUSES = new Set(['REFUSED', 'CANCELLED'])
+// Déduplication des appels en vol : un même transactionId n'appelle jamais son
+// fournisseur deux fois en parallèle (plusieurs onglets ouverts sur le même paiement).
 const inFlight = new Map<string, Promise<PaymentStatusSyncResult>>()
-// Garde anti-spam pour l'alerte trésoriers sur montant incohérent (Cas 4) : contrairement
-// au webhook qui ne passe qu'une fois, ce code est atteint toutes les 5 s tant que le
-// client poll — sans cette garde, ~12 alertes/minute seraient envoyées. Portée intra-
-// processus volontairement : un redémarrage peut au pire réémettre une alerte, ce qui
-// est acceptable et plus sûr que de risquer de ne jamais alerter.
+// Garde anti-spam des alertes d'incohérence fournisseur : le polling atteint ce
+// code toutes les 5 s. Portée intra-processus volontairement : un redémarrage peut
+// au pire réémettre une alerte, ce qui reste préférable à une incohérence ignorée.
 const mismatchAlerted = new Set<string>()
 
 export const CONTRIBUTION_SYNC_SELECT = {
@@ -65,7 +65,7 @@ export interface PaymentStatusSyncResult {
   receiptUrl: string | null
 }
 
-export async function syncYeliiContributionStatus(
+export async function syncPaymentContributionStatus(
   contribution: SyncableContribution
 ): Promise<PaymentStatusSyncResult> {
   const snapshot: PaymentStatusSyncResult = {
@@ -79,8 +79,10 @@ export async function syncYeliiContributionStatus(
   if (TERMINAL_STATUSES.has(contribution.statut)) return snapshot
 
   const txId = contribution.externalTransactionId
-  // ESPECES, VIREMENT et CARTE_VISA/CinetPay : aucune consultation de statut n'existe pour ces modes.
-  if (!txId || !YELII_MODES.has(contribution.modePaiement)) return snapshot
+  const isYelii = YELII_MODES.has(contribution.modePaiement)
+  const isCinetpay = contribution.modePaiement === CINETPAY_MODE
+  // ESPECES et VIREMENT n'ont aucun statut fournisseur à synchroniser ici.
+  if (!txId || (!isYelii && !isCinetpay)) return snapshot
 
   const pending = inFlight.get(txId)
   if (pending) return pending
@@ -90,26 +92,97 @@ export async function syncYeliiContributionStatus(
   return task
 }
 
+/** Alias historique conservé pour les routes et tests existants. */
+export async function syncYeliiContributionStatus(
+  contribution: SyncableContribution
+): Promise<PaymentStatusSyncResult> {
+  return syncPaymentContributionStatus(contribution)
+}
+
+type PaymentProvider = 'yelii' | 'cinetpay'
+
+interface RemotePaymentState {
+  provider: PaymentProvider
+  status: 'processing' | 'success' | 'failed' | 'unknown'
+  amount?: number
+  currency?: string
+  netCredited?: number
+  remoteCode?: string
+  remoteStatus?: string
+}
+
+async function getRemotePaymentState(
+  contribution: SyncableContribution,
+  txId: string
+): Promise<RemotePaymentState> {
+  if (YELII_MODES.has(contribution.modePaiement)) {
+    const remote = await getYeliiTransaction(txId)
+    return { provider: 'yelii', ...remote }
+  }
+
+  // Source de vérité CinetPay : /payment/check uniquement. Les paramètres du
+  // retour navigateur ne sont jamais utilisés pour décider d'une transition.
+  const verification = await verifyCinetpayTransaction(txId)
+  const remoteCode = String(verification.code ?? '').trim().toUpperCase()
+  const remoteStatus = verification.data?.status?.trim().toUpperCase() ?? ''
+  const rawAmount = verification.data?.amount?.trim()
+  const parsedAmount = rawAmount ? Number(rawAmount) : undefined
+  const amount = parsedAmount != null && Number.isFinite(parsedAmount) ? parsedAmount : undefined
+  const currency = verification.data?.currency?.trim().toUpperCase() ?? ''
+
+  if (remoteStatus === 'ACCEPTED' && remoteCode === '00') {
+    return { provider: 'cinetpay', status: 'success', amount, currency, remoteCode, remoteStatus }
+  }
+  if (CINETPAY_FAILED_STATUSES.has(remoteStatus)) {
+    return { provider: 'cinetpay', status: 'failed', amount, currency, remoteCode, remoteStatus }
+  }
+  return { provider: 'cinetpay', status: 'processing', amount, currency, remoteCode, remoteStatus }
+}
+
 async function runSync(
   contribution: SyncableContribution,
   txId: string,
   snapshot: PaymentStatusSyncResult
 ): Promise<PaymentStatusSyncResult> {
   try {
-    const remote = await getYeliiTransaction(txId)
-    if (remote.status === 'processing' || remote.status === 'unknown') return snapshot // aucune écriture
+    const remote = await getRemotePaymentState(contribution, txId)
+    if (remote.status === 'processing' || remote.status === 'unknown') return snapshot
 
     if (remote.status === 'success') {
-      // §Cas 4 — iso webhook : Yelii renvoie le montant MAJORÉ (§1bis), on le compare
-      // à amountChargedToPayer (fallback montant pour l'historique/espèces).
-      const expectedCharged = contribution.amountChargedToPayer ?? contribution.montant
-      if (remote.amount != null && remote.amount !== expectedCharged) {
-        console.warn(`[PaymentStatus] Montant incohérent pour ${txId} : attendu ${expectedCharged}, reçu ${remote.amount}`)
+      // Yelii renvoie le montant majoré ; CinetPay doit renvoyer exactement le
+      // montant dû à la contribution, obligatoirement en XAF.
+      const expectedAmount = remote.provider === 'yelii'
+        ? contribution.amountChargedToPayer ?? contribution.montant
+        : contribution.montant
+      const amountMatches = remote.provider === 'yelii'
+        ? remote.amount == null || remote.amount === expectedAmount
+        : remote.amount === expectedAmount
+      const currencyMatches = remote.provider === 'yelii' || remote.currency === 'XAF'
+
+      if (!amountMatches || !currencyMatches) {
+        const receivedAmountLabel = remote.amount != null ? remote.amount.toLocaleString('fr-FR') : 'absent'
+        const receivedCurrency = remote.currency || (remote.provider === 'yelii' ? 'FCFA' : 'devise absente')
+        console.warn(
+          `[PaymentStatus] Données incohérentes pour ${txId} : ` +
+          `${expectedAmount} XAF attendus, ${receivedAmountLabel} ${receivedCurrency} reçus`
+        )
         if (!mismatchAlerted.has(txId)) {
           await alertTresoriers(
-            'Montant incohérent — paiement Mobile Money',
-            `${expectedCharged.toLocaleString('fr-FR')} FCFA attendu, ${remote.amount.toLocaleString('fr-FR')} FCFA reçu (transaction ${txId})`,
-            { contributionId: contribution.id, transactionId: txId, expectedAmount: expectedCharged, receivedAmount: remote.amount },
+            remote.provider === 'yelii'
+              ? 'Montant incohérent — paiement Mobile Money'
+              : 'Paiement CinetPay incohérent',
+            `${expectedAmount.toLocaleString('fr-FR')} XAF attendus, ` +
+            `${receivedAmountLabel} ${receivedCurrency} reçus (transaction ${txId})`,
+            {
+              contributionId: contribution.id,
+              transactionId: txId,
+              expectedAmount,
+              expectedCurrency: 'XAF',
+              receivedAmount: remote.amount ?? null,
+              receivedCurrency,
+              source: 'payment_status_poll',
+              provider: remote.provider,
+            },
             { view: 'contributions', id: contribution.id }
           )
           mismatchAlerted.add(txId)
@@ -117,13 +190,14 @@ async function runSync(
         return snapshot
       }
 
+      const netAmount = remote.provider === 'yelii' ? remote.netCredited ?? null : null
       const { count } = await prisma.contribution.updateMany({
         where: { id: contribution.id, statut: 'EN_ATTENTE_CONFIRMATION' },
         data: {
           statut: 'CONFIRME',
           confirmedAt: new Date(),
           paymentStatus: 'SUCCESS',
-          netAmount: remote.netCredited ?? null,
+          netAmount,
           localisationFonds: 'REMIS_TRESORIER',
           referencePaiement: contribution.referencePaiement ?? txId,
         },
@@ -133,15 +207,20 @@ async function runSync(
         // Gagnant de la course — seul appelant à générer le reçu et à diffuser l'événement.
         const receiptUrl = await generateReceiptPDF(contribution.id)
         broadcastToAll('contribution:confirmed', { contributionId: contribution.id, rubriqueId: contribution.rubriqueId })
-        void notifyContributeur(contribution.id, 'success', receiptUrl ?? null).catch((e: unknown) => console.error('[PaymentStatus] Notification échouée', e))
-        void audit({
-          userId: 'system-yelii-sync',
-          userName: 'Synchronisation Yelii (polling)',
-          action: 'CONFIRM',
-          entityType: 'Contribution',
-          entityId: contribution.id,
-          details: { transactionId: txId, source: 'payment_status_poll', netAmount: remote.netCredited ?? null },
-        })
+        void notifyContributeur(
+          contribution.id,
+          'success',
+          receiptUrl ?? null,
+          'CONFIRM',
+          {
+            transactionId: txId,
+            source: 'payment_status_poll',
+            provider: remote.provider,
+            netAmount,
+            ...(remote.remoteCode && { remoteCode: remote.remoteCode }),
+            ...(remote.remoteStatus && { remoteStatus: remote.remoteStatus }),
+          }
+        ).catch((e: unknown) => console.error('[PaymentStatus] Notification ou audit échoué', e))
         return { id: contribution.id, statut: 'CONFIRME', paymentStatus: 'SUCCESS', receiptUrl: receiptUrl ?? null }
       }
 
@@ -153,22 +232,31 @@ async function runSync(
       return current ? { id: current.id, statut: current.statut, paymentStatus: current.paymentStatus, receiptUrl: current.receiptUrl ?? null } : snapshot
     }
 
-    // remote.status === 'failed'
     const { count } = await prisma.contribution.updateMany({
       where: { id: contribution.id, statut: 'EN_ATTENTE_CONFIRMATION' },
-      data: { statut: 'ANNULE', paymentStatus: 'FAILED', litigeMotif: 'Paiement Yelii échoué ou annulé.' },
+      data: {
+        statut: 'ANNULE',
+        paymentStatus: 'FAILED',
+        litigeMotif: remote.provider === 'yelii'
+          ? 'Paiement Yelii échoué ou annulé.'
+          : 'Paiement CinetPay refusé ou annulé.',
+      },
     })
 
     if (count === 1) {
-      void notifyContributeur(contribution.id, 'failed', null).catch((e: unknown) => console.error('[PaymentStatus] Notification échouée', e))
-      void audit({
-        userId: 'system-yelii-sync',
-        userName: 'Synchronisation Yelii (polling)',
-        action: 'REJECT',
-        entityType: 'Contribution',
-        entityId: contribution.id,
-        details: { transactionId: txId, source: 'payment_status_poll' },
-      })
+      void notifyContributeur(
+        contribution.id,
+        'failed',
+        null,
+        'REJECT',
+        {
+          transactionId: txId,
+          source: 'payment_status_poll',
+          provider: remote.provider,
+          ...(remote.remoteCode && { remoteCode: remote.remoteCode }),
+          ...(remote.remoteStatus && { remoteStatus: remote.remoteStatus }),
+        }
+      ).catch((e: unknown) => console.error('[PaymentStatus] Notification ou audit échoué', e))
       return { id: contribution.id, statut: 'ANNULE', paymentStatus: 'FAILED', receiptUrl: snapshot.receiptUrl }
     }
 
@@ -178,29 +266,54 @@ async function runSync(
     })
     return current ? { id: current.id, statut: current.statut, paymentStatus: current.paymentStatus, receiptUrl: current.receiptUrl ?? null } : snapshot
   } catch (e) {
-    // Cette route est appelée toutes les 5 secondes en polling — une erreur Prisma
-    // ou Puppeteer ne doit jamais produire un 500 côté client.
+    // Cette route est appelée toutes les 5 secondes en polling — une erreur fournisseur,
+    // Prisma ou Puppeteer ne doit jamais produire un 500 côté client.
     console.error('[PaymentStatus]', e)
     return snapshot
   }
 }
 
+// AuditLog.userId référence User : les contributions publiques utilisent le
+// même compte système désactivé que routes/public.ts, jamais un identifiant libre.
+let publicAuditUserId: string | null = null
+async function getPublicAuditUserId(): Promise<string> {
+  if (publicAuditUserId) return publicAuditUserId
+  const user = await prisma.user.upsert({
+    where: { email: 'systeme.public@sgm-cem.local' },
+    update: {},
+    create: {
+      memberId: 'SYS-PUBLIC',
+      firstName: 'Contributions',
+      lastName: 'Publiques',
+      fullName: 'Contributions publiques',
+      email: 'systeme.public@sgm-cem.local',
+      passwordHash: 'disabled',
+      role: 'MEMBRE',
+      isActive: false,
+      mustChangePassword: false,
+    },
+  })
+  publicAuditUserId = user.id
+  return user.id
+}
+
 /**
- * Notification WhatsApp du contributeur — appelée uniquement par le gagnant de la
- * course (count === 1), donc une seule fois par contribution : le coût d'une requête
- * dédiée est négligeable et n'impacte pas le polling. Logique et libellés iso `yelii.webhook.ts`.
+ * Notification et identité d'audit du contributeur — appelées uniquement par le
+ * gagnant de la course (count === 1), donc une seule fois par contribution.
  */
 async function notifyContributeur(
   contributionId: string,
   issue: 'success' | 'failed',
-  receiptUrl: string | null
+  receiptUrl: string | null,
+  auditAction: 'CONFIRM' | 'REJECT',
+  auditDetails: Prisma.InputJsonValue
 ): Promise<void> {
   const contribution = await prisma.contribution.findUnique({
     where: { id: contributionId },
     include: {
       membre: {
         include: {
-          user: { select: { whatsappPhone: true, phone: true, fullName: true } },
+          user: { select: { id: true, whatsappPhone: true, phone: true, fullName: true } },
         },
       },
       contributeurExterne: { select: { phone: true, nom: true } },
@@ -208,6 +321,23 @@ async function notifyContributeur(
     },
   })
   if (!contribution) return
+
+  try {
+    const userId = contribution.membre?.user.id ?? await getPublicAuditUserId()
+    const userName = contribution.membre?.user.fullName
+      ?? contribution.contributeurExterne?.nom
+      ?? 'Contributions publiques'
+    await audit({
+      userId,
+      userName,
+      action: auditAction,
+      entityType: 'Contribution',
+      entityId: contribution.id,
+      details: auditDetails,
+    })
+  } catch (e) {
+    console.error('[PaymentStatus] Résolution de l’identité d’audit échouée', e)
+  }
 
   const phone = contribution.membre?.user.whatsappPhone ?? contribution.membre?.user.phone ?? contribution.contributeurExterne?.phone
   if (!phone) return

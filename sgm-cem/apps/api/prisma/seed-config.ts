@@ -54,6 +54,10 @@ const initialConfigs: SeedConf[] = [
   { key: 'YELII_BASE_URL', category: 'INTEGRATION_KEYS', label: 'URL de base Yelii' },
   { key: 'CINETPAY_API_KEY', category: 'INTEGRATION_KEYS', label: 'Clé API CinetPay', isSecret: true },
   { key: 'CINETPAY_SITE_ID', category: 'INTEGRATION_KEYS', label: 'Site ID CinetPay' },
+  {
+    key: 'CINETPAY_SECRET_KEY', category: 'INTEGRATION_KEYS', label: 'Clé secrète HMAC CinetPay',
+    description: 'Clé x-token utilisée pour vérifier la signature HMAC-SHA256 des webhooks CinetPay.', isSecret: true,
+  },
   { key: 'MTN_SUBSCRIPTION_KEY', category: 'INTEGRATION_KEYS', label: 'MTN — Subscription Key', isSecret: true },
   { key: 'MTN_API_USER', category: 'INTEGRATION_KEYS', label: 'MTN — API User' },
   { key: 'MTN_API_KEY', category: 'INTEGRATION_KEYS', label: 'MTN — API Key', isSecret: true },
@@ -111,6 +115,7 @@ const initialConfigs: SeedConf[] = [
     description: 'Intervalle du job qui vérifie les paiements bloqués en PROCESSING.', defaultValue: '10',
   },
   { key: 'MOBILE_MONEY_ENABLED', category: 'SYSTEM_BEHAVIOR', label: 'Mobile Money activé', defaultValue: 'true' },
+  { key: 'CARD_ENABLED', category: 'SYSTEM_BEHAVIOR', label: 'Carte bancaire activée', defaultValue: 'true' },
   { key: 'CASH_ENABLED', category: 'SYSTEM_BEHAVIOR', label: 'Espèces activées', defaultValue: 'true' },
   { key: 'LOG_LEVEL', category: 'SYSTEM_BEHAVIOR', label: 'Niveau de log', description: 'debug / info / warning / error', defaultValue: 'info' },
 

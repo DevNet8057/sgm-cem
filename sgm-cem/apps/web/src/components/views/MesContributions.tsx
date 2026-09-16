@@ -1,38 +1,43 @@
 'use client'
 import { useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { motion, useReducedMotion } from 'framer-motion'
-import { AlertTriangle, ArrowRight, CreditCard, HandCoins, Search, Wallet, X } from 'lucide-react'
+import { AlertTriangle, ArrowRight, CreditCard, Search, Wallet, X } from 'lucide-react'
 import api from '@/lib/api'
 import { cn, formatAmount, formatDate, MODE_PAIEMENT_LABELS } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
-import { useAppStore } from '@/store/appStore'
 import { Button } from '@/components/ui/Button'
 import { SkeletonTableRow } from '@/components/ui/Skeleton'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ActivityCard } from '@/components/ui/ActivityCard'
+import { PaymentStepper } from '@/components/payments/PaymentStepper'
 import { useFocusHighlight } from '@/hooks/useFocusHighlight'
-import type { Contribution, RemainingBalance, Rubrique } from '@/types'
+import type { Contribution, Membre, RemainingBalance, Rubrique } from '@/types'
 
 export function MesContributions() {
   const { user } = useAuthStore()
-  const { navigateToNotification } = useAppStore()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [montantMin, setMontantMin] = useState('')
   const [montantMax, setMontantMax] = useState('')
-  const [showDeclareForm, setShowDeclareForm] = useState(false)
+  const [payingFor, setPayingFor] = useState<{ rubriqueId?: string; montant?: number } | null>(null)
 
   // Mêmes queryKeys que RubriquesMembre.tsx : react-query dédoublonne la requête
   // si le membre visite les deux vues, sans logique de cache à maintenir ici.
-  const { data: openRubriques } = useQuery<Rubrique[]>({
+  const { data: openRubriques, isLoading: loadingRubriques } = useQuery<Rubrique[]>({
     queryKey: ['rubriques'],
     queryFn: async () => (await api.get('/rubriques', { params: { status: 'OUVERTE' } })).data.data,
   })
   const { data: balances } = useQuery<RemainingBalance[]>({
     queryKey: ['mes-soldes'],
     queryFn: async () => (await api.get('/contributions/me/balance')).data.data,
+  })
+
+  const { data: myMembre, isLoading: loadingMyMembre } = useQuery<Membre>({
+    queryKey: ['mon-membre'],
+    queryFn: async () => (await api.get('/membres/me')).data.data,
+    staleTime: 5 * 60 * 1000,
   })
 
   // Rappels réels uniquement — jamais de compte à rebours ni de "X personnes ont
@@ -106,20 +111,22 @@ export function MesContributions() {
               Bonjour {user?.firstName} — Historique de vos contributions au ministère
             </p>
           </div>
-          <Button size="sm" onClick={() => setShowDeclareForm(v => !v)}>
-            {showDeclareForm ? <X size={14} /> : <HandCoins size={14} />}
-            {showDeclareForm ? 'Fermer' : 'Déclarer un paiement en espèces'}
+          <Button
+            size="sm"
+            loading={loadingRubriques || loadingMyMembre}
+            disabled={!myMembre || (openRubriques?.length ?? 0) === 0}
+            onClick={() => setPayingFor({})}
+          >
+            <Wallet size={14} />
+            Faire une contribution
           </Button>
         </div>
       </div>
 
-      <ContributionReminderBanner reminders={reminders} onContribute={rubriqueId =>
-        navigateToNotification({ targetView: 'rubriques', targetId: rubriqueId })
-      } />
-
-      {showDeclareForm && (
-        <DeclareCashForm onDone={() => setShowDeclareForm(false)} />
-      )}
+      <ContributionReminderBanner
+        reminders={reminders}
+        onContribute={(rubriqueId, montant) => setPayingFor({ rubriqueId, montant })}
+      />
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-5">
@@ -263,6 +270,17 @@ export function MesContributions() {
           </div>
         )}
       </div>
+
+      {payingFor && myMembre && (
+        <PaymentStepper
+          selfService
+          membres={[myMembre]}
+          rubriques={openRubriques ?? []}
+          initialRubriqueId={payingFor.rubriqueId}
+          initialMontant={payingFor.montant}
+          onClose={() => setPayingFor(null)}
+        />
+      )}
     </div>
   )
 }
@@ -274,17 +292,15 @@ type ReminderItem = { rubrique: Rubrique; balance?: RemainingBalance }
  * l'écran d'accueil réel du MEMBRE), pas enterrée dans un sous-menu.
  * URGENT/PRIORITAIRE réutilise exactement le style .badge-urgent /
  * StatusBadge déjà défini (rouge, pulse) — aucune nouvelle palette. Le CTA
- * mène vers RubriquesMembre (via le mécanisme générique navigateToNotification
- * + useFocusHighlight, déjà utilisé pour les notifications) où vit le seul et
- * unique moteur de paiement (PaymentStepper selfService) — rien n'est dupliqué
- * ici, cette bannière ne fait qu'aiguiller.
+ * ouvre directement le moteur de paiement self-service avec la rubrique et le
+ * solde restant préremplis quand ils sont disponibles.
  * Rappels réels uniquement : ni compte à rebours, ni "X personnes ont déjà
  * contribué" — seulement un solde réellement dû ou un statut de priorité déjà
  * fixé en base par un responsable.
  */
 function ContributionReminderBanner({ reminders, onContribute }: {
   reminders: { urgent: ReminderItem[]; calm: ReminderItem[]; total: number }
-  onContribute: (rubriqueId: string) => void
+  onContribute: (rubriqueId: string, montant?: number) => void
 }) {
   const reduceMotion = useReducedMotion()
   const { urgent, calm, total } = reminders
@@ -332,120 +348,20 @@ function ContributionReminderBanner({ reminders, onContribute }: {
         animate={isUrgent && !reduceMotion ? { scale: [1, 1.03, 1] } : undefined}
         transition={isUrgent && !reduceMotion ? { duration: 2, repeat: Infinity, ease: 'easeInOut' } : undefined}
       >
-        <Button size="sm" onClick={() => onContribute(top.rubrique.id)}>
+        <Button
+          size="sm"
+          onClick={() => onContribute(
+            top.rubrique.id,
+            top.balance?.remainingAmount && top.balance.remainingAmount > 0
+              ? top.balance.remainingAmount
+              : undefined
+          )}
+        >
           <ArrowRight size={13} />
-          {isUrgent ? 'Contribuer maintenant' : 'Voir mes rubriques'}
+          {isUrgent ? 'Contribuer maintenant' : 'Faire une contribution'}
         </Button>
       </motion.div>
     </div>
-  )
-}
-
-/**
- * Déclaration de paiement en espèces — RB "double validation" : le membre
- * choisit le collecteur à qui il a physiquement remis l'argent, dans la
- * liste des collecteurs actifs (GET /collecteurs/eligible-for-declaration,
- * déjà existante). La contribution reste EN_ATTENTE_CONFIRMATION jusqu'à ce
- * que CE collecteur précis confirme depuis son propre compte — jamais avant.
- */
-function DeclareCashForm({ onDone }: { onDone: () => void }) {
-  const queryClient = useQueryClient()
-  const { addToast } = useAppStore()
-  const [rubriqueId, setRubriqueId] = useState('')
-  const [collecteurId, setCollecteurId] = useState('')
-  const [montant, setMontant] = useState('')
-  const [note, setNote] = useState('')
-  const [error, setError] = useState('')
-
-  const { data: rubriques, isLoading: loadingRubriques } = useQuery<Rubrique[]>({
-    queryKey: ['rubriques-ouvertes'],
-    queryFn: async () => (await api.get('/rubriques', { params: { status: 'OUVERTE' } })).data.data,
-  })
-
-  const { data: collecteurs, isLoading: loadingCollecteurs } = useQuery<{ id: string; fullName: string; role: string }[]>({
-    queryKey: ['collecteurs-eligibles'],
-    queryFn: async () => (await api.get('/collecteurs/eligible-for-declaration')).data.data,
-  })
-
-  const declare = useMutation({
-    mutationFn: async () => api.post('/contributions/declare', {
-      rubriqueId,
-      collecteurId,
-      montant: Number(montant),
-      note: note || undefined,
-    }),
-    onSuccess: async () => {
-      addToast({
-        title: 'Déclaration envoyée',
-        message: 'Le collecteur doit maintenant confirmer avoir reçu ce paiement.',
-        variant: 'success',
-      })
-      await queryClient.invalidateQueries({ queryKey: ['mes-contributions'] })
-      await queryClient.invalidateQueries({ queryKey: ['mes-soldes'] })
-      onDone()
-    },
-    onError: (err: unknown) => {
-      const e = err as { response?: { data?: { error?: { message?: string } } } }
-      setError(e.response?.data?.error?.message ?? 'Déclaration impossible')
-    },
-  })
-
-  const canSubmit = rubriqueId !== '' && collecteurId !== '' && Number(montant) > 0
-
-  return (
-    <form
-      onSubmit={e => { e.preventDefault(); setError(''); declare.mutate() }}
-      className="mb-5 bg-white rounded-[18px] border border-gray-100 p-4 space-y-3"
-    >
-      <div className="flex items-center justify-between">
-        <h3 className="font-display font-semibold text-[#0F4A0F]">Déclarer un paiement en espèces</h3>
-      </div>
-      <p className="text-xs text-gray-500 leading-relaxed">
-        Vous avez remis de l&apos;argent en main propre à un collecteur ? Déclarez-le ici. Le statut restera
-        <strong> « En attente »</strong> jusqu&apos;à ce que ce collecteur confirme lui-même avoir reçu le montant.
-      </p>
-
-      <label className="block">
-        <span className="text-xs font-semibold text-gray-600">Rubrique</span>
-        <select value={rubriqueId} onChange={e => setRubriqueId(e.target.value)} required disabled={loadingRubriques}
-          className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-[10px] text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30">
-          <option value="">{loadingRubriques ? 'Chargement…' : 'Sélectionner une rubrique'}</option>
-          {(rubriques ?? []).map(r => (
-            <option key={r.id} value={r.id}>{r.code} — {r.title}</option>
-          ))}
-        </select>
-      </label>
-
-      <label className="block">
-        <span className="text-xs font-semibold text-gray-600">Collecteur à qui vous avez remis l&apos;argent</span>
-        <select value={collecteurId} onChange={e => setCollecteurId(e.target.value)} required disabled={loadingCollecteurs}
-          className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-[10px] text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30">
-          <option value="">{loadingCollecteurs ? 'Chargement…' : 'Sélectionner un collecteur'}</option>
-          {(collecteurs ?? []).map(c => (
-            <option key={c.id} value={c.id}>{c.fullName} ({c.role === 'TRESORIER' ? 'Trésorier' : 'Collecteur'})</option>
-          ))}
-        </select>
-      </label>
-
-      <label className="block">
-        <span className="text-xs font-semibold text-gray-600">Montant (FCFA)</span>
-        <input type="number" inputMode="numeric" min={1} required value={montant} onChange={e => setMontant(e.target.value)}
-          className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30" />
-      </label>
-
-      <label className="block">
-        <span className="text-xs font-semibold text-gray-600">Note (optionnel)</span>
-        <input value={note} onChange={e => setNote(e.target.value)}
-          className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30" />
-      </label>
-
-      {error && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-[10px] px-3 py-2">{error}</p>}
-
-      <div className="flex justify-end gap-2 pt-1">
-        <Button type="button" variant="ghost" onClick={onDone}>Annuler</Button>
-        <Button type="submit" loading={declare.isPending} disabled={!canSubmit}>Envoyer la déclaration</Button>
-      </div>
-    </form>
   )
 }
 

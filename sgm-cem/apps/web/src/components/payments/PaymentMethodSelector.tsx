@@ -8,6 +8,7 @@ export type MobileOperator = 'MTN' | 'ORANGE'
 interface Props {
   value: PayMode
   onChange: (mode: PayMode) => void
+  disabledModes?: PayMode[]
   /**
    * Masque l'option Espèces — utilisé en mode self-service (portail membre) :
    * un paiement en espèces y passe par la déclaration à double validation
@@ -57,20 +58,26 @@ const OPTIONS: Array<{
   },
 ]
 
-export function PaymentMethodSelector({ value, onChange, hideEspeces }: Props) {
+export function PaymentMethodSelector({ value, onChange, disabledModes = [], hideEspeces }: Props) {
   const options = hideEspeces ? OPTIONS.filter(opt => opt.id !== 'ESPECES') : OPTIONS
   return (
-    <div className={cn('grid gap-3', options.length === 2 ? 'grid-cols-2' : 'grid-cols-3')}>
+    <div className={cn('grid grid-cols-1 gap-3', options.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3')}>
       {options.map(opt => {
         const selected = value === opt.id
+        const disabled = disabledModes.includes(opt.id)
         return (
           <button
             key={opt.id}
             type="button"
             onClick={() => onChange(opt.id)}
+            disabled={disabled}
+            aria-disabled={disabled}
+            aria-pressed={selected}
             className={cn(
               'flex flex-col items-center gap-1.5 rounded-[16px] border-2 p-4 transition-all text-center',
-              selected
+              disabled
+                ? 'cursor-not-allowed border-gray-200 bg-gray-50 opacity-70'
+                : selected
                 ? `${opt.border} ${opt.bg} shadow-sm`
                 : 'border-gray-200 hover:border-gray-300 bg-white'
             )}
@@ -79,6 +86,11 @@ export function PaymentMethodSelector({ value, onChange, hideEspeces }: Props) {
             <span className="text-sm font-semibold text-gray-800 leading-tight">{opt.label}</span>
             {opt.sub && <span className="text-[10px] text-gray-400">{opt.sub}</span>}
             <span className="text-[10px] text-gray-400 leading-tight">{opt.info}</span>
+            {disabled && (
+              <span className="text-[10px] font-semibold leading-tight text-amber-700">
+                Temporairement indisponible
+              </span>
+            )}
             {selected && (
               <span className={cn('w-5 h-5 rounded-full flex items-center justify-center mt-0.5', opt.check)}>
                 <Check size={10} />
@@ -111,6 +123,7 @@ export function OperatorSelector({ value, onChange }: OperatorProps) {
             key={op.id}
             type="button"
             onClick={() => onChange(op.id)}
+            aria-pressed={selected}
             className={cn(
               'flex items-center gap-2 rounded-[12px] border-2 px-3 py-2.5 transition-all',
               selected ? `${op.border} ${op.bg}` : 'border-gray-200 hover:border-gray-300 bg-white'

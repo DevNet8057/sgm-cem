@@ -18,3 +18,5 @@ export {
   type RubriqueAmounts,
   type RemainingBalance,
 } from './contribution-balance'
+
+export * from './activity'

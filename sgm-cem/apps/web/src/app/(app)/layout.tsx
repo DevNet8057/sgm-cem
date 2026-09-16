@@ -10,6 +10,7 @@ import { useAuthStore } from '@/store/authStore'
 import { useOfflineSync } from '@/hooks/useOfflineSync'
 import { useSocket } from '@/hooks/useSocket'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
+import { useActivityTracker } from '@/hooks/useActivityTracker'
 import { Bell, X as XIcon } from 'lucide-react'
 
 // Bandeau visible pendant toute une impersonation (développeur connecté
@@ -109,6 +110,7 @@ function OfflineBanner({ isOffline, queuedCount }: { isOffline: boolean; queuedC
 }
 
 function AppLayoutInner({ children }: { children: React.ReactNode }) {
+  useActivityTracker()
   const { isOffline, queuedCount } = useOfflineSync()
   useSocket()
 

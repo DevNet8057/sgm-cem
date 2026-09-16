@@ -615,6 +615,7 @@ export function Contributions() {
           membres={membresData ?? []}
           rubriques={rubriquesData ?? []}
           onClose={() => setShowStepper(false)}
+          onSuccess={() => setShowStepper(false)}
         />
       )}
 

@@ -1,12 +1,13 @@
 import { Router } from 'express'
 import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { initiateYeliiPayment, retryYeliiCallback } from '../services/yelii.service'
-import { initiateCinetpayPayment } from '../services/cinetpay.service'
+import { initiateCinetpayPayment, isCinetpayConfigured } from '../services/cinetpay.service'
 import { generateReceiptPDF } from '../services/receipt'
-import { calculateAmountWithCommission, YELII_COMMISSION_RATE } from '@sgm-cem/shared'
+import { calculateAmountWithCommission, resolveDueAmount, YELII_COMMISSION_RATE } from '@sgm-cem/shared'
 import { getPrisma } from '../lib/prisma'
 import { getConfigBool, getConfigNumber } from '../services/config.service'
 import { audit } from '../services/audit.service'
@@ -22,6 +23,15 @@ const initiateSchema = z.object({
   modePaiement: z.enum(['ESPECES', 'YELII', 'CARTE_VISA']),
   mobileMoneyPhone: z.string().optional(),
   paymentChannel: z.enum(['MTN', 'ORANGE']).optional(),
+  customerPhone: z.string().optional(),
+}).superRefine((data, ctx) => {
+  if (data.modePaiement === 'CARTE_VISA' && data.montant % 5 !== 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['montant'],
+      message: 'Le montant du paiement par carte doit être un multiple de 5 FCFA',
+    })
+  }
 })
 
 /**
@@ -64,25 +74,87 @@ router.post('/initiate', authenticate, requireLevel(1), async (req, res) => {
     membreId = membre.id
   }
 
-  // Protection double-clic : si une contribution PROCESSING existe déjà, la retourner
-  const existingProcessing = await prisma.contribution.findFirst({
-    where: {
-      membreId,
-      rubriqueId: data.rubriqueId,
-      paymentStatus: 'PROCESSING',
-    },
-  })
-
-  if (existingProcessing) {
-    return res.json({
-      success: true,
-      data: {
-        contributionId: existingProcessing.id,
-        transactionId: existingProcessing.externalTransactionId,
-        paymentUrl: existingProcessing.paymentUrl,
-        status: existingProcessing.paymentStatus,
+  const [rubrique, membre] = await Promise.all([
+    prisma.rubrique.findUnique({
+      where: { id: data.rubriqueId },
+      select: {
+        code: true,
+        title: true,
+        status: true,
+        amountTravailleur: true,
+        amountEtudiant: true,
+        amountCouple: true,
       },
-    })
+    }),
+    prisma.membre.findUnique({
+      where: { id: membreId },
+      select: {
+        id: true,
+        isActive: true,
+        profilFinancier: true,
+        phone: true,
+        adresse: true,
+        user: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+          },
+        },
+      },
+    }),
+  ])
+
+  if (!rubrique || rubrique.status !== 'OUVERTE') {
+    throw new AppError('BUSINESS_RULE', 'Rubrique fermée ou introuvable')
+  }
+  if (!membre || !membre.isActive) {
+    throw new AppError('NOT_FOUND', 'Membre introuvable ou inactif', 404)
+  }
+
+  const montantAttendu = resolveDueAmount(membre.profilFinancier, rubrique)
+
+  if (data.modePaiement === 'YELII') {
+    if (!getConfigBool('MOBILE_MONEY_ENABLED', true)) {
+      throw new AppError(
+        'MOBILE_MONEY_DISABLED',
+        'Le paiement Mobile Money est temporairement désactivé. Choisissez un autre mode de paiement.',
+        403
+      )
+    }
+    if (!data.mobileMoneyPhone || !data.paymentChannel) {
+      throw new AppError(
+        'VALIDATION',
+        'Le numéro de téléphone et le réseau sont requis pour le paiement Mobile Money',
+        400
+      )
+    }
+  }
+
+  if (data.modePaiement === 'ESPECES' && !getConfigBool('CASH_ENABLED', true)) {
+    throw new AppError(
+      'CASH_DISABLED',
+      'Le paiement en espèces est temporairement désactivé. Choisissez un autre mode de paiement.',
+      403
+    )
+  }
+
+  if (data.modePaiement === 'CARTE_VISA') {
+    if (!getConfigBool('CARD_ENABLED', true)) {
+      throw new AppError(
+        'CARD_DISABLED',
+        'Le paiement par carte est temporairement désactivé. Choisissez un autre mode de paiement.',
+        403
+      )
+    }
+    if (!isCinetpayConfigured()) {
+      throw new AppError(
+        'CINETPAY_NOT_CONFIGURED',
+        'Le paiement par carte est indisponible car CinetPay n’est pas configuré.',
+        503
+      )
+    }
   }
 
   // Résoudre le vrai mode pour la traçabilité (MTN_MOMO / ORANGE_MONEY au lieu de YELII)
@@ -92,21 +164,87 @@ router.post('/initiate', authenticate, requireLevel(1), async (req, res) => {
     storedMode = data.paymentChannel === 'ORANGE' ? 'ORANGE_MONEY' : 'MTN_MOMO'
   }
 
-  const contribution = await prisma.contribution.create({
-    data: {
-      membreId,
-      rubriqueId: data.rubriqueId,
-      montant: data.montant,
-      modePaiement: storedMode,
-      // Self-service (MEMBRE) : aucun staff n'a traité ce paiement digital —
-      // collecteurId reste null (déjà le cas pour les collectes publiques).
-      collecteurId: isSelfService ? null : req.user!.userId,
-      statut: 'EN_ATTENTE_CONFIRMATION',
-      paymentStatus: 'PENDING',
-      localisationFonds: data.modePaiement === 'ESPECES' ? 'CHEZ_COLLECTEUR' : 'EN_TRANSIT',
-      mobileMoneyPhone: data.mobileMoneyPhone ?? null,
-    },
+  const cardCustomerPhone = data.modePaiement === 'CARTE_VISA'
+    ? data.customerPhone?.trim() || membre.user.phone?.trim() || membre.phone?.trim()
+    : undefined
+
+  const reservationKey = `${membreId}|${data.rubriqueId}|${storedMode}|${data.montant}`
+  const reservation = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw(Prisma.sql`
+      SELECT pg_advisory_xact_lock(hashtextextended(${reservationKey}, 0))
+    `)
+
+    const existing = await tx.contribution.findFirst({
+      where: {
+        membreId,
+        rubriqueId: data.rubriqueId,
+        montant: data.montant,
+        modePaiement: storedMode,
+        paymentStatus: { in: ['PENDING', 'PROCESSING'] },
+      },
+    })
+
+    if (existing) {
+      return { contribution: existing, created: false }
+    }
+
+    if (data.modePaiement === 'CARTE_VISA' && !cardCustomerPhone) {
+      throw new AppError('VALIDATION', 'Un numéro de téléphone est requis pour le paiement par carte', 400)
+    }
+
+    let contribution = await tx.contribution.create({
+      data: {
+        membreId,
+        rubriqueId: data.rubriqueId,
+        montant: data.montant,
+        montantAttendu: montantAttendu ?? data.montant,
+        modePaiement: storedMode,
+        // Self-service (MEMBRE) : aucun staff n'a traité ce paiement digital —
+        // collecteurId reste null (déjà le cas pour les collectes publiques).
+        collecteurId: isSelfService ? null : req.user!.userId,
+        statut: 'EN_ATTENTE_CONFIRMATION',
+        paymentStatus: 'PENDING',
+        localisationFonds: data.modePaiement === 'ESPECES' ? 'CHEZ_COLLECTEUR' : 'EN_TRANSIT',
+        mobileMoneyPhone: data.mobileMoneyPhone ?? null,
+      },
+    })
+
+    if (data.modePaiement === 'CARTE_VISA') {
+      const transactionId = `SGM${contribution.id.replace(/-/g, '').toUpperCase()}`
+      contribution = await tx.contribution.update({
+        where: { id: contribution.id },
+        data: { externalTransactionId: transactionId, paymentStatus: 'PROCESSING' },
+      })
+    }
+
+    return { contribution, created: true }
   })
+
+  if (!reservation.created) {
+    const existing = reservation.contribution
+    const isCardReady = data.modePaiement === 'CARTE_VISA' && Boolean(existing.paymentUrl)
+    const isMobileMoneyReady = data.modePaiement === 'YELII' && Boolean(existing.externalTransactionId)
+
+    if (isCardReady || isMobileMoneyReady) {
+      return res.json({
+        success: true,
+        data: {
+          contributionId: existing.id,
+          transactionId: existing.externalTransactionId,
+          paymentUrl: existing.paymentUrl,
+          status: existing.paymentStatus,
+        },
+      })
+    }
+
+    throw new AppError(
+      'PAYMENT_INITIALIZATION_IN_PROGRESS',
+      'L’initialisation de ce paiement est déjà en cours. Vérifiez son statut dans quelques instants.',
+      409
+    )
+  }
+
+  const contribution = reservation.contribution
 
   await audit({
     req, userId: req.user!.userId, userName: req.user!.email,
@@ -116,16 +254,6 @@ router.post('/initiate', authenticate, requireLevel(1), async (req, res) => {
 
   // ── MODE MOBILE MONEY (Yelii) ─────────────────────────────────────────────
   if (data.modePaiement === 'YELII') {
-    // Interrupteur section E du panneau développeur
-    if (!getConfigBool('MOBILE_MONEY_ENABLED', true)) {
-      await prisma.contribution.update({ where: { id: contribution.id }, data: { paymentStatus: 'FAILED' } })
-      return res.status(403).json({ success: false, error: 'Le paiement Mobile Money est temporairement désactivé' })
-    }
-    if (!data.mobileMoneyPhone || !data.paymentChannel) {
-      await prisma.contribution.update({ where: { id: contribution.id }, data: { paymentStatus: 'FAILED' } })
-      return res.status(400).json({ success: false, error: 'Numéro de téléphone et réseau requis pour Mobile Money' })
-    }
-
     // §1bis — Le contributeur supporte la commission Yelii de 2,5 %.
     // On envoie à Yelii le montant MAJORÉ (totalToPay), jamais le montant dû brut.
     // Taux effectif lu en base à CHAQUE appel (panneau développeur, section C) —
@@ -137,7 +265,7 @@ router.post('/initiate', authenticate, requireLevel(1), async (req, res) => {
 
     const payment = await initiateYeliiPayment({
       amount: totalToPay, // ← montant majoré, PAS contribution.montant
-      senderPhone: data.mobileMoneyPhone,
+      senderPhone: data.mobileMoneyPhone!,
       channel: data.paymentChannel === 'ORANGE' ? 'orange_money' : 'mtn_money',
     })
 
@@ -164,17 +292,16 @@ router.post('/initiate', authenticate, requireLevel(1), async (req, res) => {
       })
     } else {
       await prisma.contribution.update({ where: { id: contribution.id }, data: { paymentStatus: 'FAILED' } })
-      return res.json({ success: false, error: payment.message ?? 'Échec du paiement Mobile Money' })
+      throw new AppError(
+        'YELII_ERROR',
+        'Le paiement Mobile Money n’a pas pu être initialisé. Veuillez réessayer.',
+        502
+      )
     }
   }
 
   // ── MODE ESPÈCES — confirmation directe par le collecteur ─────────────────
   if (data.modePaiement === 'ESPECES') {
-    // Interrupteur section E du panneau développeur
-    if (!getConfigBool('CASH_ENABLED', true)) {
-      await prisma.contribution.update({ where: { id: contribution.id }, data: { paymentStatus: 'FAILED' } })
-      return res.status(403).json({ success: false, error: 'Le paiement en espèces est temporairement désactivé' })
-    }
     // RB-02 exception : espèces confirmées sans webhook car l'argent est physiquement présent
     await prisma.contribution.update({
       where: { id: contribution.id },
@@ -193,34 +320,32 @@ router.post('/initiate', authenticate, requireLevel(1), async (req, res) => {
 
   // ── MODE CARTE BANCAIRE (CinetPay) ────────────────────────────────────────
   if (data.modePaiement === 'CARTE_VISA') {
-    const [membre, rubrique] = await Promise.all([
-      prisma.membre.findUnique({
-        where: { id: membreId },
-        include: { user: { select: { firstName: true, lastName: true } } },
-      }),
-      prisma.rubrique.findUnique({
-        where: { id: data.rubriqueId },
-        select: { code: true, title: true },
-      }),
-    ])
+    if (!cardCustomerPhone || !contribution.externalTransactionId) {
+      throw new AppError('VALIDATION', 'Informations client incomplètes pour le paiement par carte', 400)
+    }
 
-    // ID de transaction CinetPay : préfixe SGM + année + id partiel
-    const txId = `SGM-${new Date().getFullYear()}-${contribution.id.substring(0, 8).toUpperCase()}`
+    const txId = contribution.externalTransactionId
 
     try {
       const result = await initiateCinetpayPayment({
         transactionId: txId,
         amount: data.montant,
-        description: `Contribution ${rubrique?.code ?? ''} — ${membre?.user.lastName ?? ''} ${membre?.user.firstName ?? ''}`.trim(),
-        customerName: membre?.user.lastName ?? 'MEMBRE',
-        customerSurname: membre?.user.firstName ?? 'CEM',
+        description: `Contribution ${rubrique.code} — ${membre.user.lastName} ${membre.user.firstName}`.trim(),
+        customerId: membre.id,
+        customerName: membre.user.lastName,
+        customerSurname: membre.user.firstName,
+        customerPhone: cardCustomerPhone,
+        customerEmail: membre.user.email,
+        customerAddress: membre.adresse || 'EEC Melen',
+        customerCity: 'Yaoundé',
+        customerCountry: 'CM',
+        customerState: 'CM',
+        customerZipCode: '00000',
       })
 
       await prisma.contribution.update({
         where: { id: contribution.id },
         data: {
-          externalTransactionId: txId,
-          paymentStatus: 'PROCESSING',
           paymentUrl: result.paymentUrl,
         },
       })
@@ -233,10 +358,12 @@ router.post('/initiate', authenticate, requireLevel(1), async (req, res) => {
           status: 'PROCESSING',
         },
       })
-    } catch (err) {
-      await prisma.contribution.update({ where: { id: contribution.id }, data: { paymentStatus: 'FAILED' } })
-      const message = err instanceof Error ? err.message : 'Erreur CinetPay'
-      return res.status(500).json({ success: false, error: message })
+    } catch {
+      throw new AppError(
+        'CINETPAY_ERROR',
+        'L’initialisation du paiement par carte est incertaine. La vérification du paiement continue automatiquement.',
+        502
+      )
     }
   }
 })
@@ -254,6 +381,7 @@ router.get('/config', authenticate, async (_req, res) => {
       yeliiCommissionRate: getConfigNumber('YELII_COMMISSION_RATE', YELII_COMMISSION_RATE),
       mobileMoneyEnabled: getConfigBool('MOBILE_MONEY_ENABLED', true),
       cashEnabled: getConfigBool('CASH_ENABLED', true),
+      cardEnabled: getConfigBool('CARD_ENABLED', true) && isCinetpayConfigured(),
     },
   })
 })
