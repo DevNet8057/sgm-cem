@@ -450,7 +450,7 @@ export function ContributionStepper({ membres, rubriques, onClose, onSuccess }: 
               <AlertCircle size={28} className="text-red-500" />
             </div>
             <h3 className="font-semibold text-red-700 mb-2">Paiement refusé ou annulé</h3>
-            <p className="text-sm text-gray-500 mb-4">La demande de paiement n'a pas abouti.</p>
+            <p className="text-sm text-gray-500 mb-4">La demande de paiement n&apos;a pas abouti.</p>
             <Button variant="danger" onClick={onClose}>Fermer</Button>
           </div>
         )}
