@@ -24,6 +24,8 @@ export interface CollectePubliqueDef {
   champsPersonnalises: ChampPersonnalise[]
   montantMin: number | null
   montantsSuggeres: number[]
+  /** Signal visuel volontairement exposé aux donateurs pour les collectes prioritaires. */
+  isUrgent: boolean
 }
 
 /** Identité minimale d'un contributeur non-membre (collecte publique). */

@@ -126,6 +126,7 @@ beforeAll(async () => {
       montantMin: 1000,
       montantsSuggeres: [1000, 2000, 5000],
       isActive: true,
+      isUrgent: true,
       createdById: anyUser.id,
       createdByName: anyUser.fullName,
     },
@@ -158,9 +159,10 @@ describe('1. GET /collectes/:slug — vitrine publique, aucune donnée privée',
     expect(res.body.data.titre).toBe('Collecte de test E2E')
     expect(res.body.data.montantMin).toBe(1000)
     expect(res.body.data.montantsSuggeres).toEqual([1000, 2000, 5000])
+    expect(res.body.data.isUrgent).toBe(true)
     expect(res.body.data.champsPersonnalises).toHaveLength(2)
     expect(Object.keys(res.body.data).sort()).toEqual(
-      ['champsPersonnalises', 'description', 'montantMin', 'montantsSuggeres', 'publicSlug', 'titre'].sort()
+      ['champsPersonnalises', 'description', 'isUrgent', 'montantMin', 'montantsSuggeres', 'publicSlug', 'titre'].sort()
     )
   })
 

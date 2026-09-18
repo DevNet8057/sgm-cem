@@ -137,6 +137,7 @@ router.get('/collectes/:slug', publicLimiter, async (req, res) => {
       champsPersonnalises: collecte.champsPersonnalises,
       montantMin: collecte.montantMin,
       montantsSuggeres: collecte.montantsSuggeres,
+      isUrgent: collecte.isUrgent,
     },
   })
 })

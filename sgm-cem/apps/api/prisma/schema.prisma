@@ -306,6 +306,7 @@ model CollectePublique {
   montantMin          Int?
   montantsSuggeres    Int[]    @default([])
   isActive            Boolean  @default(true) // contrôle l'exposition du lien public uniquement
+  isUrgent            Boolean  @default(false) // signalement urgent piloté par la trésorerie ou un rôle supérieur
   createdById         String
   createdByName       String // snapshot (pattern Rubrique)
   createdAt           DateTime @default(now())

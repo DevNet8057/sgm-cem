@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Avatar } from '@/components/ui/Avatar'
 import { useAppStore } from '@/store/appStore'
+import { useFocusHighlight } from '@/hooks/useFocusHighlight'
 import { downloadXlsx } from '@/lib/exportXlsx'
 import type { ChampPersonnalise, ChampPersonnaliseType } from '@sgm-cem/shared'
 
@@ -45,6 +46,7 @@ interface CollectePublique {
   description: string | null
   publicSlug: string
   isActive: boolean
+  isUrgent: boolean
   montantMin: number | null
   montantsSuggeres: number[]
   champsPersonnalises: ChampPersonnalise[]
@@ -108,6 +110,12 @@ export function CollectesPubliques() {
     onError: (err: unknown) => addToast({ title: 'Erreur', message: extractError(err), variant: 'error' }),
   })
 
+  const toggleUrgent = useMutation({
+    mutationFn: async ({ id, isUrgent }: { id: string; isUrgent: boolean }) => api.patch(`/collectes/${id}`, { isUrgent }),
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ['collectes'] }) },
+    onError: (err: unknown) => addToast({ title: 'Erreur', message: extractError(err), variant: 'error' }),
+  })
+
   async function resetAndRefresh(toastTitle: string) {
     setMode('none')
     setEditingId(null)
@@ -160,6 +168,7 @@ export function CollectesPubliques() {
   }
 
   const collectes = data ?? []
+  const highlightedId = useFocusHighlight(collectes.map(c => c.id))
 
   return (
     <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter">
@@ -215,9 +224,12 @@ export function CollectesPubliques() {
             <CollecteCard
               key={c.id}
               collecte={c}
-              toggleLoading={toggleActive.isPending}
+              highlighted={highlightedId === c.id}
+              activeToggleLoading={toggleActive.isPending && toggleActive.variables?.id === c.id}
+              urgentToggleLoading={toggleUrgent.isPending && toggleUrgent.variables?.id === c.id}
               onEdit={() => startEdit(c)}
               onToggleActive={next => toggleActive.mutate({ id: c.id, isActive: next })}
+              onToggleUrgent={next => toggleUrgent.mutate({ id: c.id, isUrgent: next })}
               onCopyLink={() => copyLink(c)}
               onDetail={() => setDetail(c)}
             />
@@ -228,11 +240,14 @@ export function CollectesPubliques() {
   )
 }
 
-function CollecteCard({ collecte: c, toggleLoading, onEdit, onToggleActive, onCopyLink, onDetail }: {
+function CollecteCard({ collecte: c, highlighted, activeToggleLoading, urgentToggleLoading, onEdit, onToggleActive, onToggleUrgent, onCopyLink, onDetail }: {
   collecte: CollectePublique
-  toggleLoading: boolean
+  highlighted: boolean
+  activeToggleLoading: boolean
+  urgentToggleLoading: boolean
   onEdit: () => void
   onToggleActive: (next: boolean) => void
+  onToggleUrgent: (next: boolean) => void
   onCopyLink: () => void
   onDetail: () => void
 }) {
@@ -240,8 +255,14 @@ function CollecteCard({ collecte: c, toggleLoading, onEdit, onToggleActive, onCo
   const ratio = target ? (c.totalCollecte ?? 0) / target : 0
 
   return (
-    <div className="bg-white rounded-[18px] border border-gray-100 overflow-hidden hover:shadow-cem-lg hover:-translate-y-1 hover:border-[#1A6B1A]/30 transition-all duration-200">
-      <div className={cn('h-1.5 bg-linear-to-r', c.isActive ? 'from-[#1A6B1A] to-[#2D8C2D]' : 'from-gray-300 to-gray-200')} />
+    <div
+      data-focus-id={c.id}
+      className={cn(
+        'bg-white rounded-[18px] border overflow-hidden hover:shadow-cem-lg hover:-translate-y-1 hover:border-[#1A6B1A]/30 transition-all duration-200',
+        highlighted ? 'border-[#F5C400] ring-2 ring-[#F5C400]/45 shadow-cem-lg' : 'border-gray-100'
+      )}
+    >
+      <div className={cn('h-1.5 bg-linear-to-r', c.isUrgent ? 'from-red-600 to-amber-500' : c.isActive ? 'from-[#1A6B1A] to-[#2D8C2D]' : 'from-gray-300 to-gray-200')} />
       <div className="p-5">
         <div className="flex items-start justify-between mb-3 gap-2">
           <div className="flex-1 min-w-0">
@@ -254,6 +275,11 @@ function CollecteCard({ collecte: c, toggleLoading, onEdit, onToggleActive, onCo
                 <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60" />
                 {c.isActive ? 'Active' : 'Inactive'}
               </span>
+              {c.isUrgent && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border bg-red-50 text-red-700 border-red-200">
+                  <AlertTriangle size={11} /> Urgente
+                </span>
+              )}
             </div>
             <h3 className="font-display font-semibold text-gray-800 text-sm leading-tight">{c.titre}</h3>
             {c.description && <p className="text-xs text-gray-400 mt-1 line-clamp-2">{c.description}</p>}
@@ -289,7 +315,7 @@ function CollecteCard({ collecte: c, toggleLoading, onEdit, onToggleActive, onCo
             <span className="text-[11px] text-gray-400">{c.isActive ? 'Activée' : 'Désactivée'}</span>
             <button
               type="button"
-              disabled={toggleLoading}
+              disabled={activeToggleLoading || urgentToggleLoading}
               onClick={() => onToggleActive(!c.isActive)}
               className={cn(
                 'w-9 h-5 rounded-full relative transition-colors shrink-0 disabled:opacity-50',
@@ -302,6 +328,27 @@ function CollecteCard({ collecte: c, toggleLoading, onEdit, onToggleActive, onCo
               )} />
             </button>
           </div>
+        </div>
+        <div className="mt-3 flex items-center justify-between rounded-[10px] border border-red-100 bg-red-50/60 px-3 py-2">
+          <div>
+            <p className="text-xs font-semibold text-red-800">Collecte urgente</p>
+            <p className="text-[11px] text-red-600">Alerte les utilisateurs et met la collecte en avant.</p>
+          </div>
+          <button
+            type="button"
+            aria-label={c.isUrgent ? 'Retirer le caractère urgent' : 'Marquer comme urgente'}
+            disabled={activeToggleLoading || urgentToggleLoading}
+            onClick={() => onToggleUrgent(!c.isUrgent)}
+            className={cn(
+              'w-10 h-6 rounded-full relative transition-colors shrink-0 disabled:opacity-50',
+              c.isUrgent ? 'bg-red-600' : 'bg-gray-300'
+            )}
+          >
+            <div className={cn(
+              'absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform',
+              c.isUrgent ? 'translate-x-[18px]' : 'translate-x-0.5'
+            )} />
+          </button>
         </div>
       </div>
     </div>

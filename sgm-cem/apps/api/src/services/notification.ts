@@ -139,6 +139,86 @@ export async function notifyInApp(
 }
 
 /**
+ * Informe chaque compte actif d'une nouvelle collecte ouverte au public.
+ * Le créateur est volontairement inclus : il retrouve aussi l'événement dans
+ * son propre centre de notifications, comme les autres utilisateurs.
+ */
+export async function notifyPublicCollecteCreated(p: {
+  collecteId: string
+  titre: string
+  isUrgent: boolean
+}): Promise<void> {
+  const users = await prisma.user.findMany({
+    where: { isActive: true },
+    select: { id: true, role: true },
+  })
+  const title = p.isUrgent ? 'Nouvelle collecte publique urgente' : 'Nouvelle collecte publique'
+  const body = p.isUrgent
+    ? `La collecte « ${p.titre} » est ouverte et signalée urgente.`
+    : `La collecte « ${p.titre} » est maintenant ouverte au public.`
+  const data = { collecteId: p.collecteId, isUrgent: p.isUrgent }
+
+  await prisma.notification.createMany({
+    data: users.map(user => {
+      const canManagePublicCollectes = ['ADMIN', 'TRESORIER', 'DEVELOPER'].includes(user.role)
+      return {
+        userId: user.id,
+        title,
+        body,
+        type: p.isUrgent ? 'ALERTE' : 'INFO',
+        targetView: canManagePublicCollectes ? 'collectes-publiques' : 'rubriques',
+        targetId: canManagePublicCollectes ? p.collecteId : null,
+        data,
+        statut: 'SENT',
+        sentAt: new Date(),
+      }
+    }),
+  })
+
+  for (const user of users) {
+    void sendPushToUser(user.id, { title, body, data })
+  }
+}
+
+/** Notifie tous les comptes actifs lorsqu'une collecte devient (ou cesse d'être) urgente. */
+export async function notifyPublicCollecteUrgencyChanged(p: {
+  collecteId: string
+  titre: string
+  isUrgent: boolean
+}): Promise<void> {
+  const users = await prisma.user.findMany({
+    where: { isActive: true },
+    select: { id: true, role: true },
+  })
+  const title = p.isUrgent ? 'Collecte marquée urgente' : 'Collecte retirée des urgences'
+  const body = p.isUrgent
+    ? `La collecte « ${p.titre} » demande une attention prioritaire.`
+    : `La collecte « ${p.titre} » n'est plus signalée comme urgente.`
+  const data = { collecteId: p.collecteId, isUrgent: p.isUrgent }
+
+  await prisma.notification.createMany({
+    data: users.map(user => {
+      const canManagePublicCollectes = ['ADMIN', 'TRESORIER', 'DEVELOPER'].includes(user.role)
+      return {
+        userId: user.id,
+        title,
+        body,
+        type: p.isUrgent ? 'ALERTE' : 'INFO',
+        targetView: canManagePublicCollectes ? 'collectes-publiques' : 'rubriques',
+        targetId: canManagePublicCollectes ? p.collecteId : null,
+        data,
+        statut: 'SENT',
+        sentAt: new Date(),
+      }
+    }),
+  })
+
+  for (const user of users) {
+    void sendPushToUser(user.id, { title, body, data })
+  }
+}
+
+/**
  * Alerte tous les Trésoriers/Admin d'une anomalie nécessitant une résolution manuelle
  * (ex: montant incohérent entre l'initiation et la confirmation d'un paiement).
  */

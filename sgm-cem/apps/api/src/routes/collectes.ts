@@ -12,6 +12,7 @@ import { authenticate } from '../middleware/auth'
 import { requireRole, requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { generatePublicSlug } from '../services/collecte.service'
+import { notifyPublicCollecteCreated, notifyPublicCollecteUrgencyChanged } from '../services/notification'
 
 const router = Router()
 const prisma = new PrismaClient()
@@ -53,6 +54,7 @@ const updateSchema = z.object({
   montantMin: z.number().int().positive().optional(),
   montantsSuggeres: z.array(z.number().int().positive()).max(6).optional(),
   isActive: z.boolean().optional(),
+  isUrgent: z.boolean().optional(),
   champsPersonnalises: champsPersonnalisesSchema.optional(),
 })
 
@@ -129,6 +131,12 @@ router.post('/', authenticate, requireRole('ADMIN', 'TRESORIER', 'DEVELOPER'), a
     return created
   })
 
+  await notifyPublicCollecteCreated({
+    collecteId: collecte.id,
+    titre: collecte.titre,
+    isUrgent: collecte.isUrgent,
+  })
+
   res.status(201).json({ success: true, data: collecte })
 })
 
@@ -189,6 +197,14 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'TRESORIER', 'DEVELOPER'
       details: data,
     },
   })
+
+  if (data.isUrgent !== undefined && data.isUrgent !== current.isUrgent) {
+    await notifyPublicCollecteUrgencyChanged({
+      collecteId: collecte.id,
+      titre: collecte.titre,
+      isUrgent: collecte.isUrgent,
+    })
+  }
 
   res.json({ success: true, data: collecte })
 })
