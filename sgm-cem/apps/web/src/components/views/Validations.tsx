@@ -195,7 +195,8 @@ export function Validations() {
                         )}
                         <Button
                           size="sm"
-                          loading={confirm.isPending}
+                          loading={confirm.isPending && confirm.variables === c.id}
+                          disabled={confirm.isPending}
                           onClick={() => confirmContribution(c.id)}
                         >
                           <CheckCircle2 size={13} />

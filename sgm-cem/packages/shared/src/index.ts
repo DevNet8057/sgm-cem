@@ -20,3 +20,5 @@ export {
 } from './contribution-balance'
 
 export * from './activity'
+export * from './payment-batches'
+export * from './contribution-access'

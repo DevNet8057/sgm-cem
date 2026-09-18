@@ -80,6 +80,14 @@ enum PaymentStatus {
   CANCELLED // Annulé manuellement avant confirmation
 }
 
+// Statut d'un paiement distribué entre plusieurs rubriques.
+// Distinct de PaymentStatus pour préserver les statuts historiques des contributions.
+enum PaymentBatchStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
 enum ModePaiement {
   ESPECES
   MTN_MOMO
@@ -243,6 +251,7 @@ model Membre {
 
   user          User           @relation(fields: [userId], references: [id])
   contributions Contribution[]
+  paymentBatches PaymentBatch[]
   couple        Membre?        @relation("CoupleLink", fields: [coupleId], references: [id])
   coupleOf      Membre[]       @relation("CoupleLink")
 
@@ -370,6 +379,9 @@ model Contribution {
   netAmount             Int?
   paymentUrl            String?
 
+  // Paiement multi-rubrique — nullable pour préserver toutes les contributions existantes.
+  paymentBatchId String?
+
   // ── Commission payée par le contributeur — règle métier §1bis ──────────────
   // amountChargedToPayer = montant majoré réellement débité (montant dû + commission)
   // commissionPaidByPayer = amountChargedToPayer - montant
@@ -381,6 +393,8 @@ model Contribution {
   litigeMotif     String?
   confirmedAt     DateTime?
   confirmedById   String?
+  // Autorisation administrative de confirmation par un trésorier
+  confirmationAuthorization Json?
   receiptUrl      String?
   receiptSentAt   DateTime?
   proofUrl        String?
@@ -400,6 +414,7 @@ model Contribution {
   rubrique            Rubrique             @relation(fields: [rubriqueId], references: [id])
   collecteur          User?                @relation("CollecteurContributions", fields: [collecteurId], references: [id])
   contributeurExterne ContributeurExterne? @relation(fields: [contributeurExterneId], references: [id])
+  paymentBatch        PaymentBatch?        @relation(fields: [paymentBatchId], references: [id], onDelete: SetNull)
 
   @@index([statut])
   @@index([membreId])
@@ -407,8 +422,35 @@ model Contribution {
   @@index([contributeurExterneId])
   @@index([externalTransactionId])
   @@index([paymentStatus])
+  @@index([paymentBatchId])
   @@index([createdAt])
   @@map("contributions")
+}
+
+// ─── PAIEMENT MULTI-RUBRIQUE ─────────────────────────────────────────────────
+// Un lot représente une seule transaction fournisseur répartie sur plusieurs
+// contributions; les allocations conservent les lignes { rubriqueId, montant }.
+model PaymentBatch {
+  id                    String            @id @default(cuid())
+  membreId              String?
+  budget                Int
+  allocations           Json
+  totalAllocated        Int
+  status                PaymentBatchStatus @default(PENDING)
+  idempotencyKey        String            @unique
+  requestFingerprint    String            @unique
+  externalTransactionId String?
+  paymentUrl            String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  membre        Membre?        @relation(fields: [membreId], references: [id])
+  contributions Contribution[]
+
+  @@index([membreId])
+  @@index([status])
+  @@index([externalTransactionId])
+  @@map("payment_batches")
 }
 
 // ─── WEB PUSH — abonnements navigateur ────────────────────────────────────────

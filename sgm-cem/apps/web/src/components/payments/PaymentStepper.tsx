@@ -15,6 +15,7 @@ import { extractDeclareErrorMessage, useDeclareCashContribution } from '@/hooks/
 import { calculateAmountWithCommission, YELII_COMMISSION_RATE } from '@sgm-cem/shared'
 import { PaymentMethodSelector, OperatorSelector, type PayMode, type MobileOperator } from './PaymentMethodSelector'
 import { PendingScreen, USSD_TIMEOUT } from './PendingScreen'
+import { AllocationEditor, type PaymentAllocation } from './AllocationEditor'
 import type { Membre, Rubrique } from '@/types'
 
 type PayStatus = 'idle' | 'submitting' | 'waiting' | 'redirected' | 'confirmed' | 'declared' | 'failed' | 'timeout'
@@ -85,6 +86,12 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
   const [membreId, setMembreId] = useState(() => selfService ? (membres[0]?.id ?? '') : '')
   const [rubriqueId, setRubriqueId] = useState(initialRubriqueId ?? '')
   const [montant, setMontant] = useState(initialMontant != null ? String(initialMontant) : '')
+  const [allocationBudget, setAllocationBudget] = useState<number | ''>(initialMontant ?? '')
+  const [allocations, setAllocations] = useState<PaymentAllocation[]>(() => (
+    initialRubriqueId && initialMontant != null
+      ? [{ rubriqueId: initialRubriqueId, montant: initialMontant }]
+      : []
+  ))
 
   // Étape 2 — Mode de paiement
   const [mode, setMode] = useState<PayMode>(selfService ? 'MOBILE_MONEY' : 'ESPECES')
@@ -96,6 +103,8 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
   // Étape 4 — Résultat
   const [payStatus, setPayStatus] = useState<PayStatus>('idle')
   const [contribId, setContribId] = useState<string | null>(null)
+  const [batchId, setBatchId] = useState<string | null>(null)
+  const [batchContributionIds, setBatchContributionIds] = useState<string[]>([])
   const [cinetpayUrl, setCinetpayUrl] = useState<string | null>(null)
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null)
   const [failReason, setFailReason] = useState('')
@@ -113,6 +122,11 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
 
   const selectedMembre   = membres.find(m => m.id === membreId) as MembreWithCouple | undefined
   const selectedRubrique = rubriques.find(r => r.id === rubriqueId)
+  const allocatedAmount = useMemo(
+    () => allocations.reduce((total, allocation) => total + allocation.montant, 0),
+    [allocations]
+  )
+  const paymentAmount = selfService ? allocatedAmount : Number(montant)
   const isCouple         = selectedMembre?.profilFinancier === 'COUPLE'
   const hasCouple        = isCouple && !!selectedMembre?.couple
 
@@ -126,7 +140,7 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
   const splitAmount = expectedAmount != null && isCouple ? Math.round(expectedAmount / 2) : null
   const isMobileMoney = mode === 'MOBILE_MONEY'
   const isCard = mode === 'CARTE_VISA'
-  const isCashDeclaration = Boolean(selfService && mode === 'ESPECES')
+  const isCashDeclaration = Boolean(!selfService && mode === 'ESPECES')
   const modeDisabled = disabledModes.includes(mode)
 
   const {
@@ -149,8 +163,8 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
   // §1bis — détail transparent de la commission Mobile Money (source unique @sgm-cem/shared).
   // Le contributeur paie le montant majoré ; le montant dû à la rubrique reste `montant`.
   const mmBreakdown = useMemo(
-    () => (isMobileMoney && Number(montant) > 0 ? calculateAmountWithCommission(Number(montant), commissionRate) : null),
-    [isMobileMoney, montant, commissionRate]
+    () => (isMobileMoney && paymentAmount > 0 ? calculateAmountWithCommission(paymentAmount, commissionRate) : null),
+    [isMobileMoney, paymentAmount, commissionRate]
   )
 
   // ── Countdown USSD (5 minutes) ────────────────────────────────────────────
@@ -172,28 +186,31 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
 
   // ── Polling du statut (Mobile Money + CinetPay) ───────────────────────────
   const poll = useCallback(async (): Promise<boolean> => {
-    if (!contribId) return false
-    try {
-      const res = await api.get(`/payments/status/${contribId}`)
-      const { statut, paymentStatus: ps, receiptUrl: rUrl } = res.data.data
-
-      if (statut === 'CONFIRME' || ps === 'SUCCESS') {
-        setPayStatus('confirmed')
-        if (rUrl) setReceiptUrl(rUrl)
-        await queryClient.invalidateQueries({ queryKey: ['contributions'] })
-        await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
-        return true
-      }
-      if (statut === 'ANNULE' || ps === 'FAILED') {
-        setPayStatus('failed')
-        return true
-      }
-    } catch { /* le webhook mettra à jour */ }
+    const identifiers = batchId ? [batchId, ...batchContributionIds] : contribId ? [contribId] : []
+    if (identifiers.length === 0) return false
+    for (const identifier of identifiers) {
+      try {
+        const res = await api.get(`/payments/status/${identifier}`)
+        const data = res.data.data
+        const status = data.statut ?? data.paymentStatus ?? data.status
+        if (status === 'CONFIRME' || status === 'SUCCESS' || status === 'CONFIRMED') {
+          setPayStatus('confirmed')
+          if (data.receiptUrl) setReceiptUrl(data.receiptUrl)
+          await queryClient.invalidateQueries({ queryKey: ['contributions'] })
+          await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+          return true
+        }
+        if (status === 'ANNULE' || status === 'FAILED') {
+          setPayStatus('failed')
+          return true
+        }
+      } catch { /* un batch peut ne pas encore avoir de route de statut dédiée */ }
+    }
     return false
-  }, [contribId, queryClient])
+  }, [batchId, batchContributionIds, contribId, queryClient])
 
   useEffect(() => {
-    if ((payStatus !== 'waiting' && payStatus !== 'redirected') || !contribId) return
+    if ((payStatus !== 'waiting' && payStatus !== 'redirected') || (!contribId && !batchId)) return
     const iv = setInterval(async () => {
       const done = await poll()
       if (done) clearInterval(iv)
@@ -203,16 +220,28 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
 
   // ── Mutation : initier le paiement ───────────────────────────────────────
   const pay = useMutation({
-    mutationFn: () =>
-      api.post('/payments/initiate', {
-        membreId,
-        rubriqueId,
-        montant: Number(montant),
-        modePaiement: isMobileMoney ? 'YELII' : mode,
-        mobileMoneyPhone: isMobileMoney ? mobilePhone : undefined,
-        paymentChannel: isMobileMoney ? operator : undefined,
-        customerPhone: isCard ? `+237${mobilePhone}` : undefined,
-      }),
+    mutationFn: () => selfService
+      ? api.post('/payments/batches/initiate', {
+          idempotencyKey: typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `payment-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          membreId,
+          budgetAmount: Number(allocationBudget),
+          allocations,
+          modePaiement: isMobileMoney ? 'YELII' : mode,
+          mobileMoneyPhone: isMobileMoney ? mobilePhone : undefined,
+          paymentChannel: isMobileMoney ? operator : undefined,
+          customerPhone: isCard ? `+237${mobilePhone}` : undefined,
+        })
+      : api.post('/payments/initiate', {
+          membreId,
+          rubriqueId,
+          montant: Number(montant),
+          modePaiement: isMobileMoney ? 'YELII' : mode,
+          mobileMoneyPhone: isMobileMoney ? mobilePhone : undefined,
+          paymentChannel: isMobileMoney ? operator : undefined,
+          customerPhone: isCard ? `+237${mobilePhone}` : undefined,
+        }),
     onSuccess: async (res) => {
       // Le backend renvoie HTTP 200 avec { success:false, error } quand
       // l'initiation échoue (Yelii injoignable, solde insuffisant, etc.).
@@ -227,7 +256,12 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
       }
 
       const d = res.data.data
-      const id = d.contributionId ?? d.id
+      const returnedContributionIds = Array.isArray(d.contributions)
+        ? d.contributions.map((contribution: { id?: string }) => contribution.id).filter((id: string | undefined): id is string => Boolean(id))
+        : []
+      const id = d.contributionId ?? d.id ?? returnedContributionIds[0]
+      if (d.batchId) setBatchId(d.batchId)
+      if (returnedContributionIds.length > 0) setBatchContributionIds(returnedContributionIds)
       setContribId(id)
 
       await queryClient.invalidateQueries({ queryKey: ['contributions'] })
@@ -238,13 +272,13 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
       // Avancer à l'étape Résultat
       setStep(3)
 
-      if (isMobileMoney && (d.status === 'PROCESSING' || d.paymentStatus === 'PROCESSING')) {
+      if (isMobileMoney && (d.status === 'PROCESSING' || d.paymentStatus === 'PROCESSING' || d.status === 'PENDING')) {
         setPayStatus('waiting')
       } else if (mode === 'CARTE_VISA' && d.paymentUrl) {
         setCinetpayUrl(d.paymentUrl)
         window.open(d.paymentUrl, '_blank', 'noopener,noreferrer')
         setPayStatus('redirected')
-      } else if (d.status === 'SUCCESS' || d.paymentStatus === 'SUCCESS') {
+      } else if (d.status === 'SUCCESS' || d.status === 'CONFIRMED' || d.paymentStatus === 'SUCCESS') {
         setPayStatus('confirmed')
         // Pas de fermeture automatique : l'utilisateur consulte le reçu
         // (Partager / Imprimer) puis ferme lui-même.
@@ -289,6 +323,14 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
     setError('')
     if (step === 0) {
       if (!membreId)  { setError('Sélectionnez un membre'); return }
+      if (selfService) {
+        if (typeof allocationBudget !== 'number' || allocationBudget <= 0 || allocations.length === 0 || allocatedAmount > allocationBudget) {
+          setError('Vérifiez le budget et la répartition des rubriques')
+          return
+        }
+        setStep(1)
+        return
+      }
       if (!rubriqueId){ setError('Sélectionnez une rubrique'); return }
       if (!montant || Number(montant) <= 0) { setError('Entrez un montant valide'); return }
     }
@@ -341,6 +383,8 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
   function retry() {
     setPayStatus('idle')
     setContribId(null)
+    setBatchId(null)
+    setBatchContributionIds([])
     setFailReason('')
     setStep(2) // Retour au récap pour re-confirmer
     setError('')
@@ -369,7 +413,7 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
               {step === 0 ? 'Annuler' : 'Retour'}
             </AntButton>
           ) : <span />}
-          {step < 2 && (
+          {step < 2 && !(selfService && step === 0) && (
             <AntButton
               type="primary"
               icon={<ArrowRight size={14} />}
@@ -462,6 +506,26 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
 
           {/* ── Étape 1 : Sélection ── */}
           {step === 0 && (
+            selfService ? (
+              <div className="space-y-4">
+                {selectedMembre && (
+                  <div className="flex items-center gap-2 rounded-[10px] border border-[#1A6B1A]/20 bg-[#E8F5E8] px-3 py-2">
+                    <CheckCircle2 size={14} className="shrink-0 text-[#1A6B1A]" />
+                    <span className="text-sm font-semibold text-[#0F4A0F]">{selectedMembre.user.fullName}</span>
+                    <span className="ml-auto text-xs text-gray-500">{selectedMembre.profilFinancier}</span>
+                  </div>
+                )}
+                <AllocationEditor
+                  budget={allocationBudget}
+                  allocations={allocations}
+                  rubriques={rubriques.filter(r => r.status === 'OUVERTE').map(r => ({ id: r.id, title: r.title, code: r.code }))}
+                  onBudgetChange={value => { setAllocationBudget(value); setError('') }}
+                  onAllocationsChange={value => { setAllocations(value); setError('') }}
+                  onNext={() => { setError(''); goNext() }}
+                  nextLabel="Choisir le moyen de paiement"
+                />
+              </div>
+            ) : (
             <Form layout="vertical" className="space-y-4">
               <div>
                 {!selfService && (
@@ -544,6 +608,7 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
                 )}
               </div>
             </Form>
+            )
           )}
 
           {/* ── Étape 2 : Mode de paiement ── */}
@@ -683,9 +748,20 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
                 <h3 className="font-display font-semibold text-[#0F4A0F] text-base mb-3">Récapitulatif</h3>
                 <RecapRow label="Membre"   value={selectedMembre?.user.fullName ?? '—'} />
                 <RecapRow label="Profil"   value={selectedMembre?.profilFinancier ?? '—'} />
-                <RecapRow label="Rubrique" value={selectedRubrique ? `${selectedRubrique.code} — ${selectedRubrique.title}` : '—'} />
+                {selfService ? (
+                  <div className="space-y-1.5 text-sm">
+                    <span className="text-gray-500">Répartition</span>
+                    {allocations.map(allocation => {
+                      const rubrique = rubriques.find(r => r.id === allocation.rubriqueId)
+                      return <RecapRow key={allocation.rubriqueId} label={rubrique ? `${rubrique.code} — ${rubrique.title}` : 'Rubrique'} value={formatAmount(allocation.montant)} />
+                    })}
+                    <RecapRow label="Budget total" value={formatAmount(Number(allocationBudget))} />
+                  </div>
+                ) : (
+                  <RecapRow label="Rubrique" value={selectedRubrique ? `${selectedRubrique.code} — ${selectedRubrique.title}` : '—'} />
+                )}
                 <div className="border-t border-gray-200 pt-2.5">
-                  <RecapRow label="Montant de la contribution" value={formatAmount(Number(montant))} highlight={!isMobileMoney} />
+                  <RecapRow label="Montant de la contribution" value={formatAmount(paymentAmount)} highlight={!isMobileMoney} />
                 </div>
                 <RecapRow
                   label="Mode"
@@ -829,8 +905,8 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
                   contributionId={contribId}
                   initialReceiptUrl={receiptUrl}
                   memberName={selectedMembre?.user.fullName}
-                  amount={Number(montant)}
-                  rubriqueLabel={selectedRubrique?.title}
+                  amount={paymentAmount}
+                  rubriqueLabel={selectedRubrique?.title ?? (allocations.length > 1 ? 'Paiement réparti' : rubriques.find(r => r.id === allocations[0]?.rubriqueId)?.title)}
                 />
               )}
 

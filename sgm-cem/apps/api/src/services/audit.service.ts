@@ -26,9 +26,12 @@ export async function audit(p: {
   entityType: string
   entityId?: string | null
   details?: Prisma.InputJsonValue
+}, options?: {
+  client?: Pick<Prisma.TransactionClient, 'auditLog'>
+  strict?: boolean
 }): Promise<void> {
   try {
-    await prisma.auditLog.create({
+    await (options?.client ?? prisma).auditLog.create({
       data: {
         userId: p.userId,
         userName: p.userName,
@@ -41,5 +44,6 @@ export async function audit(p: {
     })
   } catch (e) {
     console.error('[Audit] écriture impossible :', e)
+    if (options?.strict) throw e
   }
 }

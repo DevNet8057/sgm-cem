@@ -12,6 +12,7 @@ import { getPrisma } from '../lib/prisma'
 import { getConfigBool, getConfigNumber } from '../services/config.service'
 import { audit } from '../services/audit.service'
 import { syncYeliiContributionStatus, CONTRIBUTION_SYNC_SELECT } from '../services/payment-status.service'
+import { createPaymentBatch, PaymentBatchError } from '../services/payment-batch.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -33,6 +34,21 @@ const initiateSchema = z.object({
     })
   }
 })
+
+const initiateBatchSchema = z.object({
+  idempotencyKey: z.string(),
+  membreId: z.string(),
+  budgetAmount: z.number(),
+  allocations: z.array(z.object({
+    rubriqueId: z.string(),
+    montant: z.number(),
+  }).strict()),
+  modePaiement: z.enum(['YELII', 'CARTE_VISA', 'ESPECES']),
+  mobileMoneyPhone: z.string().optional(),
+  paymentChannel: z.enum(['MTN', 'ORANGE']).optional(),
+  customerPhone: z.string().optional(),
+  collecteurId: z.string().optional(),
+}).strict()
 
 /**
  * POST /api/payments/initiate
@@ -365,6 +381,157 @@ router.post('/initiate', authenticate, requireLevel(1), async (req, res) => {
         502
       )
     }
+  }
+})
+
+/**
+ * POST /api/payments/batches/initiate
+ * Réserve atomiquement un paiement réparti entre plusieurs rubriques, puis
+ * déclenche exactement un fournisseur pour le montant total du lot.
+ */
+router.post('/batches/initiate', authenticate, requireLevel(1), async (req, res) => {
+  const data = initiateBatchSchema.parse(req.body)
+  const isSelfService = req.user!.role === 'MEMBRE'
+
+  if (isSelfService) {
+    const membre = await prisma.membre.findFirst({
+      where: { userId: req.user!.userId },
+      select: { id: true },
+    })
+    if (!membre) throw new AppError('NOT_FOUND', 'Profil membre introuvable pour ce compte', 404)
+    if (data.membreId !== membre.id) {
+      throw new AppError('ACCESS_DENIED', 'Vous ne pouvez initier un paiement que pour vous-même', 403)
+    }
+  }
+
+  // Les données client sont nécessaires à CinetPay, mais ne doivent être
+  // récupérées qu'ici : le fournisseur ne sera appelé qu'une seule fois plus
+  // bas, après la réservation idempotente du lot.
+  const batchMember = data.modePaiement === 'CARTE_VISA'
+    ? await prisma.membre.findUnique({
+        where: { id: data.membreId },
+        select: {
+          id: true,
+          phone: true,
+          adresse: true,
+          user: { select: { firstName: true, lastName: true, email: true, phone: true } },
+        },
+      })
+    : null
+
+  const cardCustomerPhone = data.modePaiement === 'CARTE_VISA'
+    ? data.customerPhone?.trim() || batchMember?.user.phone?.trim() || batchMember?.phone?.trim()
+    : undefined
+
+  if (data.modePaiement === 'CARTE_VISA') {
+    if (!batchMember) throw new AppError('NOT_FOUND', 'Membre introuvable', 404)
+    if (!cardCustomerPhone) throw new AppError('VALIDATION', 'Un numéro de téléphone est requis pour le paiement par carte', 400)
+    if (!isCinetpayConfigured()) {
+      throw new AppError('CINETPAY_NOT_CONFIGURED', 'Le paiement par carte est indisponible car CinetPay n’est pas configuré.', 503)
+    }
+  }
+
+  try {
+    const result = await createPaymentBatch({
+      ...data,
+      collecteurId: data.collecteurId ?? (isSelfService ? undefined : req.user!.userId),
+    })
+
+    await audit({
+      req,
+      userId: req.user!.userId,
+      userName: req.user!.email,
+      action: 'CREATE',
+      entityType: 'PaymentBatch',
+      entityId: result.batchId,
+      details: {
+        source: 'payment_batch_initiate',
+        membreId: result.membreId,
+        budget: result.budget,
+        totalAllocated: result.totalAllocated,
+        modePaiement: result.modePaiement,
+        created: result.created,
+      },
+    })
+
+    // Une réservation existante porte déjà le résultat du fournisseur. Ne
+    // jamais rejouer l'appel en cas de double soumission/idempotence.
+    if (result.created) {
+      const batchUpdate = async (dataToUpdate: Record<string, unknown>, childUpdate: Record<string, unknown>) => {
+        await prisma.$transaction([
+          (prisma as any).paymentBatch.update({ where: { id: result.batchId }, data: dataToUpdate }),
+          (prisma.contribution as any).updateMany({ where: { paymentBatchId: result.batchId }, data: childUpdate }),
+        ])
+      }
+
+      if (data.modePaiement === 'ESPECES') {
+        // Les espèces restent une déclaration humaine : aucun fournisseur.
+        // PENDING/EN_ATTENTE_CONFIRMATION est l'état attendu jusqu'à validation.
+      } else if (data.modePaiement === 'YELII') {
+        const payment = await initiateYeliiPayment({
+          amount: result.totalToPay,
+          senderPhone: data.mobileMoneyPhone!,
+          channel: data.paymentChannel === 'ORANGE' ? 'orange_money' : 'mtn_money',
+        })
+
+        if (!payment.success || !payment.transactionId) {
+          await batchUpdate({ status: 'FAILED' }, { paymentStatus: 'FAILED', statut: 'ANNULE' })
+          throw new AppError('YELII_ERROR', 'Le paiement Mobile Money n’a pas pu être initialisé. Veuillez réessayer.', 502)
+        }
+
+        await batchUpdate(
+          { externalTransactionId: payment.transactionId, status: 'PENDING' },
+          { paymentStatus: 'PROCESSING', statut: 'EN_ATTENTE_CONFIRMATION' },
+        )
+        result.externalTransactionId = payment.transactionId
+        result.status = 'PENDING'
+        result.contributions = result.contributions.map(child => ({ ...child, paymentStatus: 'PROCESSING' }))
+      } else {
+        const transactionId = `SGMB${result.batchId.replace(/-/g, '').toUpperCase()}`
+        try {
+          const payment = await initiateCinetpayPayment({
+            transactionId,
+            amount: result.totalToPay,
+            description: `Paiement groupé SGM CEM — ${batchMember!.user.lastName} ${batchMember!.user.firstName}`.trim(),
+            customerId: batchMember!.id,
+            customerName: batchMember!.user.lastName,
+            customerSurname: batchMember!.user.firstName,
+            customerPhone: cardCustomerPhone!,
+            customerEmail: batchMember!.user.email,
+            customerAddress: batchMember!.adresse || 'EEC Melen',
+            customerCity: 'Yaoundé',
+            customerCountry: 'CM',
+            customerState: 'CM',
+            customerZipCode: '00000',
+          })
+
+          await batchUpdate(
+            { externalTransactionId: transactionId, paymentUrl: payment.paymentUrl, status: 'PENDING' },
+            { paymentUrl: payment.paymentUrl, paymentStatus: 'PROCESSING', statut: 'EN_ATTENTE_CONFIRMATION' },
+          )
+          result.externalTransactionId = transactionId
+          result.paymentUrl = payment.paymentUrl
+          result.status = 'PENDING'
+          result.contributions = result.contributions.map(child => ({ ...child, paymentStatus: 'PROCESSING' }))
+        } catch {
+          await batchUpdate({ status: 'FAILED' }, { paymentStatus: 'FAILED', statut: 'ANNULE' })
+          throw new AppError('CINETPAY_ERROR', 'L’initialisation du paiement par carte est incertaine. La vérification du paiement continue automatiquement.', 502)
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        ...result,
+        dueAmount: result.totalAllocated,
+      },
+    })
+  } catch (error) {
+    if (error instanceof PaymentBatchError) {
+      throw new AppError(error.code, error.message, error.statusCode)
+    }
+    throw error
   }
 })
 
