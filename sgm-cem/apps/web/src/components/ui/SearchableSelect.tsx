@@ -69,7 +69,6 @@ export function SearchableSelect({
         clearIcon={<X size={14} className="text-gray-300" aria-hidden="true" />}
         popupMatchSelectWidth
         listHeight={224}
-        getPopupContainer={triggerNode => triggerNode.parentElement ?? document.body}
         className={cn('w-full', error && 'searchable-select-error')}
         status={error ? 'error' : undefined}
         aria-label={label}
