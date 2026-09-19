@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
-import { initiateYeliiPayment, retryYeliiCallback } from '../services/yelii.service'
+import { initiateYeliiPayment, retryYeliiCallback, type YeliiPaymentResult } from '../services/yelii.service'
 import { initiateCinetpayPayment, isCinetpayConfigured } from '../services/cinetpay.service'
 import { generateReceiptPDF } from '../services/receipt'
 import { calculateAmountWithCommission, resolveDueAmount, YELII_COMMISSION_RATE } from '@sgm-cem/shared'
@@ -16,6 +16,43 @@ import { createPaymentBatch, PaymentBatchError } from '../services/payment-batch
 
 const router = Router()
 const prisma = getPrisma()
+
+function isUncertainYeliiInitialization(code: YeliiPaymentResult['code']): boolean {
+  return code === 'YELII_UNAVAILABLE' || code === 'YELII_INVALID_RESPONSE'
+}
+
+/** Ne révèle jamais le détail de configuration ou de réponse du prestataire. */
+function yeliiInitializationError(code: YeliiPaymentResult['code']): AppError {
+  switch (code) {
+    case 'YELII_VALIDATION':
+      return new AppError(
+        'VALIDATION',
+        'Le numéro Mobile Money est invalide. Vérifiez-le puis réessayez.',
+        400
+      )
+    case 'YELII_PROVIDER_REJECTED':
+      return new AppError(
+        'YELII_PROVIDER_REJECTED',
+        'L’opérateur Mobile Money a refusé le paiement. Vérifiez le numéro ou votre solde puis réessayez.',
+        422
+      )
+    case 'YELII_NOT_CONFIGURED':
+    case 'YELII_CONFIGURATION_INVALID':
+      return new AppError(
+        'MOBILE_MONEY_UNAVAILABLE',
+        'Le paiement Mobile Money est temporairement indisponible. Choisissez un autre mode de paiement.',
+        503
+      )
+    case 'YELII_UNAVAILABLE':
+    case 'YELII_INVALID_RESPONSE':
+    default:
+      return new AppError(
+        'YELII_INITIALIZATION_UNCERTAIN',
+        'Le débit Mobile Money est en cours de vérification. Ne relancez pas le paiement pour éviter un double débit.',
+        502
+      )
+  }
+}
 
 const initiateSchema = z.object({
   membreId: z.string().min(1),
@@ -312,12 +349,15 @@ router.post('/initiate', authenticate, requireLevel(1), async (req, res) => {
         },
       })
     } else {
-      await prisma.contribution.update({ where: { id: contribution.id }, data: { paymentStatus: 'FAILED' } })
-      throw new AppError(
-        'YELII_ERROR',
-        'Le paiement Mobile Money n’a pas pu être initialisé. Veuillez réessayer.',
-        502
-      )
+      if (isUncertainYeliiInitialization(payment.code)) {
+        await prisma.contribution.update({
+          where: { id: contribution.id },
+          data: { paymentStatus: 'PROCESSING', statut: 'EN_ATTENTE_CONFIRMATION' },
+        })
+      } else {
+        await prisma.contribution.update({ where: { id: contribution.id }, data: { paymentStatus: 'FAILED' } })
+      }
+      throw yeliiInitializationError(payment.code)
     }
   }
 
@@ -480,8 +520,15 @@ router.post('/batches/initiate', authenticate, requireLevel(1), async (req, res)
         })
 
         if (!payment.success || !payment.transactionId) {
-          await batchUpdate({ status: 'FAILED' }, { paymentStatus: 'FAILED', statut: 'ANNULE' })
-          throw new AppError('YELII_ERROR', 'Le paiement Mobile Money n’a pas pu être initialisé. Veuillez réessayer.', 502)
+          if (isUncertainYeliiInitialization(payment.code)) {
+            await batchUpdate(
+              { status: 'PENDING' },
+              { paymentStatus: 'PROCESSING', statut: 'EN_ATTENTE_CONFIRMATION' },
+            )
+          } else {
+            await batchUpdate({ status: 'FAILED' }, { paymentStatus: 'FAILED', statut: 'ANNULE' })
+          }
+          throw yeliiInitializationError(payment.code)
         }
 
         await batchUpdate(
@@ -523,6 +570,12 @@ router.post('/batches/initiate', authenticate, requireLevel(1), async (req, res)
           throw new AppError('CINETPAY_ERROR', 'L’initialisation du paiement par carte est incertaine. La vérification du paiement continue automatiquement.', 502)
         }
       }
+    } else if (data.modePaiement === 'YELII' && !result.externalTransactionId && result.status === 'PENDING') {
+      throw new AppError(
+        'PAYMENT_INITIALIZATION_IN_PROGRESS',
+        'Le débit Mobile Money est en cours de vérification. Ne relancez pas le paiement pour éviter un double débit.',
+        409
+      )
     }
 
     res.json({

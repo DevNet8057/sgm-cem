@@ -34,6 +34,7 @@ import { startActivityRetentionJob } from './services/activity-write.service'
 import { schedulePaymentReconciliation } from './jobs/payment-reconciliation'
 import { scheduleMonthlyCron } from './services/cron'
 import { initSocketIO } from './lib/socket'
+import { loadConfigCache } from './services/config.service'
 
 const app = express()
 const PORT = process.env.PORT ?? 3001
@@ -123,7 +124,8 @@ app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Da
 
 app.use(errorHandler)
 
-if (process.env.NODE_ENV !== 'test') {
+async function bootstrap(): Promise<void> {
+  await loadConfigCache()
   startActivityRetentionJob()
   const server = http.createServer(app)
   initSocketIO(server)
@@ -132,6 +134,10 @@ if (process.env.NODE_ENV !== 'test') {
   })
   schedulePaymentReconciliation()
   scheduleMonthlyCron()
+}
+
+if (process.env.NODE_ENV !== 'test') {
+  void bootstrap()
 }
 
 export default app

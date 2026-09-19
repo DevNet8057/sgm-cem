@@ -1,17 +1,73 @@
 import crypto from 'crypto'
 import { getConfig } from './config.service'
 
+const YELII_DEFAULT_BASE_URL = 'https://api.yelii.xyz/api/yelii-pro-pay/v1'
+const YELII_REQUEST_TIMEOUT_MS = 10_000
+
+function getConfiguredValue(key: string): string | undefined {
+  const value = getConfig(key)?.trim()
+  return value || undefined
+}
+
+function isPrivateOrLoopbackHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  if (host === 'localhost' || host === '::1' || host.endsWith('.localhost')) return true
+
+  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+  if (ipv4) {
+    const octets = ipv4.slice(1).map(Number)
+    if (octets.some(octet => octet > 255)) return true
+    return octets[0] === 0
+      || octets[0] === 10
+      || octets[0] === 127
+      || (octets[0] === 169 && octets[1] === 254)
+      || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
+      || (octets[0] === 192 && octets[1] === 168)
+  }
+
+  return host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:')
+}
+
+function isSafePublicHttpUrl(value: string | undefined): value is string {
+  if (!value) return false
+
+  try {
+    const url = new URL(value)
+    const isProduction = getConfiguredValue('NODE_ENV') === 'production'
+    const isHttpAllowed = url.protocol === 'https:' || (!isProduction && url.protocol === 'http:')
+    return isHttpAllowed && !url.username && !url.password && !isPrivateOrLoopbackHost(url.hostname)
+  } catch {
+    return false
+  }
+}
+
+function isAllowedYeliiBaseUrl(value: string | undefined): value is string {
+  if (!isSafePublicHttpUrl(value)) return false
+
+  const url = new URL(value)
+  return url.hostname.toLowerCase() === 'api.yelii.xyz' && (url.port === '' || url.port === '443')
+}
+
+function normalizeCameroonMobilePhone(phone: string): string | undefined {
+  let normalized = phone.replace(/\D/g, '')
+  if (normalized.startsWith('00237')) normalized = normalized.slice(5)
+  else if (normalized.startsWith('237')) normalized = normalized.slice(3)
+
+  return /^6\d{8}$/.test(normalized) ? normalized : undefined
+}
+
 // Configuration lue AU MOMENT DE L'APPEL (jamais de constante figée au
 // chargement du module) : un changement depuis le panneau développeur est
 // pris en compte immédiatement, sans redémarrage (DEVELOPER_PANEL §3).
 function getYeliiConfig() {
+  const apiUrl = getConfiguredValue('API_URL')
   return {
-    baseUrl: getConfig('YELII_BASE_URL') ?? 'https://api.yelii.xyz/api/yelii-pro-pay/v1',
+    baseUrl: (getConfiguredValue('YELII_BASE_URL') ?? YELII_DEFAULT_BASE_URL).replace(/\/+$/, ''),
     // Certains déploiements historiques ne disposent que de YELII_API_KEY.
     // La clé de collecte reste prioritaire, mais un champ vide ne doit pas
     // empêcher MTN/Orange de fonctionner si la clé historique est valide.
-    apiKey: getConfig('YELII_COLLECT_API_KEY') || getConfig('YELII_API_KEY'),
-    webhookUrl: getConfig('YELII_WEBHOOK_URL') ?? `${getConfig('API_URL')}/webhooks/yelii`,
+    apiKey: getConfiguredValue('YELII_COLLECT_API_KEY') || getConfiguredValue('YELII_API_KEY'),
+    webhookUrl: getConfiguredValue('YELII_WEBHOOK_URL') ?? (apiUrl ? `${apiUrl.replace(/\/+$/, '')}/webhooks/yelii` : undefined),
   }
 }
 
@@ -21,6 +77,13 @@ export interface YeliiPaymentResult {
   status: 'processing' | 'success' | 'failed' | 'cancelled'
   netAmount?: number
   message?: string
+  code?:
+    | 'YELII_NOT_CONFIGURED'
+    | 'YELII_CONFIGURATION_INVALID'
+    | 'YELII_VALIDATION'
+    | 'YELII_UNAVAILABLE'
+    | 'YELII_PROVIDER_REJECTED'
+    | 'YELII_INVALID_RESPONSE'
 }
 
 /**
@@ -82,12 +145,16 @@ export async function initiateYeliiPayment(params: {
   try {
     const { baseUrl, apiKey, webhookUrl } = getYeliiConfig()
     if (!apiKey) {
-      return { success: false, transactionId: '', status: 'failed', message: 'Yelii non configuré' }
+      return { success: false, transactionId: '', status: 'failed', message: 'Yelii non configuré', code: 'YELII_NOT_CONFIGURED' }
+    }
+    if (!isAllowedYeliiBaseUrl(baseUrl) || !isSafePublicHttpUrl(webhookUrl)) {
+      return { success: false, transactionId: '', status: 'failed', message: 'Configuration Yelii invalide', code: 'YELII_CONFIGURATION_INVALID' }
     }
 
-    const phone = params.senderPhone.startsWith('+237')
-      ? params.senderPhone.slice(4)
-      : params.senderPhone.replace(/\D/g, '')
+    const phone = normalizeCameroonMobilePhone(params.senderPhone)
+    if (!phone) {
+      return { success: false, transactionId: '', status: 'failed', message: 'Numéro Mobile Money camerounais invalide', code: 'YELII_VALIDATION' }
+    }
 
     const response = await fetch(`${baseUrl}/collect/initiate`, {
       method: 'POST',
@@ -101,26 +168,51 @@ export async function initiateYeliiPayment(params: {
         channel: params.channel,
         callbackUrl: webhookUrl,
       }),
+      signal: AbortSignal.timeout(YELII_REQUEST_TIMEOUT_MS),
+      redirect: 'error',
     })
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({})) as { message?: string }
-      return { success: false, transactionId: '', status: 'failed', message: error.message ?? 'Erreur Yelii' }
+      return { success: false, transactionId: '', status: 'failed', message: 'Le service de paiement est momentanément indisponible', code: 'YELII_UNAVAILABLE' }
     }
 
-    const payload = (await response.json()) as { data?: { transactionId?: string; status?: string; netCredited?: number }; transactionId?: string; status?: string }
+    const payload = (await response.json().catch(() => null)) as {
+      success?: boolean
+      data?: { transactionId?: string; status?: string; netCredited?: number }
+      transactionId?: string
+      status?: string
+    } | null
+    if (!payload) {
+      return { success: false, transactionId: '', status: 'failed', message: 'Réponse Yelii invalide', code: 'YELII_INVALID_RESPONSE' }
+    }
+    if (payload.success === false) {
+      return { success: false, transactionId: '', status: 'failed', message: 'Yelii a refusé l’initialisation du paiement', code: 'YELII_PROVIDER_REJECTED' }
+    }
+
     const transactionId = payload?.data?.transactionId ?? payload?.transactionId ?? ''
+    if (!transactionId.trim()) {
+      return { success: false, transactionId: '', status: 'failed', message: 'Yelii n’a retourné aucune référence de transaction', code: 'YELII_INVALID_RESPONSE' }
+    }
     const status = String(payload?.data?.status ?? payload?.status ?? 'processing').toLowerCase() as 'processing' | 'success' | 'failed' | 'cancelled'
+    if (status === 'failed' || status === 'cancelled') {
+      return {
+        success: false,
+        transactionId,
+        status: 'failed',
+        message: 'Yelii a refusé l’initialisation du paiement',
+        code: 'YELII_PROVIDER_REJECTED',
+      }
+    }
 
     return {
       success: true,
       transactionId,
-      status: status === 'success' ? 'success' : status === 'failed' || status === 'cancelled' ? 'failed' : 'processing',
+      status: status === 'success' ? 'success' : 'processing',
       netAmount: payload?.data?.netCredited,
     }
-  } catch (err) {
-    console.error('[Yelii]', err)
-    return { success: false, transactionId: '', status: 'failed', message: 'Erreur de connexion Yelii' }
+  } catch {
+    console.warn('[Yelii] Initialisation indisponible ou délai dépassé')
+    return { success: false, transactionId: '', status: 'failed', message: 'Erreur de connexion Yelii', code: 'YELII_UNAVAILABLE' }
   }
 }
 
@@ -131,9 +223,12 @@ export async function initiateYeliiPayment(params: {
 export async function getYeliiWalletBalance(): Promise<{ ok: boolean; balance?: number; message?: string }> {
   const { baseUrl, apiKey } = getYeliiConfig()
   if (!apiKey) return { ok: false, message: 'Clé API Yelii absente' }
+  if (!isAllowedYeliiBaseUrl(baseUrl)) return { ok: false, message: 'Configuration Yelii invalide' }
   try {
     const response = await fetch(`${baseUrl}/wallet/balance`, {
       headers: { 'X-Collect-Api-Key': apiKey },
+      signal: AbortSignal.timeout(YELII_REQUEST_TIMEOUT_MS),
+      redirect: 'error',
     })
     if (!response.ok) return { ok: false, message: `Yelii a répondu HTTP ${response.status}` }
     const payload = (await response.json().catch(() => ({}))) as { data?: { balance?: number }; balance?: number }
@@ -149,15 +244,25 @@ export async function getYeliiWalletBalance(): Promise<{ ok: boolean; balance?: 
  */
 export async function retryYeliiCallback(transactionId: string): Promise<{ sent: boolean; status?: number }> {
   const { baseUrl, apiKey } = getYeliiConfig()
-  if (!apiKey) return { sent: false }
+  if (!apiKey || !isAllowedYeliiBaseUrl(baseUrl) || !transactionId.trim()) return { sent: false }
 
-  const response = await fetch(
-    `${baseUrl}/collect/callback/retry/${transactionId}`,
-    { method: 'POST', headers: { 'X-Collect-Api-Key': apiKey } }
-  )
+  try {
+    const response = await fetch(
+      `${baseUrl}/collect/callback/retry/${encodeURIComponent(transactionId)}`,
+      {
+        method: 'POST',
+        headers: { 'X-Collect-Api-Key': apiKey },
+        signal: AbortSignal.timeout(YELII_REQUEST_TIMEOUT_MS),
+        redirect: 'error',
+      }
+    )
 
-  const payload = (await response.json().catch(() => ({}))) as { callback?: { sent?: boolean; status?: number } }
-  return { sent: payload.callback?.sent ?? response.ok, status: payload.callback?.status }
+    const payload = (await response.json().catch(() => ({}))) as { success?: boolean; callback?: { sent?: boolean; status?: number } }
+    return { sent: payload.success !== false && (payload.callback?.sent ?? response.ok), status: payload.callback?.status }
+  } catch {
+    console.warn('[Yelii] Relance du callback indisponible ou délai dépassé')
+    return { sent: false }
+  }
 }
 
 /**
@@ -172,7 +277,7 @@ export async function retryYeliiCallback(transactionId: string): Promise<{ sent:
  */
 export async function getYeliiTransaction(transactionId: string): Promise<YeliiTransactionStatus> {
   const { baseUrl, apiKey } = getYeliiConfig()
-  if (!apiKey) {
+  if (!apiKey || !isAllowedYeliiBaseUrl(baseUrl) || !transactionId.trim()) {
     console.warn('[Yelii] Clé API absente — statut indéterminé')
     return { status: 'unknown' }
   }
@@ -180,11 +285,15 @@ export async function getYeliiTransaction(transactionId: string): Promise<YeliiT
   let response: Response
   try {
     response = await fetch(
-      `${baseUrl}/collect/status/${transactionId}`,
-      { headers: { 'X-Collect-Api-Key': apiKey }, signal: AbortSignal.timeout(8000) }
+      `${baseUrl}/collect/status/${encodeURIComponent(transactionId)}`,
+      {
+        headers: { 'X-Collect-Api-Key': apiKey },
+        signal: AbortSignal.timeout(YELII_REQUEST_TIMEOUT_MS),
+        redirect: 'error',
+      }
     )
-  } catch (err) {
-    console.warn('[Yelii] Erreur réseau ou délai dépassé lors de la consultation du statut — statut indéterminé', err)
+  } catch {
+    console.warn('[Yelii] Erreur réseau ou délai dépassé lors de la consultation du statut — statut indéterminé')
     return { status: 'unknown' }
   }
 
@@ -205,7 +314,7 @@ export async function getYeliiTransaction(transactionId: string): Promise<YeliiT
   }
 
   if (payload.success === false) {
-    console.warn('[Yelii] Échec applicatif signalé par Yelii — statut indéterminé', payload.message)
+    console.warn('[Yelii] Échec applicatif signalé par Yelii — statut indéterminé')
     return { status: 'unknown' }
   }
 
