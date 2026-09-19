@@ -186,7 +186,9 @@ router.post('/initiate', authenticate, requireLevel(1), async (req, res) => {
 
   const reservationKey = `${membreId}|${data.rubriqueId}|${storedMode}|${data.montant}`
   const reservation = await prisma.$transaction(async (tx) => {
-    await tx.$queryRaw(Prisma.sql`
+    // pg_advisory_xact_lock renvoie void : utiliser executeRaw, pas queryRaw
+    // (Prisma ne peut pas désérialiser une colonne PostgreSQL void).
+    await tx.$executeRaw(Prisma.sql`
       SELECT pg_advisory_xact_lock(hashtextextended(${reservationKey}, 0))
     `)
 
@@ -196,6 +198,9 @@ router.post('/initiate', authenticate, requireLevel(1), async (req, res) => {
         rubriqueId: data.rubriqueId,
         montant: data.montant,
         modePaiement: storedMode,
+        // Ne jamais réutiliser une contribution déjà confirmée par le parcours
+        // rapide : son paymentStatus historique peut encore être PENDING.
+        statut: 'EN_ATTENTE_CONFIRMATION',
         paymentStatus: { in: ['PENDING', 'PROCESSING'] },
       },
     })

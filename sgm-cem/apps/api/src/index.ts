@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import 'express-async-errors'
 import http from 'http'
+import path from 'path'
 import express, { type Request, type Response, type NextFunction } from 'express'
 import helmet from 'helmet'
 import cors from 'cors'
@@ -38,6 +39,11 @@ const app = express()
 const PORT = process.env.PORT ?? 3001
 
 app.use(helmet())
+
+// Les URL de reçu sont envoyées aux contributeurs et à WhatsApp. Seuls les
+// reçus sont publiés localement ; les documents GED restent derrière leurs
+// routes authentifiées dédiées.
+app.use('/uploads/receipts', express.static(path.join(process.cwd(), 'uploads', 'receipts')))
 
 const allowedOrigins = (process.env.APP_URL ?? 'http://localhost:3000')
   .split(',')

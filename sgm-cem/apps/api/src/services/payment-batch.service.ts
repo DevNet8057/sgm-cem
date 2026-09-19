@@ -250,7 +250,9 @@ export async function createPaymentBatch(
 
   try {
     const transactionResult = await client.$transaction(async (tx: any) => {
-      await tx.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${normalized.idempotencyKey}, 0))`)
+      // La fonction de verrou PostgreSQL renvoie void : executeRaw évite une
+      // désérialisation impossible par Prisma tout en gardant le verrou de transaction.
+      await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${normalized.idempotencyKey}, 0))`)
 
       const existing = await tx.paymentBatch.findFirst({
         where: { OR: [{ idempotencyKey: normalized.idempotencyKey }, { requestFingerprint: fingerprint }] },

@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { getYeliiStatus, requestYelii } from '../services/payment'
+import { generateReceiptPDF } from '../services/receipt'
 
 const router = Router()
 const prisma = new PrismaClient()
@@ -195,7 +196,12 @@ router.patch('/:id/confirm', authenticate, requireLevel(2), async (req, res) => 
 
   const updated = await prisma.contribution.update({
     where: { id },
-    data: { statut: 'CONFIRME', confirmedAt: new Date(), confirmedById: req.user!.userId }
+    data: {
+      statut: 'CONFIRME',
+      paymentStatus: 'SUCCESS',
+      confirmedAt: new Date(),
+      confirmedById: req.user!.userId,
+    }
   })
 
   await prisma.auditLog.create({
@@ -209,7 +215,8 @@ router.patch('/:id/confirm', authenticate, requireLevel(2), async (req, res) => 
     }
   })
 
-  res.json({ success: true, data: updated })
+  const receiptUrl = await generateReceiptPDF(updated.id)
+  res.json({ success: true, data: { ...updated, receiptUrl } })
 })
 
 router.patch('/:id/litige', authenticate, requireLevel(2), async (req, res) => {

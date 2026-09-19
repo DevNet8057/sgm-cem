@@ -1,4 +1,5 @@
 import puppeteer from 'puppeteer'
+import fs from 'fs'
 import { PrismaClient } from '@prisma/client'
 import { storeFile } from './storage'
 import { getLogoDataUri, formatXAF, formatDate, formatDateTime } from './pdf-branding'
@@ -19,6 +20,20 @@ const STATUT_LABELS: Record<string, { label: string; color: string; bg: string }
   EN_ATTENTE_CONFIRMATION: { label: 'EN ATTENTE DE CONFIRMATION', color: '#92400E', bg: '#FFFBEB' },
   ANNULE: { label: 'PAIEMENT ANNULÉ', color: '#991B1B', bg: '#FEF2F2' },
   LITIGE: { label: 'EN LITIGE', color: '#991B1B', bg: '#FEF2F2' },
+}
+
+/**
+ * Docker fournit Chromium via PUPPETEER_EXECUTABLE_PATH. En développement
+ * Windows, Puppeteer est installé sans son navigateur afin d'alléger le dépôt :
+ * utiliser Chrome local quand il est présent pour que les reçus restent testables.
+ */
+function resolveBrowserExecutable(): string | undefined {
+  const configured = process.env.PUPPETEER_EXECUTABLE_PATH
+  if (configured) return configured
+  if (process.platform !== 'win32') return undefined
+
+  const chrome = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+  return fs.existsSync(chrome) ? chrome : undefined
 }
 
 /** Numéro de reçu lisible et stable, dérivé de l'ID — pas de compteur séparé à maintenir. */
@@ -189,7 +204,12 @@ export async function generateReceiptHtml(contributionId: string): Promise<strin
 
 export async function generateReceiptPdf(contributionId: string): Promise<Buffer> {
   const html = await generateReceiptHtml(contributionId)
-  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] })
+  const executablePath = resolveBrowserExecutable()
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    ...(executablePath ? { executablePath } : {}),
+  })
   const page = await browser.newPage()
   await page.setContent(html, { waitUntil: 'networkidle0' })
   const pdf = await page.pdf({ format: 'A5', printBackground: true })
