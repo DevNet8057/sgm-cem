@@ -7,20 +7,22 @@ import { generateFinancialReportPdf } from '../services/financial-report'
 const router = Router()
 const prisma = new PrismaClient()
 
-export async function computeDashboardStats(requestedYear?: number) {
+export async function computeDashboardStats(requestedYear?: number, requestedMonth?: number) {
   const now = new Date()
   const year = requestedYear || now.getFullYear()
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  const month = requestedMonth && requestedMonth >= 1 && requestedMonth <= 12 ? requestedMonth : undefined
   const startOfYear = new Date(year, 0, 1)
   const endOfYear = new Date(year, 11, 31, 23, 59, 59, 999)
+  const startOfPeriod = month ? new Date(year, month - 1, 1) : startOfYear
+  const endOfPeriod = month ? new Date(year, month, 0, 23, 59, 59, 999) : endOfYear
+  const periodFilter = { gte: startOfPeriod, lte: endOfPeriod }
 
   const [
     totalMembres,
     membresEnRetard,
     pendingConfirmations,
     litiges,
-    totalMonth,
-    totalYear,
+    totalPeriod,
     recentContributions,
     rubriquesOuvertes,
     confirmedContributions,
@@ -28,18 +30,15 @@ export async function computeDashboardStats(requestedYear?: number) {
   ] = await Promise.all([
     prisma.membre.count({ where: { isActive: true } }),
     prisma.membre.count({ where: { statut: { in: ['EN_OBSERVATION', 'EN_SUIVI'] } } }),
-    prisma.contribution.count({ where: { statut: 'EN_ATTENTE_CONFIRMATION' } }),
-    prisma.contribution.count({ where: { statut: 'LITIGE' } }),
+    prisma.contribution.count({ where: { statut: 'EN_ATTENTE_CONFIRMATION', createdAt: periodFilter } }),
+    prisma.contribution.count({ where: { statut: 'LITIGE', createdAt: periodFilter } }),
     prisma.contribution.aggregate({
-      where: { statut: 'CONFIRME', createdAt: { gte: startOfMonth } },
-      _sum: { montant: true }
-    }),
-    prisma.contribution.aggregate({
-      where: { statut: 'CONFIRME', createdAt: { gte: startOfYear, lte: endOfYear } },
+      where: { statut: 'CONFIRME', createdAt: periodFilter },
       _sum: { montant: true },
       _count: true,
     }),
     prisma.contribution.findMany({
+      where: { createdAt: periodFilter },
       take: 10,
       orderBy: { createdAt: 'desc' },
       include: {
@@ -55,21 +54,21 @@ export async function computeDashboardStats(requestedYear?: number) {
       take: 8
     }),
     prisma.contribution.findMany({
-      where: { statut: 'CONFIRME', createdAt: { gte: startOfYear, lte: endOfYear } },
+      where: { statut: 'CONFIRME', createdAt: periodFilter },
       include: {
         membre: { include: { user: { select: { fullName: true } } } },
         rubrique: { select: { id: true, code: true, title: true, targetAmount: true } },
       }
     }),
     prisma.contribution.findMany({
-      where: { createdAt: { gte: startOfYear, lte: endOfYear } },
+      where: { createdAt: periodFilter },
       select: { statut: true },
     }),
   ])
 
   const rubriquesActives = await Promise.all(rubriquesOuvertes.map(async rubrique => {
     const agg = await prisma.contribution.aggregate({
-      where: { rubriqueId: rubrique.id, statut: 'CONFIRME' },
+      where: { rubriqueId: rubrique.id, statut: 'CONFIRME', createdAt: periodFilter },
       _sum: { montant: true },
       _count: true,
     })
@@ -149,13 +148,18 @@ export async function computeDashboardStats(requestedYear?: number) {
 
   return {
     year,
+    month: month ?? null,
     totalMembres,
     membresEnRetard,
     pendingConfirmations,
     litiges,
-    totalCollectedMonth: totalMonth._sum.montant ?? 0,
-    totalCollectedYear: totalYear._sum.montant ?? 0,
-    totalConfirmedContributions: totalYear._count,
+    // Ces deux champs historiques sont conservés pour les clients existants.
+    // La période sélectionnée est toujours renvoyée explicitement afin que les
+    // tableaux de bord historiques ne mélangent jamais deux mois/années.
+    totalCollectedMonth: totalPeriod._sum.montant ?? 0,
+    totalCollectedYear: totalPeriod._sum.montant ?? 0,
+    totalCollectedPeriod: totalPeriod._sum.montant ?? 0,
+    totalConfirmedContributions: totalPeriod._count,
     globalConfirmationRate,
     contributionStatus: {
       confirmed: confirmedCount,
@@ -174,8 +178,11 @@ export async function computeDashboardStats(requestedYear?: number) {
 }
 
 router.get('/dashboard', authenticate, requireLevel(3), async (req, res) => {
-  const year = parseInt(req.query.year as string) || undefined
-  const data = await computeDashboardStats(year)
+  const rawYear = Number(req.query.year)
+  const rawMonth = Number(req.query.month)
+  const year = Number.isInteger(rawYear) && rawYear >= 2000 && rawYear <= 2100 ? rawYear : undefined
+  const month = Number.isInteger(rawMonth) && rawMonth >= 1 && rawMonth <= 12 ? rawMonth : undefined
+  const data = await computeDashboardStats(year, month)
   res.json({ success: true, data })
 })
 

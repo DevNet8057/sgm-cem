@@ -290,12 +290,14 @@ export interface ApiResponse<T> {
 
 export interface DashboardStats {
   year: number
+  month: number | null
   totalMembres: number
   membresEnRetard: number
   pendingConfirmations: number
   litiges: number
   totalCollectedMonth: number
   totalCollectedYear: number
+  totalCollectedPeriod: number
   totalConfirmedContributions: number
   globalConfirmationRate: number
   contributionStatus: {

@@ -30,17 +30,33 @@ const MODE_COLORS: Record<string, string> = {
 
 const GROUPE_COLORS = ['#1A6B1A', '#2563EB', '#F5C400', '#F97316', '#7C3AED', '#DC2626']
 
+const MONTH_OPTIONS = [
+  { value: 'all', label: "Toute l'année" },
+  ...Array.from({ length: 12 }, (_, index) => ({
+    value: String(index + 1),
+    label: new Date(2026, index, 1).toLocaleDateString('fr-FR', { month: 'long' }),
+  })),
+]
+
 export function Statistiques() {
   const [chartTab, setChartTab] = useState<'montants' | 'taux'>('montants')
+  const currentYear = new Date().getFullYear()
+  const [year, setYear] = useState(currentYear)
+  const [month, setMonth] = useState(String(new Date().getMonth() + 1))
+  const selectedMonth = month === 'all' ? undefined : Number(month)
+  const years = Array.from({ length: 7 }, (_, index) => currentYear - 4 + index)
+  const periodLabel = month === 'all'
+    ? `Année ${year}`
+    : `${MONTH_OPTIONS.find(option => option.value === month)?.label ?? ''} ${year}`
 
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
-    queryKey: ['dashboard-stats'],
-    queryFn: async () => (await api.get('/stats/dashboard')).data.data,
+    queryKey: ['dashboard-stats', year, month],
+    queryFn: async () => (await api.get('/stats/dashboard', { params: { year, ...(selectedMonth ? { month: selectedMonth } : {}) } })).data.data,
   })
 
   const { data: monthly, isLoading: monthlyLoading } = useQuery<MonthlyStat[]>({
-    queryKey: ['monthly-stats'],
-    queryFn: async () => (await api.get('/stats/monthly')).data.data,
+    queryKey: ['monthly-stats', year],
+    queryFn: async () => (await api.get('/stats/monthly', { params: { year } })).data.data,
   })
 
   const bestMonth = monthly?.reduce<MonthlyStat | null>(
@@ -58,15 +74,24 @@ export function Statistiques() {
       {/* Header */}
       <div className="relative overflow-hidden rounded-[18px] border border-[#0F4A0F]/10 bg-white mb-6">
         <div className="absolute inset-y-0 left-0 w-1.5 bg-[#7C3AED]" />
-        <div className="p-5 flex items-center justify-between gap-4">
+        <div className="p-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-purple-600">Analyse</p>
             <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Statistiques</h2>
             <p className="text-gray-500 text-sm mt-0.5">Vue financière et opérationnelle du ministère</p>
           </div>
-          <span className="text-xs font-semibold text-gray-400 bg-gray-100 px-3 py-1.5 rounded-full">
-            {new Date().getFullYear()}
-          </span>
+          <div className="grid grid-cols-2 gap-2 sm:min-w-[260px]">
+            <label className="text-xs font-semibold text-gray-500">Mois
+              <select value={month} onChange={event => setMonth(event.target.value)} aria-label="Mois des statistiques" className="mt-1 block w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-700 focus:border-[#1A6B1A] focus:outline-none">
+                {MONTH_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-semibold text-gray-500">Année
+              <select value={year} onChange={event => setYear(Number(event.target.value))} aria-label="Année des statistiques" className="mt-1 block w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-700 focus:border-[#1A6B1A] focus:outline-none">
+                {years.map(option => <option key={option} value={option}>{option}</option>)}
+              </select>
+            </label>
+          </div>
         </div>
       </div>
 
@@ -78,8 +103,8 @@ export function Statistiques() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <Kpi icon={Users} label="Membres actifs" value={String(stats?.totalMembres ?? 0)} color="#2563EB" />
-          <Kpi icon={Wallet} label="Collecte annuelle" value={formatAmount(stats?.totalCollectedYear ?? 0)} color="#1A6B1A" />
-          <Kpi icon={CreditCard} label="Ce mois-ci" value={formatAmount(stats?.totalCollectedMonth ?? 0)} color="#F5C400" textColor="#C4A000" />
+          <Kpi icon={Wallet} label={month === 'all' ? 'Collecte annuelle' : 'Collecte du mois'} value={formatAmount(stats?.totalCollectedPeriod ?? 0)} color="#1A6B1A" />
+          <Kpi icon={CreditCard} label={`Confirmées · ${periodLabel}`} value={String(stats?.totalConfirmedContributions ?? 0)} color="#F5C400" textColor="#C4A000" />
           <Kpi icon={TrendingUp} label="Meilleur mois" value={bestMonth ? formatAmount(bestMonth.total) : '—'} color="#7C3AED" />
         </div>
       )}

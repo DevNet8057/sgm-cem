@@ -38,16 +38,29 @@ const STATUS_LABELS: Record<string, string> = {
   CONFIRME: 'Confirmé', EN_ATTENTE_CONFIRMATION: 'En attente', LITIGE: 'Litige', ANNULE: 'Annulé',
 }
 
+const MONTH_OPTIONS = [
+  { value: 'all', label: "Toute l'année" },
+  ...Array.from({ length: 12 }, (_, index) => ({
+    value: String(index + 1),
+    label: new Date(2026, index, 1).toLocaleDateString('fr-FR', { month: 'long' }),
+  })),
+]
+
 export function Dashboard() {
   const { setActiveView } = useAppStore()
   const { user } = useAuthStore()
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
+  const [month, setMonth] = useState(String(new Date().getMonth() + 1))
   const [chartMode, setChartMode] = useState<'montants' | 'taux'>('montants')
+  const selectedMonth = month === 'all' ? undefined : Number(month)
+  const periodLabel = month === 'all'
+    ? `Année ${year}`
+    : `${MONTH_OPTIONS.find(option => option.value === month)?.label ?? ''} ${year}`
 
   const statsQuery = useQuery<DashboardStats>({
-    queryKey: ['dashboard-stats', year],
-    queryFn: async () => (await api.get('/stats/dashboard', { params: { year } })).data.data,
+    queryKey: ['dashboard-stats', year, month],
+    queryFn: async () => (await api.get('/stats/dashboard', { params: { year, ...(selectedMonth ? { month: selectedMonth } : {}) } })).data.data,
     refetchInterval: 30000,
   })
   const monthlyQuery = useQuery<MonthlyStat[]>({
@@ -80,9 +93,9 @@ export function Dashboard() {
             <h1 className="font-display text-3xl font-semibold text-white md:text-4xl">Bonjour, {user?.firstName ?? '…'}</h1>
             <p className="mt-1 text-sm text-white/65">Culte d&apos;Enfants de Melen · Tableau de bord financier</p>
           </div>
-          <div className="min-w-32">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-white/60" htmlFor="dashboard-year">Exercice</label>
-            <Select id="dashboard-year" value={year} onChange={setYear} options={years.map(value => ({ value, label: String(value) }))} className="w-full" aria-label="Exercice financier" />
+          <div className="grid min-w-32 grid-cols-2 gap-2 sm:flex sm:min-w-[290px]">
+            <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-white/60" htmlFor="dashboard-month">Mois</label><Select id="dashboard-month" value={month} onChange={setMonth} options={MONTH_OPTIONS} className="w-full" aria-label="Mois des statistiques" /></div>
+            <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-white/60" htmlFor="dashboard-year">Année</label><Select id="dashboard-year" value={year} onChange={setYear} options={years.map(value => ({ value, label: String(value) }))} className="w-full" aria-label="Année des statistiques" /></div>
           </div>
         </div>
       </Card>
@@ -93,8 +106,8 @@ export function Dashboard() {
 
       {statsQuery.isLoading ? <DashboardSkeleton /> : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <MetricCard icon={<Wallet size={20} />} title="Collecte annuelle" value={stats?.totalCollectedYear ?? 0} formatter={formatAmount} color="#1A6B1A" onClick={() => setActiveView('contributions')} />
-          <MetricCard icon={<TrendingUp size={20} />} title="Ce mois-ci" value={stats?.totalCollectedMonth ?? 0} formatter={formatAmount} color="#D4A900" iconTextColor="#052005" onClick={() => setActiveView('statistiques')} />
+          <MetricCard icon={<Wallet size={20} />} title={month === 'all' ? 'Collecte annuelle' : 'Collecte du mois'} value={stats?.totalCollectedPeriod ?? 0} formatter={formatAmount} color="#1A6B1A" onClick={() => setActiveView('contributions')} />
+          <MetricCard icon={<TrendingUp size={20} />} title="Contributions confirmées" value={stats?.totalConfirmedContributions ?? 0} color="#D4A900" iconTextColor="#052005" onClick={() => setActiveView('statistiques')} />
           <MetricCard icon={<CheckCircle2 size={20} />} title="Taux de confirmation" value={stats?.globalConfirmationRate ?? 0} suffix="%" color="#2563EB" onClick={() => setActiveView('validations')} />
           <MetricCard icon={<AlertTriangle size={20} />} title="Litiges actifs" value={stats?.litiges ?? 0} color="#DC2626" onClick={() => setActiveView('litiges')} />
         </div>
@@ -118,7 +131,7 @@ export function Dashboard() {
                   </BarChart>
                 )}
               </ResponsiveContainer>
-              <div aria-live="polite" className="mt-3 flex flex-wrap justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-500"><span>Total {year} : <strong className="text-[#0F4A0F]">{formatAmount(monthlyTotal)}</strong></span><span>{stats?.totalConfirmedContributions ?? 0} contribution(s) confirmée(s)</span></div>
+              <div aria-live="polite" className="mt-3 flex flex-wrap justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-500"><span>Total {year} : <strong className="text-[#0F4A0F]">{formatAmount(monthlyTotal)}</strong></span><span>{periodLabel} · {stats?.totalConfirmedContributions ?? 0} contribution(s) confirmée(s)</span></div>
             </>
           )}
         </Panel>
