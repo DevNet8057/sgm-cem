@@ -16,7 +16,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.726.1",
+    "@aws-sdk/client-s3": "3.726.1",
     "@prisma/adapter-pg": "latest",
     "@prisma/client": "^5.22.0",
     "@sgm-cem/shared": "workspace:*",
