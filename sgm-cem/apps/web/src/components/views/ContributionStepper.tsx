@@ -164,7 +164,7 @@ export function ContributionStepper({ membres, rubriques, onClose, onSuccess }: 
       await queryClient.invalidateQueries({ queryKey: ['monthly-stats'] })
       await queryClient.invalidateQueries({ queryKey: ['rubriques'] })
 
-      if (isMobileMoney && (contrib.status === 'PROCESSING' || contrib.paymentStatus === 'PROCESSING')) {
+      if (isMobileMoney && (contrib.status === 'PROCESSING' || contrib.paymentStatus === 'PROCESSING' || contrib.status === 'PENDING')) {
         setPaymentStatus('waiting')
       } else if (contrib.status === 'SUCCESS' || contrib.status === 'CONFIRMED' || contrib.paymentStatus === 'SUCCESS') {
         onSuccess()
