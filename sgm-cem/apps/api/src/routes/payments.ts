@@ -561,9 +561,14 @@ router.post('/batches/initiate', authenticate, requireLevel(1), async (req, res)
           throw yeliiInitializationError(payment.code)
         }
 
+        // externalTransactionId doit aussi être posé sur CHAQUE contribution enfant
+        // (pas seulement sur le lot) : c'est ce champ que le webhook Yelii et le
+        // polling /payments/status/:id (appelés par id de contribution) utilisent
+        // pour retrouver la transaction distante — sans lui, aucune ligne du lot
+        // ne peut jamais être confirmée automatiquement, quel que soit le paiement réel.
         await batchUpdate(
           { externalTransactionId: payment.transactionId, status: 'PENDING' },
-          { paymentStatus: 'PROCESSING', statut: 'EN_ATTENTE_CONFIRMATION' },
+          { paymentStatus: 'PROCESSING', statut: 'EN_ATTENTE_CONFIRMATION', externalTransactionId: payment.transactionId },
         )
         result.externalTransactionId = payment.transactionId
         result.status = 'PENDING'
@@ -587,9 +592,12 @@ router.post('/batches/initiate', authenticate, requireLevel(1), async (req, res)
             customerZipCode: '00000',
           })
 
+          // Même raison que pour YELII ci-dessus : sans externalTransactionId sur
+          // chaque contribution enfant, ni le webhook CinetPay ni le polling ne
+          // peuvent jamais retrouver/confirmer les lignes du lot.
           await batchUpdate(
             { externalTransactionId: transactionId, paymentUrl: payment.paymentUrl, status: 'PENDING' },
-            { paymentUrl: payment.paymentUrl, paymentStatus: 'PROCESSING', statut: 'EN_ATTENTE_CONFIRMATION' },
+            { paymentUrl: payment.paymentUrl, paymentStatus: 'PROCESSING', statut: 'EN_ATTENTE_CONFIRMATION', externalTransactionId: transactionId },
           )
           result.externalTransactionId = transactionId
           result.paymentUrl = payment.paymentUrl

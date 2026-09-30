@@ -185,28 +185,43 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
   }, [payStatus])
 
   // ── Polling du statut (Mobile Money + CinetPay) ───────────────────────────
+  // Un lot réparti sur plusieurs rubriques partage UNE transaction fournisseur
+  // mais produit PLUSIEURS contributions à confirmer individuellement — il faut
+  // attendre que TOUTES soient dans un état terminal avant d'arrêter le polling,
+  // sinon les lignes qui ne sont pas encore synchronisées restent bloquées en
+  // attente (aucun autre appel ne les vérifie plus une fois l'intervalle arrêté).
   const poll = useCallback(async (): Promise<boolean> => {
-    const identifiers = batchId ? [batchId, ...batchContributionIds] : contribId ? [contribId] : []
+    const identifiers = batchId ? batchContributionIds : contribId ? [contribId] : []
     if (identifiers.length === 0) return false
+    let allTerminal = true
+    let anyConfirmed = false
+    let anyFailed = false
     for (const identifier of identifiers) {
       try {
         const res = await api.get(`/payments/status/${identifier}`)
         const data = res.data.data
         const status = data.statut ?? data.paymentStatus ?? data.status
         if (status === 'CONFIRME' || status === 'SUCCESS' || status === 'CONFIRMED') {
-          setPayStatus('confirmed')
+          anyConfirmed = true
           if (data.receiptUrl) setReceiptUrl(data.receiptUrl)
-          await queryClient.invalidateQueries({ queryKey: ['contributions'] })
-          await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
-          return true
+        } else if (status === 'ANNULE' || status === 'FAILED') {
+          anyFailed = true
+        } else {
+          allTerminal = false
         }
-        if (status === 'ANNULE' || status === 'FAILED') {
-          setPayStatus('failed')
-          return true
-        }
-      } catch { /* un batch peut ne pas encore avoir de route de statut dédiée */ }
+      } catch {
+        allTerminal = false
+      }
     }
-    return false
+    if (!allTerminal) return false
+    if (anyConfirmed) {
+      setPayStatus('confirmed')
+      await queryClient.invalidateQueries({ queryKey: ['contributions'] })
+      await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+    } else if (anyFailed) {
+      setPayStatus('failed')
+    }
+    return true
   }, [batchId, batchContributionIds, contribId, queryClient])
 
   useEffect(() => {

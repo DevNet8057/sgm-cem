@@ -70,31 +70,44 @@ export function ContributionStepper({ membres, rubriques, onClose, onSuccess }: 
     ? allocations.reduce((total, allocation) => total + allocation.montant, 0)
     : Number(montant)
 
-  // Polling du statut paiement mobile (gère plusieurs identifiants en mode réparti)
+  // Polling du statut paiement mobile (gère plusieurs identifiants en mode réparti).
+  // Un lot partage UNE transaction fournisseur mais produit PLUSIEURS contributions
+  // à confirmer individuellement — attendre que TOUTES soient dans un état terminal
+  // avant d'arrêter le polling, sinon les lignes pas encore synchronisées restent
+  // bloquées en attente (plus aucun appel ne les vérifie une fois l'intervalle arrêté).
   useEffect(() => {
     if (paymentStatus !== 'waiting') return
-    const identifiers = batchId ? [batchId, ...batchContributionIds] : createdContribId ? [createdContribId] : []
+    const identifiers = batchId ? batchContributionIds : createdContribId ? [createdContribId] : []
     if (identifiers.length === 0) return
     const interval = setInterval(async () => {
+      let allTerminal = true
+      let anyConfirmed = false
+      let anyFailed = false
       for (const identifier of identifiers) {
         try {
           const res = await api.get(`/payments/status/${identifier}`)
           const data = res.data.data
           const status = data.statut ?? data.paymentStatus ?? data.status
           if (status === 'CONFIRME' || status === 'SUCCESS' || status === 'CONFIRMED') {
-            setPaymentStatus('confirmed')
-            clearInterval(interval)
-            await queryClient.invalidateQueries({ queryKey: ['contributions'] })
-            await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
-            setTimeout(onSuccess, 2000)
-            return
+            anyConfirmed = true
+          } else if (status === 'ANNULE' || status === 'FAILED') {
+            anyFailed = true
+          } else {
+            allTerminal = false
           }
-          if (status === 'ANNULE' || status === 'FAILED') {
-            setPaymentStatus('failed')
-            clearInterval(interval)
-            return
-          }
-        } catch { /* un batch peut ne pas encore avoir de route de statut dédiée */ }
+        } catch {
+          allTerminal = false
+        }
+      }
+      if (!allTerminal) return
+      clearInterval(interval)
+      if (anyConfirmed) {
+        setPaymentStatus('confirmed')
+        await queryClient.invalidateQueries({ queryKey: ['contributions'] })
+        await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+        setTimeout(onSuccess, 2000)
+      } else if (anyFailed) {
+        setPaymentStatus('failed')
       }
     }, 5000)
     return () => clearInterval(interval)

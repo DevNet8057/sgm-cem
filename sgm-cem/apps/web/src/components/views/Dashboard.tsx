@@ -199,7 +199,7 @@ export function Dashboard() {
             { icon: Users, label: 'Nouveau membre', view: 'membres' }, { icon: CreditCard, label: 'Enregistrer', view: 'contributions' },
             { icon: CheckCircle2, label: 'Valider', view: 'validations' }, { icon: FileText, label: 'Rapport', view: 'rapports' },
           ].map(action => <Button key={action.label} block className="h-auto py-3" onClick={() => setActiveView(action.view)}><span className="flex flex-col items-center gap-1"><action.icon size={17} /><small>{action.label}</small></span></Button>)}</div></Panel>
-          <Card className="border-0 bg-[#0F4A0F] text-white"><div className="flex items-center gap-2 text-xs text-white/60"><Crown size={15} className="text-[#F5C400]" /> Grand contributeur {year}</div><div className="mt-2 truncate text-xl font-semibold">{stats?.topContributor?.fullName ?? 'Aucun'}</div><div className="text-sm font-bold text-[#F5C400]">{formatAmount(stats?.topContributor?.total ?? 0)}</div></Card>
+          <Card variant="borderless" styles={{ body: { background: '#0F4A0F', color: '#fff' } }}><div className="flex items-center gap-2 text-xs text-white/60"><Crown size={15} className="text-[#F5C400]" /> Grand contributeur {year}</div><div className="mt-2 truncate text-xl font-semibold text-white">{stats?.topContributor?.fullName ?? 'Aucun'}</div><div className="text-sm font-bold text-[#F5C400]">{formatAmount(stats?.topContributor?.total ?? 0)}</div></Card>
         </div>
       </div>
 
@@ -218,6 +218,7 @@ function Panel({ title, extra, children }: { title: string; extra?: React.ReactN
 }
 
 function ActivityTimeline({ items }: { items: Contribution[] }) {
+  const navigateToNotification = useAppStore(s => s.navigateToNotification)
   if (!items.length) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Aucune contribution récente" />
   return (
     <div className="stagger-children space-y-2">
@@ -228,6 +229,12 @@ function ActivityTimeline({ items }: { items: Contribution[] }) {
           title={item.membre?.user.fullName ?? 'Membre inconnu'}
           subtitle={`${item.rubrique?.code ?? ''} · ${MODE_PAIEMENT_LABELS[item.modePaiement]}`}
           timestamp={item.createdAt}
+          onClick={() => navigateToNotification({
+            // En attente : direction l'écran où on peut l'action (la confirmer).
+            // Déjà tranchée (confirmée/litige/annulée) : direction l'historique.
+            targetView: item.statut === 'EN_ATTENTE_CONFIRMATION' ? 'validations' : 'contributions',
+            targetId: item.id,
+          })}
           trailing={
             <>
               <strong className="block text-sm text-[#1A6B1A]">{formatAmount(item.montant)}</strong>
