@@ -56,6 +56,9 @@ export function Contributions() {
   const [splitMode, setSplitMode] = useState(false)
   const [allocationBudget, setAllocationBudget] = useState<number | ''>('')
   const [allocations, setAllocations] = useState<PaymentAllocation[]>([])
+  const [declareSplitMode, setDeclareSplitMode] = useState(false)
+  const [declareAllocationBudget, setDeclareAllocationBudget] = useState<number | ''>('')
+  const [declareAllocations, setDeclareAllocations] = useState<PaymentAllocation[]>([])
   const [error, setError] = useState('')
   const [declareError, setDeclareError] = useState('')
   const [receiptLoading, setReceiptLoading] = useState<string | null>(null)
@@ -212,15 +215,25 @@ export function Contributions() {
   })
 
   const declareMutation = useMutation({
-    mutationFn: async () => api.post('/contributions/declare', {
-      collecteurId: declareForm.collecteurId,
-      rubriqueId: declareForm.rubriqueId,
-      montant: Number(declareForm.montant),
-      periodeLabel: declareForm.periodeLabel || undefined,
-      note: declareForm.note || undefined,
-    }),
+    mutationFn: async () => api.post('/contributions/declare', declareSplitMode
+      ? {
+          collecteurId: declareForm.collecteurId,
+          allocations: declareAllocations,
+          periodeLabel: declareForm.periodeLabel || undefined,
+          note: declareForm.note || undefined,
+        }
+      : {
+          collecteurId: declareForm.collecteurId,
+          rubriqueId: declareForm.rubriqueId,
+          montant: Number(declareForm.montant),
+          periodeLabel: declareForm.periodeLabel || undefined,
+          note: declareForm.note || undefined,
+        }),
     onSuccess: async () => {
       setDeclareForm(initialDeclareForm)
+      setDeclareSplitMode(false)
+      setDeclareAllocationBudget('')
+      setDeclareAllocations([])
       setShowDeclare(false)
       setDeclareError('')
       await queryClient.invalidateQueries({ queryKey: ['contributions'] })
@@ -312,7 +325,7 @@ export function Contributions() {
               <Wand2 size={14} />
               Guidé
             </Button>
-            <Button size="sm" variant="outline" onClick={() => { setShowDeclare(v => !v); setShowForm(false) }}>
+            <Button size="sm" variant="outline" onClick={() => { setShowDeclare(v => !v); setShowForm(false); setDeclareSplitMode(false); setDeclareAllocationBudget(''); setDeclareAllocations([]) }}>
               {showDeclare ? <X size={14} /> : <MapPin size={14} />}
               {showDeclare ? 'Fermer' : 'Déclarer'}
             </Button>
@@ -519,7 +532,7 @@ export function Contributions() {
 
       {/* B2 : Formulaire de déclaration membre */}
       {showDeclare && (
-        <form onSubmit={e => { e.preventDefault(); declareMutation.mutate() }}
+        <form onSubmit={e => { e.preventDefault(); if (declareSplitMode) return; declareMutation.mutate() }}
           className="mb-5 bg-white rounded-[18px] border border-amber-100 shadow-sm p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
           <div className="md:col-span-4 flex items-center gap-2 pb-1 border-b border-gray-100">
             <MapPin size={14} className="text-amber-500" />
@@ -531,20 +544,56 @@ export function Contributions() {
             onChange={collecteurId => setDeclareForm({ ...declareForm, collecteurId })}
             options={(collecteursData ?? []).filter(u => u.role === 'TRESORIER' || u.role === 'COLLECTEUR').map(u => ({ value: u.id, label: u.fullName, sublabel: u.role }))}
           />
-          <SearchableSelect label="Rubrique" required placeholder="Rechercher une rubrique…"
-            value={declareForm.rubriqueId}
-            onChange={rubriqueId => setDeclareForm({ ...declareForm, rubriqueId })}
-            options={(rubriquesData ?? []).filter(r => r.status === 'OUVERTE').map(r => ({ value: r.id, label: r.title, sublabel: r.code }))}
-          />
-          <Input label="Montant (FCFA)" type="number" required value={declareForm.montant} onChange={montant => setDeclareForm({ ...declareForm, montant })} />
+          <label className="md:col-span-4 flex items-center gap-2.5 cursor-pointer select-none rounded-[10px] bg-[#E8F5E8] border border-[#1A6B1A]/20 px-4 py-3">
+            <input
+              type="checkbox"
+              checked={declareSplitMode}
+              onChange={e => { setDeclareSplitMode(e.target.checked); setDeclareError('') }}
+              className="w-4 h-4 accent-[#1A6B1A]"
+            />
+            <div>
+              <p className="text-sm font-semibold text-[#0F4A0F]">Répartir cette remise sur plusieurs rubriques</p>
+              <p className="text-xs text-[#1A6B1A]">Saisissez un montant total puis partagez-le entre les rubriques — le reste à affecter s&apos;affiche en direct.</p>
+            </div>
+          </label>
+          {!declareSplitMode && (
+            <>
+              <SearchableSelect label="Rubrique" required placeholder="Rechercher une rubrique…"
+                value={declareForm.rubriqueId}
+                onChange={rubriqueId => setDeclareForm({ ...declareForm, rubriqueId })}
+                options={(rubriquesData ?? []).filter(r => r.status === 'OUVERTE').map(r => ({ value: r.id, label: r.title, sublabel: r.code }))}
+              />
+              <Input label="Montant (FCFA)" type="number" required value={declareForm.montant} onChange={montant => setDeclareForm({ ...declareForm, montant })} />
+            </>
+          )}
+          {declareSplitMode && (
+            <div className="md:col-span-4">
+              <AllocationEditor
+                budget={declareAllocationBudget}
+                allocations={declareAllocations}
+                rubriques={(rubriquesData ?? []).filter(r => r.status === 'OUVERTE').map(r => ({ id: r.id, title: r.title, code: r.code }))}
+                onBudgetChange={value => { setDeclareAllocationBudget(value); setDeclareError('') }}
+                onAllocationsChange={value => { setDeclareAllocations(value); setDeclareError('') }}
+                onNext={() => {
+                  setDeclareError('')
+                  if (!declareForm.collecteurId) { setDeclareError('Sélectionnez un collecteur'); return }
+                  declareMutation.mutate()
+                }}
+                nextLabel="Déclarer la remise répartie"
+                disabled={declareMutation.isPending}
+              />
+            </div>
+          )}
           <Input label="Période (ex: Janv 2026)" value={declareForm.periodeLabel} onChange={periodeLabel => setDeclareForm({ ...declareForm, periodeLabel })} />
           <div className="md:col-span-4">
             <Input label="Note (optionnel)" value={declareForm.note} onChange={note => setDeclareForm({ ...declareForm, note })} />
           </div>
           {declareError && <p className="md:col-span-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-[10px] px-3 py-2">{declareError}</p>}
-          <div className="md:col-span-4 flex justify-end">
-            <Button loading={declareMutation.isPending} variant="yellow">Déclarer la remise</Button>
-          </div>
+          {!declareSplitMode && (
+            <div className="md:col-span-4 flex justify-end">
+              <Button loading={declareMutation.isPending} variant="yellow">Déclarer la remise</Button>
+            </div>
+          )}
         </form>
       )}
 

@@ -9,6 +9,7 @@ import { generateReceiptPDF, generateReceiptPdf } from '../services/receipt'
 import { getFileStream } from '../services/storage'
 import { getConfig } from '../services/config.service'
 import { notifyCollecteurNewContribution } from '../services/notification'
+import { calculateRemainingBalance } from '@sgm-cem/shared'
 
 const router = Router()
 const prisma = new PrismaClient()
@@ -27,13 +28,25 @@ const createSchema = z.object({
   directCollection: z.boolean().optional(),
 })
 
+const MAX_DECLARE_LINES = 50
+
+// Deux formes acceptées : rubriqueId+montant (une seule rubrique, historique)
+// OU allocations (répartition sur plusieurs rubriques, comme les autres flows
+// de contribution) — exactement l'une des deux, jamais les deux à la fois.
 const declareSchema = z.object({
   collecteurId: z.string().min(1, 'Collecteur requis'),
-  rubriqueId: z.string().min(1, 'Rubrique requise'),
-  montant: z.number().int().positive('Le montant doit être un entier positif (FCFA)'),
+  rubriqueId: z.string().min(1).optional(),
+  montant: z.number().int().positive().optional(),
+  allocations: z.array(z.object({
+    rubriqueId: z.string().min(1),
+    montant: z.number().int().positive(),
+  })).min(1).max(MAX_DECLARE_LINES).optional(),
   periodeLabel: z.string().max(120).optional(),
   note: z.string().max(500).optional(),
-})
+}).refine(
+  data => Boolean(data.rubriqueId && data.montant) !== Boolean(data.allocations),
+  { message: 'Fournissez soit rubriqueId et montant, soit allocations — jamais les deux ni aucun des deux' }
+)
 
 router.get('/', authenticate, requireLevel(2), async (req, res) => {
   const { page = '1', limit = '20', statut, rubriqueId, membreId } = req.query as Record<string, string>
@@ -101,6 +114,102 @@ router.get('/litiges', authenticate, requireLevel(3), async (_req, res) => {
   })
 
   res.json({ success: true, data: contributions })
+})
+
+/**
+ * GET /api/contributions/me
+ * Historique paginé des contributions du MEMBRE connecté (portail self-service,
+ * vue "Mes contributions") — filtres optionnels montantMin/montantMax.
+ */
+router.get('/me', authenticate, requireLevel(1), async (req, res) => {
+  const membre = await prisma.membre.findFirst({ where: { userId: req.user!.userId }, select: { id: true } })
+  if (!membre) throw new AppError('NOT_FOUND', 'Profil membre introuvable pour ce compte', 404)
+
+  const { page = '1', limit = '20', montantMin, montantMax } = req.query as Record<string, string>
+  const currentPage = Math.max(1, parseInt(page, 10) || 1)
+  const pageSize = Math.min(100, Math.max(1, parseInt(limit, 10) || 20))
+  const skip = (currentPage - 1) * pageSize
+
+  const montantFilter: Record<string, number> = {}
+  if (montantMin) montantFilter.gte = parseInt(montantMin, 10)
+  if (montantMax) montantFilter.lte = parseInt(montantMax, 10)
+
+  const where = {
+    membreId: membre.id,
+    ...(Object.keys(montantFilter).length > 0 && { montant: montantFilter }),
+  }
+
+  const [contributions, total] = await Promise.all([
+    prisma.contribution.findMany({
+      where,
+      skip,
+      take: pageSize,
+      include: {
+        rubrique: { select: { title: true, code: true } },
+        collecteur: { select: { fullName: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.contribution.count({ where }),
+  ])
+
+  res.json({
+    success: true,
+    data: contributions,
+    pagination: { page: currentPage, limit: pageSize, total, totalPages: Math.ceil(total / pageSize) },
+  })
+})
+
+/**
+ * GET /api/contributions/me/balance
+ * Solde restant dû du MEMBRE connecté, par rubrique ouverte — alimente les
+ * cartes "Reste à payer" (RubriquesMembre.tsx) et les rappels proactifs
+ * (MesContributions.tsx). Une seule requête groupée par rubrique/statut,
+ * pas de N+1 : les montants confirmé/en attente sont agrégés puis reconstruits
+ * en "contributions virtuelles" pour réutiliser calculateRemainingBalance
+ * (@sgm-cem/shared, seule source de vérité du calcul).
+ */
+router.get('/me/balance', authenticate, requireLevel(1), async (req, res) => {
+  const membre = await prisma.membre.findFirst({
+    where: { userId: req.user!.userId },
+    select: { id: true, profilFinancier: true },
+  })
+  if (!membre) throw new AppError('NOT_FOUND', 'Profil membre introuvable pour ce compte', 404)
+
+  const rubriques = await prisma.rubrique.findMany({
+    where: { status: 'OUVERTE' },
+    select: {
+      id: true, code: true, title: true, priority: true,
+      amountTravailleur: true, amountEtudiant: true, amountCouple: true,
+    },
+  })
+
+  const aggregates = await prisma.contribution.groupBy({
+    by: ['rubriqueId', 'statut'],
+    where: {
+      membreId: membre.id,
+      rubriqueId: { in: rubriques.map(r => r.id) },
+      statut: { in: ['CONFIRME', 'EN_ATTENTE_CONFIRMATION'] },
+    },
+    _sum: { montant: true },
+  })
+
+  const data = rubriques.map(rubrique => {
+    const confirmedAmount = aggregates.find(a => a.rubriqueId === rubrique.id && a.statut === 'CONFIRME')?._sum.montant ?? 0
+    const pendingAmount = aggregates.find(a => a.rubriqueId === rubrique.id && a.statut === 'EN_ATTENTE_CONFIRMATION')?._sum.montant ?? 0
+    const virtualContributions: { montant: number; statut: 'CONFIRME' | 'EN_ATTENTE_CONFIRMATION' }[] = []
+    if (confirmedAmount > 0) virtualContributions.push({ montant: confirmedAmount, statut: 'CONFIRME' })
+    if (pendingAmount > 0) virtualContributions.push({ montant: pendingAmount, statut: 'EN_ATTENTE_CONFIRMATION' })
+
+    const balance = calculateRemainingBalance(membre.profilFinancier, rubrique, virtualContributions)
+
+    return {
+      rubrique: { id: rubrique.id, code: rubrique.code, title: rubrique.title, priority: rubrique.priority },
+      ...balance,
+    }
+  })
+
+  res.json({ success: true, data })
 })
 
 router.post('/', authenticate, requireLevel(2), async (req, res) => {
@@ -182,41 +291,65 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
   res.status(201).json({ success: true, data: { ...contribution, receiptUrl } })
 })
 
-router.post('/declare', authenticate, requireLevel(2), async (req, res) => {
+router.post('/declare', authenticate, requireLevel(1), async (req, res) => {
   const data = declareSchema.parse(req.body)
+  const lines = data.allocations ?? [{ rubriqueId: data.rubriqueId!, montant: data.montant! }]
 
-  const [rubrique, collecteur] = await Promise.all([
-    prisma.rubrique.findUnique({ where: { id: data.rubriqueId } }),
+  const ids = new Set<string>()
+  for (const line of lines) {
+    if (ids.has(line.rubriqueId)) throw new AppError('VALIDATION', 'Une même rubrique est répétée dans la répartition')
+    ids.add(line.rubriqueId)
+  }
+
+  // Un MEMBRE ne déclare que pour lui-même — la déclaration alimente alors son
+  // propre historique ; le staff (COLLECTEUR+) déclare pour un tiers sans
+  // compte (remise groupée), donc sans membreId, comportement déjà établi.
+  const isSelfService = req.user!.role === 'MEMBRE'
+  let membreId: string | null = null
+  if (isSelfService) {
+    const membre = await prisma.membre.findFirst({ where: { userId: req.user!.userId }, select: { id: true } })
+    if (!membre) throw new AppError('NOT_FOUND', 'Profil membre introuvable pour ce compte', 404)
+    membreId = membre.id
+  }
+
+  const [rubriques, collecteur] = await Promise.all([
+    prisma.rubrique.findMany({ where: { id: { in: Array.from(ids) } } }),
     prisma.user.findFirst({
       where: { id: data.collecteurId, isActive: true, role: { in: ['TRESORIER', 'COLLECTEUR'] } },
       select: { id: true, fullName: true, phone: true, whatsappPhone: true },
     }),
   ])
 
-  if (!rubrique || rubrique.status !== 'OUVERTE') {
-    throw new AppError('BUSINESS_RULE', 'Rubrique fermée ou introuvable')
+  if (rubriques.length !== ids.size || rubriques.some(r => r.status !== 'OUVERTE')) {
+    throw new AppError('BUSINESS_RULE', 'Une ou plusieurs rubriques sont fermées ou introuvables')
   }
   if (!collecteur) {
     throw new AppError('NOT_FOUND', 'Collecteur introuvable ou rôle non éligible', 404)
   }
 
-  const contribution = await prisma.contribution.create({
-    data: {
-      rubriqueId: data.rubriqueId,
-      collecteurId: data.collecteurId,
-      montant: data.montant,
-      montantAttendu: data.montant,
-      modePaiement: 'ESPECES',
-      statut: 'EN_ATTENTE_CONFIRMATION',
-      localisationFonds: 'CHEZ_COLLECTEUR',
-      periodeLabel: data.periodeLabel,
-      note: data.note,
-    },
-    include: {
-      rubrique: { select: { title: true, code: true } },
-      collecteur: { select: { fullName: true } },
-    },
-  })
+  const rubriqueById = new Map(rubriques.map(r => [r.id, r]))
+  const contributions = await prisma.$transaction(
+    lines.map(line => prisma.contribution.create({
+      data: {
+        membreId,
+        rubriqueId: line.rubriqueId,
+        collecteurId: data.collecteurId,
+        montant: line.montant,
+        montantAttendu: line.montant,
+        modePaiement: 'ESPECES',
+        statut: 'EN_ATTENTE_CONFIRMATION',
+        localisationFonds: 'CHEZ_COLLECTEUR',
+        periodeLabel: data.periodeLabel,
+        note: data.note,
+      },
+      include: {
+        rubrique: { select: { title: true, code: true } },
+        collecteur: { select: { fullName: true } },
+      },
+    }))
+  )
+
+  const totalMontant = contributions.reduce((sum, c) => sum + c.montant, 0)
 
   await prisma.auditLog.create({
     data: {
@@ -224,8 +357,15 @@ router.post('/declare', authenticate, requireLevel(2), async (req, res) => {
       userName: req.user!.email,
       action: 'CREATE',
       entityType: 'Contribution',
-      entityId: contribution.id,
-      details: { montant: contribution.montant, statut: contribution.statut, declaredForCollecteurId: data.collecteurId, viaDeclare: true },
+      entityId: contributions[0].id,
+      details: {
+        montant: totalMontant,
+        statut: 'EN_ATTENTE_CONFIRMATION',
+        declaredForCollecteurId: data.collecteurId,
+        viaDeclare: true,
+        contributionIds: contributions.map(c => c.id),
+        rubriques: contributions.map(c => rubriqueById.get(c.rubriqueId)?.code ?? c.rubriqueId),
+      },
     },
   })
 
@@ -233,16 +373,16 @@ router.post('/declare', authenticate, requireLevel(2), async (req, res) => {
     await notifyCollecteurNewContribution({
       collecteurId: data.collecteurId,
       collecteurPhone: collecteur.whatsappPhone ?? collecteur.phone,
-      memberName: `Remise groupée déclarée par ${req.user!.email}`,
-      montant: contribution.montant,
-      rubriqueCode: contribution.rubrique.code,
-      contributionId: contribution.id,
+      memberName: isSelfService ? req.user!.email : `Remise groupée déclarée par ${req.user!.email}`,
+      montant: totalMontant,
+      rubriqueCode: contributions.length > 1 ? `${contributions.length} rubriques` : contributions[0].rubrique.code,
+      contributionId: contributions[0].id,
     })
   } catch (e) {
     console.error('[Notification] Échec notification collecteur (declare):', e)
   }
 
-  res.status(201).json({ success: true, data: contribution })
+  res.status(201).json({ success: true, data: data.allocations ? contributions : contributions[0] })
 })
 
 router.get('/:id/payment-status', authenticate, requireLevel(2), async (req, res) => {
@@ -367,6 +507,106 @@ router.patch('/:id/resolve-litige', authenticate, requireLevel(3), async (req, r
   })
 
   res.json({ success: true, data: updated })
+})
+
+const TIMELINE_ACTION_LABELS: Record<string, string> = {
+  CREATE: 'Contribution créée',
+  CONFIRM: 'Paiement confirmé',
+  REJECT: 'Mise en litige',
+  APPROVE: 'Litige résolu — confirmée',
+}
+
+/**
+ * GET /api/contributions/:id/timeline
+ * Traçabilité de fonds d'une contribution — journal d'audit (créée, confirmée,
+ * mise en litige, résolue) enrichi du trajet réel de l'argent une fois collecté
+ * en espèces (transfert collecteur → responsable/trésorier, puis dépôt bancaire).
+ * Affichée par le bouton "Voir la traçabilité" de la liste des contributions.
+ */
+router.get('/:id/timeline', authenticate, requireLevel(2), async (req, res) => {
+  const id = String(req.params.id)
+  const contribution = await prisma.contribution.findUnique({
+    where: { id },
+    include: {
+      membre: { include: { user: { select: { fullName: true } } } },
+      rubrique: { select: { title: true, code: true } },
+      fundsTransfer: { select: { senderName: true, receiverName: true, status: true, createdAt: true, confirmedAt: true, refusedAt: true, cancelledAt: true, transferType: true } },
+      bankDeposit: { select: { referenceBordereau: true, depositedByName: true, createdAt: true } },
+    },
+  })
+  if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
+
+  const auditLogs = await prisma.auditLog.findMany({
+    where: { entityType: 'Contribution', entityId: id },
+    orderBy: { createdAt: 'asc' },
+  })
+
+  type Step = { step: string; label: string; actor: string; at: Date; localisation?: string }
+  const timeline: Step[] = auditLogs.map(log => ({
+    step: log.action,
+    label: TIMELINE_ACTION_LABELS[log.action] ?? log.action,
+    actor: log.userName,
+    at: log.createdAt,
+  }))
+
+  // Repli minimal si la contribution est antérieure à la mise en place de
+  // l'audit systématique (aucune entrée trouvée) — évite une timeline vide.
+  if (timeline.length === 0) {
+    timeline.push({
+      step: 'CREATE',
+      label: 'Contribution créée',
+      actor: contribution.collecteurId ? 'Collecteur' : 'Système',
+      at: contribution.createdAt,
+    })
+  }
+
+  // Trajet réel de l'argent (espèces uniquement) — la collecte publique/Mobile
+  // Money/Carte n'a pas de FundsTransfer, aucune ligne supplémentaire alors.
+  if (contribution.fundsTransfer) {
+    const ft = contribution.fundsTransfer
+    timeline.push({
+      step: 'TRANSFER',
+      label: 'Fonds remis en transfert',
+      actor: `${ft.senderName} → ${ft.receiverName}`,
+      at: ft.createdAt,
+      localisation: `Type : ${ft.transferType}`,
+    })
+    if (ft.confirmedAt) {
+      timeline.push({ step: 'TRANSFER_CONFIRMED', label: 'Transfert confirmé par le destinataire', actor: ft.receiverName, at: ft.confirmedAt })
+    }
+    if (ft.refusedAt) {
+      timeline.push({ step: 'TRANSFER_REFUSED', label: 'Transfert refusé par le destinataire', actor: ft.receiverName, at: ft.refusedAt })
+    }
+    if (ft.cancelledAt) {
+      timeline.push({ step: 'TRANSFER_CANCELLED', label: 'Transfert annulé', actor: ft.senderName, at: ft.cancelledAt })
+    }
+  }
+  if (contribution.bankDeposit) {
+    timeline.push({
+      step: 'BANK_DEPOSIT',
+      label: 'Déposé en banque',
+      actor: contribution.bankDeposit.depositedByName,
+      at: contribution.bankDeposit.createdAt,
+      localisation: `Bordereau : ${contribution.bankDeposit.referenceBordereau}`,
+    })
+  }
+
+  // Plus récent en premier — l'état actuel de la contribution est donc le
+  // premier élément affiché (mis en avant côté frontend).
+  timeline.sort((a, b) => b.at.getTime() - a.at.getTime())
+
+  res.json({
+    success: true,
+    data: {
+      contribution: {
+        membre: contribution.membre?.user.fullName ?? null,
+        rubrique: contribution.rubrique ? `${contribution.rubrique.code} — ${contribution.rubrique.title}` : null,
+        montant: contribution.montant,
+        statut: contribution.statut,
+      },
+      timeline,
+    },
+  })
 })
 
 /**
