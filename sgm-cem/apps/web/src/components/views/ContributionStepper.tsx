@@ -6,6 +6,7 @@ import api from '@/lib/api'
 import { cn, formatAmount, MODE_PAIEMENT_LABELS } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
+import { AllocationEditor, type PaymentAllocation } from '@/components/payments/AllocationEditor'
 import type { Membre, ModePaiement, Rubrique } from '@/types'
 
 type MembreWithCouple = Membre & {
@@ -32,6 +33,11 @@ export function ContributionStepper({ membres, rubriques, onClose, onSuccess }: 
   const [mobilePhone, setMobilePhone] = useState('')
   const [mobileChannel, setMobileChannel] = useState<'MTN' | 'ORANGE'>('MTN')
   const [error, setError] = useState('')
+  const [splitMode, setSplitMode] = useState(false)
+  const [allocationBudget, setAllocationBudget] = useState<number | ''>('')
+  const [allocations, setAllocations] = useState<PaymentAllocation[]>([])
+  const [batchId, setBatchId] = useState<string | null>(null)
+  const [batchContributionIds, setBatchContributionIds] = useState<string[]>([])
 
   const membreOptions = useMemo(
     () => membres.map(m => ({ value: m.id, label: m.user.fullName, sublabel: `${m.memberId} · ${m.profilFinancier}` })),
@@ -60,32 +66,61 @@ export function ContributionStepper({ membres, rubriques, onClose, onSuccess }: 
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'waiting' | 'confirmed' | 'failed'>('idle')
   const [createdContribId, setCreatedContribId] = useState<string | null>(null)
 
-  // Polling du statut paiement mobile
+  const paymentAmount = splitMode
+    ? allocations.reduce((total, allocation) => total + allocation.montant, 0)
+    : Number(montant)
+
+  // Polling du statut paiement mobile (gère plusieurs identifiants en mode réparti)
   useEffect(() => {
-    if (paymentStatus !== 'waiting' || !createdContribId) return
+    if (paymentStatus !== 'waiting') return
+    const identifiers = batchId ? [batchId, ...batchContributionIds] : createdContribId ? [createdContribId] : []
+    if (identifiers.length === 0) return
     const interval = setInterval(async () => {
-      try {
-        const res = await api.get(`/payments/status/${createdContribId}`)
-        const { statut, paymentStatus: ps } = res.data.data
-        if (statut === 'CONFIRME' || ps === 'SUCCESS') {
-          setPaymentStatus('confirmed')
-          clearInterval(interval)
-          await queryClient.invalidateQueries({ queryKey: ['contributions'] })
-          await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
-          setTimeout(onSuccess, 2000)
-        } else if (statut === 'ANNULE' || ps === 'FAILED') {
-          setPaymentStatus('failed')
-          clearInterval(interval)
-        }
-      } catch { /* ignore */ }
+      for (const identifier of identifiers) {
+        try {
+          const res = await api.get(`/payments/status/${identifier}`)
+          const data = res.data.data
+          const status = data.statut ?? data.paymentStatus ?? data.status
+          if (status === 'CONFIRME' || status === 'SUCCESS' || status === 'CONFIRMED') {
+            setPaymentStatus('confirmed')
+            clearInterval(interval)
+            await queryClient.invalidateQueries({ queryKey: ['contributions'] })
+            await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+            setTimeout(onSuccess, 2000)
+            return
+          }
+          if (status === 'ANNULE' || status === 'FAILED') {
+            setPaymentStatus('failed')
+            clearInterval(interval)
+            return
+          }
+        } catch { /* un batch peut ne pas encore avoir de route de statut dédiée */ }
+      }
     }, 5000)
     return () => clearInterval(interval)
-  }, [paymentStatus, createdContribId, queryClient, onSuccess])
+  }, [paymentStatus, batchId, batchContributionIds, createdContribId, queryClient, onSuccess])
 
   const isMobileMoney = ['MTN_MOMO', 'ORANGE_MONEY'].includes(modePaiement as string)
 
   const create = useMutation({
     mutationFn: async () => {
+      if (splitMode) {
+        return api.post('/payments/batches/initiate', {
+          idempotencyKey: typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `contrib-batch-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          membreId,
+          budgetAmount: Number(allocationBudget),
+          allocations,
+          modePaiement: isMobileMoney ? 'YELII' : modePaiement === 'CARTE_VISA' ? 'CARTE_VISA' : 'ESPECES',
+          mobileMoneyPhone: isMobileMoney ? mobilePhone : undefined,
+          paymentChannel: isMobileMoney ? mobileChannel : undefined,
+          // Pas de champ téléphone dédié Carte dans ce stepper — le serveur
+          // retombe sur le téléphone déjà enregistré du membre (voir
+          // /payments/batches/initiate), comme le fait déjà /payments/initiate
+          // pour le mode Carte non réparti.
+        })
+      }
       // Yelii handles both MTN and Orange Money
       const effectivePaymentMode = ['MTN_MOMO', 'ORANGE_MONEY'].includes(modePaiement) ? 'YELII' : modePaiement
       return api.post('/payments/initiate', {
@@ -98,8 +133,19 @@ export function ContributionStepper({ membres, rubriques, onClose, onSuccess }: 
       })
     },
     onSuccess: async (res) => {
+      if (!res.data?.success) {
+        const err = res.data?.error
+        setError(typeof err === 'string' ? err : (err?.message ?? 'Enregistrement impossible'))
+        return
+      }
       const contrib = res.data.data
-      setCreatedContribId(contrib.contributionId ?? contrib.id)
+      const returnedContributionIds = Array.isArray(contrib.contributions)
+        ? contrib.contributions.map((c: { id?: string }) => c.id).filter((id: string | undefined): id is string => Boolean(id))
+        : []
+      if (contrib.batchId) setBatchId(contrib.batchId)
+      if (returnedContributionIds.length > 0) setBatchContributionIds(returnedContributionIds)
+      setCreatedContribId(contrib.contributionId ?? contrib.id ?? returnedContributionIds[0])
+
       await queryClient.invalidateQueries({ queryKey: ['contributions'] })
       await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
       await queryClient.invalidateQueries({ queryKey: ['monthly-stats'] })
@@ -107,13 +153,18 @@ export function ContributionStepper({ membres, rubriques, onClose, onSuccess }: 
 
       if (isMobileMoney && (contrib.status === 'PROCESSING' || contrib.paymentStatus === 'PROCESSING')) {
         setPaymentStatus('waiting')
-      } else if (contrib.status === 'SUCCESS' || contrib.paymentStatus === 'SUCCESS') {
+      } else if (contrib.status === 'SUCCESS' || contrib.status === 'CONFIRMED' || contrib.paymentStatus === 'SUCCESS') {
+        onSuccess()
+      } else if (!isMobileMoney && modePaiement !== 'CARTE_VISA') {
+        // Espèces réparties (déclaration humaine) : pas de statut PROCESSING/SUCCESS immédiat côté batch.
         onSuccess()
       }
     },
     onError: (err: unknown) => {
-      const e = err as { response?: { data?: { error?: { message?: string } } } }
-      setError(e.response?.data?.error?.message ?? 'Enregistrement impossible')
+      const e = err as { response?: { data?: { error?: unknown } } }
+      const raw = e.response?.data?.error
+      const msg = typeof raw === 'string' ? raw : (raw as { message?: string } | undefined)?.message
+      setError(msg ?? 'Enregistrement impossible')
     },
   })
 
@@ -121,8 +172,15 @@ export function ContributionStepper({ membres, rubriques, onClose, onSuccess }: 
     setError('')
     if (step === 0) {
       if (!membreId) { setError('Sélectionnez un membre'); return }
-      if (!rubriqueId) { setError('Sélectionnez une rubrique'); return }
-      if (!montant || Number(montant) <= 0) { setError('Entrez un montant valide'); return }
+      if (splitMode) {
+        if (typeof allocationBudget !== 'number' || allocationBudget <= 0 || allocations.length === 0 || paymentAmount > allocationBudget) {
+          setError('Vérifiez le budget et la répartition des rubriques')
+          return
+        }
+      } else {
+        if (!rubriqueId) { setError('Sélectionnez une rubrique'); return }
+        if (!montant || Number(montant) <= 0) { setError('Entrez un montant valide'); return }
+      }
     }
     if (step === 1) {
       if (isMobileMoney && !mobilePhone) {
@@ -213,42 +271,73 @@ export function ContributionStepper({ membres, rubriques, onClose, onSuccess }: 
                 )}
               </div>
 
-              {/* Rubrique */}
-              <SearchableSelect
-                label="Rubrique"
-                required
-                placeholder="Rechercher une rubrique…"
-                value={rubriqueId}
-                onChange={rid => {
-                  setRubriqueId(rid)
-                  const r = rubriques.find(r => r.id === rid)
-                  if (r && selectedMembre) {
-                    const amt = selectedMembre.profilFinancier === 'ETUDIANT' ? r.amountEtudiant
-                      : selectedMembre.profilFinancier === 'COUPLE' ? r.amountCouple : r.amountTravailleur
-                    if (amt != null) setMontant(String(amt))
-                  }
-                }}
-                options={rubriqueOptions}
-                emptyText="Aucune rubrique ouverte"
-              />
+              {/* Répartition multi-rubriques */}
+              <label className="flex items-center gap-2.5 cursor-pointer select-none rounded-[10px] bg-[#E8F5E8] border border-[#1A6B1A]/20 px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={splitMode}
+                  onChange={e => { setSplitMode(e.target.checked); setError('') }}
+                  className="w-4 h-4 accent-[#1A6B1A]"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-[#0F4A0F]">Répartir ce paiement sur plusieurs rubriques</p>
+                  <p className="text-xs text-[#1A6B1A]">Saisissez un montant total puis partagez-le entre les rubriques — le reste à affecter s&apos;affiche en direct.</p>
+                </div>
+              </label>
 
-              {/* Montant */}
-              <div>
-                <label className="text-xs font-semibold text-gray-600 block mb-1.5">Montant (FCFA) <span className="text-red-500">*</span></label>
-                <input type="number" value={montant} onChange={e => setMontant(e.target.value)} placeholder="0"
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-[10px] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30" />
-                {expectedAmount != null && (
-                  <p className="text-xs text-[#1A6B1A] mt-1">Attendu : <strong>{formatAmount(expectedAmount)}</strong></p>
-                )}
-                {/* Split couple */}
-                {hasLinkedCouple && splitAmount != null && Number(montant) > 0 && (
-                  <div className="mt-2 rounded-[8px] bg-pink-50 border border-pink-200 px-2.5 py-2 text-xs text-pink-700 space-y-0.5">
-                    <p className="font-semibold flex items-center gap-1"><Heart size={10} fill="currentColor" /> Split couple automatique :</p>
-                    <p>{selectedMembre?.user.fullName} → {formatAmount(Math.round(Number(montant) / 2))}</p>
-                    <p>{selectedMembre?.couple?.user.fullName} → {formatAmount(Number(montant) - Math.round(Number(montant) / 2))}</p>
+              {!splitMode && (
+                <>
+                  {/* Rubrique */}
+                  <SearchableSelect
+                    label="Rubrique"
+                    required
+                    placeholder="Rechercher une rubrique…"
+                    value={rubriqueId}
+                    onChange={rid => {
+                      setRubriqueId(rid)
+                      const r = rubriques.find(r => r.id === rid)
+                      if (r && selectedMembre) {
+                        const amt = selectedMembre.profilFinancier === 'ETUDIANT' ? r.amountEtudiant
+                          : selectedMembre.profilFinancier === 'COUPLE' ? r.amountCouple : r.amountTravailleur
+                        if (amt != null) setMontant(String(amt))
+                      }
+                    }}
+                    options={rubriqueOptions}
+                    emptyText="Aucune rubrique ouverte"
+                  />
+
+                  {/* Montant */}
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 block mb-1.5">Montant (FCFA) <span className="text-red-500">*</span></label>
+                    <input type="number" value={montant} onChange={e => setMontant(e.target.value)} placeholder="0"
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-[10px] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30" />
+                    {expectedAmount != null && (
+                      <p className="text-xs text-[#1A6B1A] mt-1">Attendu : <strong>{formatAmount(expectedAmount)}</strong></p>
+                    )}
+                    {/* Split couple */}
+                    {hasLinkedCouple && splitAmount != null && Number(montant) > 0 && (
+                      <div className="mt-2 rounded-[8px] bg-pink-50 border border-pink-200 px-2.5 py-2 text-xs text-pink-700 space-y-0.5">
+                        <p className="font-semibold flex items-center gap-1"><Heart size={10} fill="currentColor" /> Split couple automatique :</p>
+                        <p>{selectedMembre?.user.fullName} → {formatAmount(Math.round(Number(montant) / 2))}</p>
+                        <p>{selectedMembre?.couple?.user.fullName} → {formatAmount(Number(montant) - Math.round(Number(montant) / 2))}</p>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                </>
+              )}
+
+              {splitMode && (
+                <AllocationEditor
+                  budget={allocationBudget}
+                  allocations={allocations}
+                  rubriques={rubriques.filter(r => r.status === 'OUVERTE').map(r => ({ id: r.id, title: r.title, code: r.code }))}
+                  onBudgetChange={value => { setAllocationBudget(value); setError('') }}
+                  onAllocationsChange={value => { setAllocations(value); setError('') }}
+                  onNext={goNext}
+                  nextLabel="Suivant — Choisir le mode de paiement"
+                  disabled={create.isPending}
+                />
+              )}
             </div>
           )}
 
@@ -365,14 +454,23 @@ export function ContributionStepper({ membres, rubriques, onClose, onSuccess }: 
                 <h3 className="font-display font-semibold text-[#0F4A0F] text-lg mb-2">Récapitulatif</h3>
                 <Row label="Membre" value={selectedMembre?.user.fullName ?? '—'} />
                 <Row label="Profil" value={selectedMembre?.profilFinancier ?? '—'} />
-                <Row label="Rubrique" value={selectedRubrique ? `${selectedRubrique.code} — ${selectedRubrique.title}` : '—'} />
-                <Row label="Montant total" value={formatAmount(Number(montant))} highlight />
+                {splitMode ? (
+                  <div className="space-y-1.5">
+                    {allocations.map(allocation => {
+                      const rubrique = rubriques.find(r => r.id === allocation.rubriqueId)
+                      return <Row key={allocation.rubriqueId} label={rubrique ? `${rubrique.code} — ${rubrique.title}` : 'Rubrique'} value={formatAmount(allocation.montant)} />
+                    })}
+                  </div>
+                ) : (
+                  <Row label="Rubrique" value={selectedRubrique ? `${selectedRubrique.code} — ${selectedRubrique.title}` : '—'} />
+                )}
+                <Row label="Montant total" value={formatAmount(paymentAmount)} highlight />
                 <Row label="Mode" value={isMobileMoney ? `Paiement mobile - ${MODE_PAIEMENT_LABELS[modePaiement]}` : MODE_PAIEMENT_LABELS[modePaiement]} />
                 {mobilePhone && <Row label="Tél. MoMo" value={mobilePhone} />}
               </div>
 
               {/* Aperçu split couple */}
-              {hasLinkedCouple && splitAmount != null && (
+              {!splitMode && hasLinkedCouple && splitAmount != null && (
                 <div className="rounded-[12px] bg-pink-50 border border-pink-200 p-3 space-y-2">
                   <p className="text-xs font-semibold text-pink-700 flex items-center gap-1.5">
                     <Heart size={12} fill="currentColor" /> Répartition couple (automatique)
@@ -462,7 +560,7 @@ export function ContributionStepper({ membres, rubriques, onClose, onSuccess }: 
               {step === 0 ? 'Annuler' : '← Retour'}
             </Button>
             {step < 2 ? (
-              <Button onClick={goNext}>Suivant →</Button>
+              (step === 0 && splitMode) ? <span /> : <Button onClick={goNext}>Suivant →</Button>
             ) : (
               <Button loading={create.isPending} onClick={() => create.mutate()}>
                 <CreditCard size={14} />
