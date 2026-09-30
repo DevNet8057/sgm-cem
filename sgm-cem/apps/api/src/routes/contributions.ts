@@ -5,7 +5,10 @@ import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { getYeliiStatus, requestYelii } from '../services/payment'
-import { generateReceiptPDF } from '../services/receipt'
+import { generateReceiptPDF, generateReceiptPdf } from '../services/receipt'
+import { getFileStream } from '../services/storage'
+import { getConfig } from '../services/config.service'
+import { notifyCollecteurNewContribution } from '../services/notification'
 
 const router = Router()
 const prisma = new PrismaClient()
@@ -20,6 +23,16 @@ const createSchema = z.object({
   mobileMoneyPhone: z.string().optional(),
   paymentChannel: z.enum(['MTN', 'ORANGE']).optional(),
   referencePaiement: z.string().optional(),
+  // B1 — collecteur encaisse en présentiel : confirmation immédiate, pas de double validation.
+  directCollection: z.boolean().optional(),
+})
+
+const declareSchema = z.object({
+  collecteurId: z.string().min(1, 'Collecteur requis'),
+  rubriqueId: z.string().min(1, 'Rubrique requise'),
+  montant: z.number().int().positive('Le montant doit être un entier positif (FCFA)'),
+  periodeLabel: z.string().max(120).optional(),
+  note: z.string().max(500).optional(),
 })
 
 router.get('/', authenticate, requireLevel(2), async (req, res) => {
@@ -56,9 +69,13 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
   })
 })
 
-router.get('/validations', authenticate, requireLevel(2), async (_req, res) => {
+router.get('/validations', authenticate, requireLevel(2), async (req, res) => {
+  const isCollecteur = req.user!.role === 'COLLECTEUR'
   const contributions = await prisma.contribution.findMany({
-    where: { statut: 'EN_ATTENTE_CONFIRMATION' },
+    where: {
+      statut: 'EN_ATTENTE_CONFIRMATION',
+      ...(isCollecteur && { collecteurId: req.user!.userId }),
+    },
     include: {
       membre: { include: { user: { select: { fullName: true } } } },
       rubrique: { select: { title: true, code: true } },
@@ -88,6 +105,7 @@ router.get('/litiges', authenticate, requireLevel(3), async (_req, res) => {
 
 router.post('/', authenticate, requireLevel(2), async (req, res) => {
   const data = createSchema.parse(req.body)
+  const { directCollection, paymentChannel, ...contributionData } = data
 
   const [rubrique, membre] = await Promise.all([
     prisma.rubrique.findUnique({ where: { id: data.rubriqueId } }),
@@ -106,13 +124,18 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
     membre.profilFinancier === 'COUPLE' ? rubrique.amountCouple :
     rubrique.amountTravailleur
 
+  // B1 — encaissement en présentiel : confirmation immédiate, sans double validation.
+  const isDirectCash = data.modePaiement === 'ESPECES' && directCollection === true
+
   const contribution = await prisma.contribution.create({
     data: {
-      ...data,
+      ...contributionData,
       collecteurId: data.collecteurId ?? req.user!.userId,
       montantAttendu: montantAttendu ?? data.montant,
-      statut: 'EN_ATTENTE_CONFIRMATION',
+      statut: isDirectCash ? 'CONFIRME' : 'EN_ATTENTE_CONFIRMATION',
       localisationFonds: data.modePaiement === 'ESPECES' ? 'CHEZ_COLLECTEUR' : 'EN_TRANSIT',
+      confirmedAt: isDirectCash ? new Date() : undefined,
+      confirmedById: isDirectCash ? req.user!.userId : undefined,
     },
     include: {
       membre: { include: { user: { select: { fullName: true } } } },
@@ -120,6 +143,11 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
       collecteur: { select: { fullName: true } },
     }
   })
+
+  let receiptUrl: string | null = null
+  if (isDirectCash) {
+    receiptUrl = await generateReceiptPDF(contribution.id)
+  }
 
   if (data.modePaiement === 'YELII' && data.mobileMoneyPhone) {
     const payment = await requestYelii({
@@ -150,6 +178,69 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
       details: { montant: contribution.montant, statut: contribution.statut },
     }
   })
+
+  res.status(201).json({ success: true, data: { ...contribution, receiptUrl } })
+})
+
+router.post('/declare', authenticate, requireLevel(2), async (req, res) => {
+  const data = declareSchema.parse(req.body)
+
+  const [rubrique, collecteur] = await Promise.all([
+    prisma.rubrique.findUnique({ where: { id: data.rubriqueId } }),
+    prisma.user.findFirst({
+      where: { id: data.collecteurId, isActive: true, role: { in: ['TRESORIER', 'COLLECTEUR'] } },
+      select: { id: true, fullName: true, phone: true, whatsappPhone: true },
+    }),
+  ])
+
+  if (!rubrique || rubrique.status !== 'OUVERTE') {
+    throw new AppError('BUSINESS_RULE', 'Rubrique fermée ou introuvable')
+  }
+  if (!collecteur) {
+    throw new AppError('NOT_FOUND', 'Collecteur introuvable ou rôle non éligible', 404)
+  }
+
+  const contribution = await prisma.contribution.create({
+    data: {
+      rubriqueId: data.rubriqueId,
+      collecteurId: data.collecteurId,
+      montant: data.montant,
+      montantAttendu: data.montant,
+      modePaiement: 'ESPECES',
+      statut: 'EN_ATTENTE_CONFIRMATION',
+      localisationFonds: 'CHEZ_COLLECTEUR',
+      periodeLabel: data.periodeLabel,
+      note: data.note,
+    },
+    include: {
+      rubrique: { select: { title: true, code: true } },
+      collecteur: { select: { fullName: true } },
+    },
+  })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: req.user!.userId,
+      userName: req.user!.email,
+      action: 'CREATE',
+      entityType: 'Contribution',
+      entityId: contribution.id,
+      details: { montant: contribution.montant, statut: contribution.statut, declaredForCollecteurId: data.collecteurId, viaDeclare: true },
+    },
+  })
+
+  try {
+    await notifyCollecteurNewContribution({
+      collecteurId: data.collecteurId,
+      collecteurPhone: collecteur.whatsappPhone ?? collecteur.phone,
+      memberName: `Remise groupée déclarée par ${req.user!.email}`,
+      montant: contribution.montant,
+      rubriqueCode: contribution.rubrique.code,
+      contributionId: contribution.id,
+    })
+  } catch (e) {
+    console.error('[Notification] Échec notification collecteur (declare):', e)
+  }
 
   res.status(201).json({ success: true, data: contribution })
 })
@@ -192,6 +283,9 @@ router.patch('/:id/confirm', authenticate, requireLevel(2), async (req, res) => 
   if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
   if (contribution.statut !== 'EN_ATTENTE_CONFIRMATION') {
     throw new AppError('BUSINESS_RULE', 'Cette contribution ne peut pas etre confirmee')
+  }
+  if (req.user!.role === 'COLLECTEUR' && contribution.collecteurId !== req.user!.userId) {
+    throw new AppError('ACCESS_DENIED', 'Vous ne pouvez confirmer que vos propres remises', 403)
   }
 
   const updated = await prisma.contribution.update({
@@ -273,6 +367,46 @@ router.patch('/:id/resolve-litige', authenticate, requireLevel(3), async (req, r
   })
 
   res.json({ success: true, data: updated })
+})
+
+/**
+ * GET /api/contributions/:id/receipt
+ * Reçu PDF — vue inline par défaut (?download=1 force le téléchargement).
+ * Réutilise le PDF déjà généré s'il existe (webhook/confirmation), sinon le
+ * génère à la volée (auto-guérison pour les contributions confirmées avant
+ * la mise en place de la génération automatique).
+ */
+router.get('/:id/receipt', authenticate, requireLevel(2), async (req, res) => {
+  const id = String(req.params.id)
+  const contribution = await prisma.contribution.findUnique({ where: { id } })
+  if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
+  if (contribution.statut !== 'CONFIRME') {
+    throw new AppError('BUSINESS_RULE', 'Le reçu est disponible uniquement pour les contributions confirmées', 400)
+  }
+
+  let pdfBuffer: Buffer | null = null
+  const apiUrl = getConfig('API_URL') ?? 'http://localhost:3001'
+
+  if (contribution.receiptUrl?.startsWith(`${apiUrl}/uploads/`)) {
+    const key = contribution.receiptUrl.replace(`${apiUrl}/uploads/`, '')
+    const file = await getFileStream(key)
+    if (file) {
+      const chunks: Buffer[] = []
+      for await (const chunk of file.stream) chunks.push(chunk as Buffer)
+      pdfBuffer = Buffer.concat(chunks)
+    }
+  }
+
+  if (!pdfBuffer) {
+    pdfBuffer = await generateReceiptPdf(id)
+    await generateReceiptPDF(id) // persiste receiptUrl pour les prochains appels
+  }
+
+  const filename = `Recu-CEM-${id.substring(0, 8).toUpperCase()}.pdf`
+  const disposition = req.query.download === '1' ? 'attachment' : 'inline'
+  res.setHeader('Content-Type', 'application/pdf')
+  res.setHeader('Content-Disposition', `${disposition}; filename="${filename}"`)
+  res.send(pdfBuffer)
 })
 
 export { router as contributionsRouter }

@@ -13,6 +13,7 @@ import { getConfigBool, getConfigNumber } from '../services/config.service'
 import { audit } from '../services/audit.service'
 import { syncYeliiContributionStatus, CONTRIBUTION_SYNC_SELECT } from '../services/payment-status.service'
 import { createPaymentBatch, PaymentBatchError } from '../services/payment-batch.service'
+import { notifyCollecteurNewContribution } from '../services/notification'
 
 const router = Router()
 const prisma = getPrisma()
@@ -512,6 +513,35 @@ router.post('/batches/initiate', authenticate, requireLevel(1), async (req, res)
       if (data.modePaiement === 'ESPECES') {
         // Les espèces restent une déclaration humaine : aucun fournisseur.
         // PENDING/EN_ATTENTE_CONFIRMATION est l'état attendu jusqu'à validation.
+
+        // Notification instantanée du collecteur désigné — sauf si c'est le
+        // staff qui vient de créer le lot pour lui-même (rien à notifier).
+        if (result.collecteurId && result.collecteurId !== req.user!.userId) {
+          try {
+            const [collecteurUser, batchMembre] = await Promise.all([
+              prisma.user.findUnique({
+                where: { id: result.collecteurId },
+                select: { phone: true, whatsappPhone: true },
+              }),
+              prisma.membre.findUnique({
+                where: { id: result.membreId },
+                select: { user: { select: { fullName: true } } },
+              }),
+            ])
+            await notifyCollecteurNewContribution({
+              collecteurId: result.collecteurId,
+              collecteurPhone: collecteurUser?.whatsappPhone ?? collecteurUser?.phone,
+              memberName: batchMembre?.user.fullName ?? 'Membre',
+              montant: result.totalAllocated,
+              rubriqueCode: result.contributions.length > 1
+                ? `${result.contributions.length} rubriques`
+                : 'Rubrique',
+              contributionId: result.contributions[0]!.id,
+            })
+          } catch (e) {
+            console.error('[Notification] Échec notification collecteur (batch):', e)
+          }
+        }
       } else if (data.modePaiement === 'YELII') {
         const payment = await initiateYeliiPayment({
           amount: result.totalToPay,
