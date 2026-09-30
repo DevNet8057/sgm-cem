@@ -13,6 +13,7 @@ import { ContributionStepper } from '@/components/views/ContributionStepper'
 import { ReceiptSuccessModal } from '@/components/contributions/ReceiptSuccessModal'
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { Modal } from '@/components/ui/Modal'
+import { AllocationEditor, type PaymentAllocation } from '@/components/payments/AllocationEditor'
 import { queueContribution } from '@/lib/offlineQueue'
 import { Avatar } from '@/components/ui/Avatar'
 import { useFocusHighlight } from '@/hooks/useFocusHighlight'
@@ -52,6 +53,9 @@ export function Contributions() {
   const [showStepper, setShowStepper] = useState(false)
   const [form, setForm] = useState(initialForm)
   const [declareForm, setDeclareForm] = useState(initialDeclareForm)
+  const [splitMode, setSplitMode] = useState(false)
+  const [allocationBudget, setAllocationBudget] = useState<number | ''>('')
+  const [allocations, setAllocations] = useState<PaymentAllocation[]>([])
   const [error, setError] = useState('')
   const [declareError, setDeclareError] = useState('')
   const [receiptLoading, setReceiptLoading] = useState<string | null>(null)
@@ -116,6 +120,12 @@ export function Contributions() {
     return selectedRubrique.amountTravailleur
   }, [selectedMembre, selectedRubrique])
 
+  function resetSplitState() {
+    setSplitMode(false)
+    setAllocationBudget('')
+    setAllocations([])
+  }
+
   const createContribution = useMutation({
     mutationFn: async () => api.post('/contributions', {
       ...form,
@@ -136,6 +146,7 @@ export function Contributions() {
         })
       }
       setForm(initialForm)
+      resetSplitState()
       setShowForm(false)
       setError('')
       await queryClient.invalidateQueries({ queryKey: ['contributions'] })
@@ -167,6 +178,37 @@ export function Contributions() {
       }
       setError(e.response?.data?.error?.message ?? 'Enregistrement impossible')
     }
+  })
+
+  const createBatchContribution = useMutation({
+    mutationFn: async () => api.post('/payments/batches/initiate', {
+      idempotencyKey: typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `contrib-batch-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      membreId: form.membreId,
+      budgetAmount: Number(allocationBudget),
+      allocations,
+      modePaiement: 'ESPECES',
+    }),
+    onSuccess: async () => {
+      setForm(initialForm)
+      resetSplitState()
+      setShowForm(false)
+      setError('')
+      addToast({ title: 'Paiement réparti enregistré', message: 'Chaque ligne est en attente de confirmation par un responsable.', variant: 'success' })
+      await queryClient.invalidateQueries({ queryKey: ['contributions'] })
+      await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+      await queryClient.invalidateQueries({ queryKey: ['monthly-stats'] })
+      await queryClient.invalidateQueries({ queryKey: ['rubriques'] })
+    },
+    onError: (err: unknown) => {
+      if (!navigator.onLine || (err as { code?: string }).code === 'ERR_NETWORK') {
+        setError('Connexion indisponible — la répartition multi-rubriques nécessite une connexion active. Réessayez une fois reconnecté.')
+        return
+      }
+      const e = err as { response?: { data?: { error?: { message?: string } } } }
+      setError(e.response?.data?.error?.message ?? 'Enregistrement impossible')
+    },
   })
 
   const declareMutation = useMutation({
@@ -274,7 +316,7 @@ export function Contributions() {
               {showDeclare ? <X size={14} /> : <MapPin size={14} />}
               {showDeclare ? 'Fermer' : 'Déclarer'}
             </Button>
-            <Button size="sm" onClick={() => { setShowForm(v => !v); setShowDeclare(false) }}>
+            <Button size="sm" onClick={() => { setShowForm(v => !v); setShowDeclare(false); resetSplitState() }}>
               {showForm ? <X size={14} /> : <Plus size={14} />}
               {showForm ? 'Fermer' : 'Rapide'}
             </Button>
@@ -375,60 +417,103 @@ export function Contributions() {
       )}
 
       {showForm && (
-        <form onSubmit={e => { e.preventDefault(); createContribution.mutate() }}
+        <form onSubmit={e => { e.preventDefault(); if (splitMode) return; createContribution.mutate() }}
           className="mb-5 bg-white rounded-[18px] border border-gray-100 p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
           <SearchableSelect label="Membre" required placeholder="Rechercher un membre…"
             value={form.membreId}
             onChange={membreId => setForm({ ...form, membreId })}
             options={(membresData ?? []).map(m => ({ value: m.id, label: m.user.fullName, sublabel: m.memberId }))}
           />
-          <SearchableSelect label="Rubrique" required placeholder="Rechercher une rubrique…"
-            value={form.rubriqueId}
-            onChange={rubriqueId => {
-              const r = rubriquesData?.find(r => r.id === rubriqueId)
-              const membre = membresData?.find(m => m.id === form.membreId)
-              let montant = form.montant
-              if (r && membre && !montant) {
-                const amt = membre.profilFinancier === 'ETUDIANT' ? r.amountEtudiant
-                  : membre.profilFinancier === 'COUPLE' ? r.amountCouple : r.amountTravailleur
-                if (amt != null) montant = String(amt)
-              }
-              setForm({ ...form, rubriqueId, montant })
-            }}
-            options={(rubriquesData ?? []).filter(r => r.status === 'OUVERTE').map(r => ({ value: r.id, label: r.title, sublabel: r.code }))}
-          />
-          <Input label="Montant" type="number" value={form.montant} onChange={montant => setForm({ ...form, montant })} required />
           <SearchableSelect label="Mode" placeholder="Rechercher un mode…"
             value={form.modePaiement}
-            onChange={modePaiement => setForm({ ...form, modePaiement: (modePaiement || 'ESPECES') as ModePaiement })}
+            onChange={modePaiement => {
+              const nextMode = (modePaiement || 'ESPECES') as ModePaiement
+              if (nextMode !== 'ESPECES') setSplitMode(false)
+              setForm({ ...form, modePaiement: nextMode })
+            }}
             options={Object.entries(MODE_PAIEMENT_LABELS).map(([value, label]) => ({ value, label }))}
           />
-          <Input label="Telephone paiement" value={form.mobileMoneyPhone} onChange={mobileMoneyPhone => setForm({ ...form, mobileMoneyPhone })} />
-          <Input label="Reference" value={form.referencePaiement} onChange={referencePaiement => setForm({ ...form, referencePaiement })} />
-          <div className="flex items-end">
-            <div className="w-full rounded-[10px] bg-[#E8F5E8] px-3 py-2 text-xs text-[#0F4A0F]">
-              Attendu: <span className="font-bold font-mono">{formatAmount(expectedAmount)}</span>
-            </div>
-          </div>
-          {/* B1 : Confirmation immédiate (présentiel espèces) */}
+          {/* Répartition multi-rubriques (staff, ESPECES uniquement) */}
           {form.modePaiement === 'ESPECES' && (
-            <label className="md:col-span-4 flex items-center gap-2.5 cursor-pointer select-none rounded-[10px] bg-[#ECFDF5] border border-[#A7F3D0] px-4 py-3">
+            <label className="md:col-span-4 flex items-center gap-2.5 cursor-pointer select-none rounded-[10px] bg-[#E8F5E8] border border-[#1A6B1A]/20 px-4 py-3">
               <input
                 type="checkbox"
-                checked={form.directCollection}
-                onChange={e => setForm({ ...form, directCollection: e.target.checked })}
+                checked={splitMode}
+                onChange={e => { setSplitMode(e.target.checked); setError('') }}
                 className="w-4 h-4 accent-[#1A6B1A]"
               />
               <div>
-                <p className="text-sm font-semibold text-[#065F46]">Collecteur encaisse en présentiel</p>
-                <p className="text-xs text-[#10B981]">Statut CONFIRMÉ immédiat — le membre est notifié</p>
+                <p className="text-sm font-semibold text-[#0F4A0F]">Répartir ce paiement sur plusieurs rubriques</p>
+                <p className="text-xs text-[#1A6B1A]">Saisissez un montant total puis partagez-le entre les rubriques — le reste à affecter s&apos;affiche en direct.</p>
               </div>
             </label>
           )}
+          {!splitMode && (
+            <>
+              <SearchableSelect label="Rubrique" required placeholder="Rechercher une rubrique…"
+                value={form.rubriqueId}
+                onChange={rubriqueId => {
+                  const r = rubriquesData?.find(r => r.id === rubriqueId)
+                  const membre = membresData?.find(m => m.id === form.membreId)
+                  let montant = form.montant
+                  if (r && membre && !montant) {
+                    const amt = membre.profilFinancier === 'ETUDIANT' ? r.amountEtudiant
+                      : membre.profilFinancier === 'COUPLE' ? r.amountCouple : r.amountTravailleur
+                    if (amt != null) montant = String(amt)
+                  }
+                  setForm({ ...form, rubriqueId, montant })
+                }}
+                options={(rubriquesData ?? []).filter(r => r.status === 'OUVERTE').map(r => ({ value: r.id, label: r.title, sublabel: r.code }))}
+              />
+              <Input label="Montant" type="number" value={form.montant} onChange={montant => setForm({ ...form, montant })} required />
+              <Input label="Telephone paiement" value={form.mobileMoneyPhone} onChange={mobileMoneyPhone => setForm({ ...form, mobileMoneyPhone })} />
+              <Input label="Reference" value={form.referencePaiement} onChange={referencePaiement => setForm({ ...form, referencePaiement })} />
+              <div className="flex items-end">
+                <div className="w-full rounded-[10px] bg-[#E8F5E8] px-3 py-2 text-xs text-[#0F4A0F]">
+                  Attendu: <span className="font-bold font-mono">{formatAmount(expectedAmount)}</span>
+                </div>
+              </div>
+              {/* B1 : Confirmation immédiate (présentiel espèces) */}
+              {form.modePaiement === 'ESPECES' && (
+                <label className="md:col-span-4 flex items-center gap-2.5 cursor-pointer select-none rounded-[10px] bg-[#ECFDF5] border border-[#A7F3D0] px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={form.directCollection}
+                    onChange={e => setForm({ ...form, directCollection: e.target.checked })}
+                    className="w-4 h-4 accent-[#1A6B1A]"
+                  />
+                  <div>
+                    <p className="text-sm font-semibold text-[#065F46]">Collecteur encaisse en présentiel</p>
+                    <p className="text-xs text-[#10B981]">Statut CONFIRMÉ immédiat — le membre est notifié</p>
+                  </div>
+                </label>
+              )}
+            </>
+          )}
+          {splitMode && (
+            <div className="md:col-span-4">
+              <AllocationEditor
+                budget={allocationBudget}
+                allocations={allocations}
+                rubriques={(rubriquesData ?? []).filter(r => r.status === 'OUVERTE').map(r => ({ id: r.id, title: r.title, code: r.code }))}
+                onBudgetChange={value => { setAllocationBudget(value); setError('') }}
+                onAllocationsChange={value => { setAllocations(value); setError('') }}
+                onNext={() => {
+                  setError('')
+                  if (!form.membreId) { setError('Sélectionnez un membre'); return }
+                  createBatchContribution.mutate()
+                }}
+                nextLabel="Enregistrer le paiement réparti"
+                disabled={createBatchContribution.isPending}
+              />
+            </div>
+          )}
           {error && <p className="md:col-span-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-[10px] px-3 py-2">{error}</p>}
-          <div className="md:col-span-4 flex justify-end">
-            <Button loading={createContribution.isPending}>Enregistrer</Button>
-          </div>
+          {!splitMode && (
+            <div className="md:col-span-4 flex justify-end">
+              <Button loading={createContribution.isPending}>Enregistrer</Button>
+            </div>
+          )}
         </form>
       )}
 
