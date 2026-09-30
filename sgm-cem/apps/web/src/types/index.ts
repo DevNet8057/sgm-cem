@@ -147,6 +147,7 @@ export interface CollecteurSummary {
   nbContributions: number
   nbEnRetard: number
   oldestContributionAt?: string
+  lastValidatedByName?: string
 }
 
 export interface CollecteursResponse {

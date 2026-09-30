@@ -63,6 +63,16 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
     .filter(u => myRole !== 'COLLECTEUR' || u.id !== myUserId)
     .map(u => ({ id: u.id, fullName: u.fullName, email: u.email, role: u.role }))
 
+  // Qui a validé (confirmé) chacune de ces contributions — confirmedById n'est
+  // pas une relation Prisma (simple string), résolution manuelle en un seul aller.
+  const confirmerIds = Array.from(new Set(
+    contributions.map(c => c.confirmedById).filter((id): id is string => Boolean(id))
+  ))
+  const confirmers = confirmerIds.length > 0
+    ? await prisma.user.findMany({ where: { id: { in: confirmerIds } }, select: { id: true, fullName: true } })
+    : []
+  const confirmerNameById = new Map(confirmers.map(u => [u.id, u.fullName]))
+
   const byCollector = new Map<string, {
     collecteurId: string
     collecteurName: string
@@ -73,6 +83,8 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
     nbContributions: number
     nbEnRetard: number
     oldestContributionAt?: Date
+    lastValidatedByName?: string
+    lastValidatedAt?: Date
   }>()
 
   for (const contribution of contributions) {
@@ -87,6 +99,8 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
       nbContributions: 0,
       nbEnRetard: 0,
       oldestContributionAt: contribution.createdAt,
+      lastValidatedByName: undefined,
+      lastValidatedAt: undefined,
     }
 
     if (contribution.localisationFonds === 'CHEZ_COLLECTEUR') row.totalChezCollecteur += contribution.montant
@@ -96,6 +110,11 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
     if (contribution.createdAt < retentionLimit) row.nbEnRetard += 1
     if (!row.oldestContributionAt || contribution.createdAt < row.oldestContributionAt) {
       row.oldestContributionAt = contribution.createdAt
+    }
+    const validatedAt = contribution.confirmedAt ?? contribution.createdAt
+    if (contribution.confirmedById && (!row.lastValidatedAt || validatedAt > row.lastValidatedAt)) {
+      row.lastValidatedByName = confirmerNameById.get(contribution.confirmedById)
+      row.lastValidatedAt = validatedAt
     }
     byCollector.set(key, row)
   }

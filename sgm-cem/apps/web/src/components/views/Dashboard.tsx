@@ -18,7 +18,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { formatAmount, MODE_PAIEMENT_LABELS } from '@/lib/utils'
 import { useAppStore } from '@/store/appStore'
 import { useAuthStore } from '@/store/authStore'
-import type { Contribution, DashboardStats, ModePaiement } from '@/types'
+import type { CollecteursResponse, Contribution, DashboardStats, ModePaiement } from '@/types'
 
 interface MonthlyStat {
   month: number; label: string; total: number; count: number
@@ -47,8 +47,9 @@ const MONTH_OPTIONS = [
 ]
 
 export function Dashboard() {
-  const { setActiveView } = useAppStore()
+  const { setActiveView, navigateToNotification } = useAppStore()
   const { user } = useAuthStore()
+  const canSeeFundsHolders = user?.role === 'TRESORIER' || user?.role === 'ADMIN' || user?.role === 'DEVELOPER'
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
   const [month, setMonth] = useState(String(new Date().getMonth() + 1))
@@ -66,6 +67,12 @@ export function Dashboard() {
   const monthlyQuery = useQuery<MonthlyStat[]>({
     queryKey: ['monthly-stats', year],
     queryFn: async () => (await api.get('/stats/monthly', { params: { year } })).data.data,
+  })
+  const collecteursQuery = useQuery<CollecteursResponse>({
+    queryKey: ['collecteurs'],
+    queryFn: async () => (await api.get('/collecteurs')).data.data,
+    enabled: canSeeFundsHolders,
+    refetchInterval: 30000,
   })
 
   const stats = statsQuery.data
@@ -149,6 +156,34 @@ export function Dashboard() {
       <Panel title="Activité récente" extra={<Button type="link" onClick={() => setActiveView('contributions')}>Voir tout</Button>}>
         {statsQuery.isLoading ? <Skeleton active /> : <ActivityTimeline items={stats?.recentContributions ?? []} />}
       </Panel>
+
+      {canSeeFundsHolders && (
+        <Panel title="Fonds détenus par collecteur" extra={<Button type="link" onClick={() => setActiveView('collecteurs')}>Voir tout</Button>}>
+          {collecteursQuery.isLoading ? <Skeleton active paragraph={{ rows: 4 }} /> : (collecteursQuery.data?.summary?.length ?? 0) === 0 ? (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Aucun fonds détenu par un collecteur actuellement" />
+          ) : (
+            <div className="space-y-2">
+              {(collecteursQuery.data?.summary ?? []).slice(0, 6).map(item => (
+                <button
+                  key={item.collecteurId}
+                  type="button"
+                  onClick={() => navigateToNotification({ targetView: 'journal', targetId: item.collecteurId })}
+                  className="flex w-full items-center gap-3 rounded-xl border border-slate-100 p-3 text-left transition hover:border-green-300 hover:bg-green-50"
+                >
+                  <Avatar name={item.collecteurName} size="sm" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-slate-800">{item.collecteurName}</span>
+                    <span className="block truncate text-xs text-slate-400">
+                      {item.nbContributions} contribution(s){item.lastValidatedByName ? ` · validé par ${item.lastValidatedByName}` : ''}
+                    </span>
+                  </span>
+                  <strong className="shrink-0 text-sm text-[#1A6B1A]">{formatAmount(item.totalARemettre)}</strong>
+                </button>
+              ))}
+            </div>
+          )}
+        </Panel>
+      )}
 
       <div className="grid grid-cols-1 gap-4 md:gap-6 xl:grid-cols-3">
         <Panel title="Top contributeurs">

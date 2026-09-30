@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, History, ScrollText, X } from 'lucide-react'
 import api from '@/lib/api'
@@ -8,6 +8,7 @@ import { SkeletonTableRow } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Avatar } from '@/components/ui/Avatar'
 import { useAuthStore } from '@/store/authStore'
+import { useAppStore } from '@/store/appStore'
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface AuditEntry {
@@ -150,6 +151,17 @@ export function Journal() {
   const [userId, setUserId] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+
+  // Arrivée depuis une carte "Fonds détenus par collecteur" (Dashboard) ou une
+  // notification : préremplit le filtre Utilisateur avec la personne visée.
+  const focusTarget = useAppStore(s => s.focusTarget)
+  const clearFocusTarget = useAppStore(s => s.clearFocusTarget)
+  useEffect(() => {
+    if (focusTarget?.view !== 'journal' || !focusTarget.id) return
+    setUserId(focusTarget.id)
+    setPage(1)
+    clearFocusTarget()
+  }, [focusTarget, clearFocusTarget])
 
   const hasFilters = Boolean(action || entityType || userId || from || to)
 
