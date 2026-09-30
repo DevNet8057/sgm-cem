@@ -375,7 +375,12 @@ model Contribution {
   valeursChamps         Json? // réponses aux champs personnalisés d'une collecte publique
 
   // ── Champs pour les paiements en ligne (Yelii / CinetPay) ──────────────────
-  externalTransactionId String?        @unique
+  // Pas @unique : un paiement réparti (PaymentBatch) partage UNE transaction
+  // fournisseur entre PLUSIEURS lignes de contribution (une par rubrique) —
+  // @unique interdirait d'écrire externalTransactionId sur plus d'une ligne
+  // à la fois (violerait la contrainte dès le premier lot à 2+ rubriques).
+  // L'index ci-dessous (@@index) suffit pour les lookups webhook/polling.
+  externalTransactionId String?
   paymentStatus         PaymentStatus? @default(PENDING)
   netAmount             Int?
   paymentUrl            String?
