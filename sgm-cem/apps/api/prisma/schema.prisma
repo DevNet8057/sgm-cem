@@ -597,6 +597,8 @@ model FundsTransfer {
 
   remindersSentCount Int       @default(0)
   lastReminderSentAt DateTime?
+  // Alerte « transfert non traité » envoyée à la trésorerie (une seule fois)
+  tresorierAlertedAt DateTime?
 
   @@index([senderId])
   @@index([receiverId])

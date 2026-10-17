@@ -87,6 +87,8 @@ type SettingsForm = {
   inactivityMonthsThreshold: string
   reminderDelayDays: string
   maxFundsRetentionDays: string
+  transferPendingReminderHours: string
+  transferAlertTresorierHours: string
   communityName: string
   communityVerse: string
 }
@@ -98,6 +100,8 @@ const emptyForm: SettingsForm = {
   inactivityMonthsThreshold: '',
   reminderDelayDays: '',
   maxFundsRetentionDays: '',
+  transferPendingReminderHours: '',
+  transferAlertTresorierHours: '',
   communityName: '',
   communityVerse: '',
 }
@@ -127,6 +131,8 @@ export function Parametres() {
       inactivityMonthsThreshold: String(data.inactivityMonthsThreshold),
       reminderDelayDays: String(data.reminderDelayDays),
       maxFundsRetentionDays: String(data.maxFundsRetentionDays),
+      transferPendingReminderHours: String(data.transferPendingReminderHours),
+      transferAlertTresorierHours: String(data.transferAlertTresorierHours),
       communityName: data.communityName,
       communityVerse: data.communityVerse,
     })
@@ -187,8 +193,11 @@ export function Parametres() {
 
           <Panel icon={ShieldCheck} title="Suivi et controle">
             <Input label="Inactivite apres mois" type="number" value={form.inactivityMonthsThreshold} onChange={inactivityMonthsThreshold => setForm({ ...form, inactivityMonthsThreshold })} required />
-            <Input label="Délai de rappel (jours)" type="number" value={form.reminderDelayDays} onChange={reminderDelayDays => setForm({ ...form, reminderDelayDays })} required />
-            <Input label="Retention max fonds (jours)" type="number" value={form.maxFundsRetentionDays} onChange={maxFundsRetentionDays => setForm({ ...form, maxFundsRetentionDays })} required />
+            <Input label="Relance des paiements à confirmer (jours, 0 = désactivée)" type="number" value={form.reminderDelayDays} onChange={reminderDelayDays => setForm({ ...form, reminderDelayDays })} required />
+            <Input label="Rétention maximale des fonds (jours)" type="number" value={form.maxFundsRetentionDays} onChange={maxFundsRetentionDays => setForm({ ...form, maxFundsRetentionDays })} required />
+            <Input label="Rappel d'un transfert non reçu (heures, 0 = désactivé)" type="number" value={form.transferPendingReminderHours} onChange={transferPendingReminderHours => setForm({ ...form, transferPendingReminderHours })} required />
+            <Input label="Alerte trésorerie, transfert non reçu (heures, 0 = désactivée)" type="number" value={form.transferAlertTresorierHours} onChange={transferAlertTresorierHours => setForm({ ...form, transferAlertTresorierHours })} required />
+            <p className="text-xs text-slate-500">Au-delà du double des délais en jours, la trésorerie reçoit un récapitulatif quotidien.</p>
           </Panel>
 
           {error && <div className="rounded-[10px] border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>}
@@ -355,6 +364,8 @@ function serialize(form: SettingsForm) {
     inactivityMonthsThreshold: Number(form.inactivityMonthsThreshold),
     reminderDelayDays: Number(form.reminderDelayDays),
     maxFundsRetentionDays: Number(form.maxFundsRetentionDays),
+    transferPendingReminderHours: Number(form.transferPendingReminderHours),
+    transferAlertTresorierHours: Number(form.transferAlertTresorierHours),
     communityName: form.communityName,
     communityVerse: form.communityVerse,
   }

@@ -1,7 +1,7 @@
 'use client'
 import { useMemo, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ArrowRight, Building2, Calendar, Check, ChevronDown, CreditCard, FolderOpen, HandCoins, Landmark, MapPin, Plus, RefreshCw, ShieldCheck, Shield, Smartphone, User, UserCheck, UserPlus, Wallet, X, XCircle, Loader2, Banknote } from 'lucide-react'
+import { AlertTriangle, ArrowRight, BellRing, Building2, Calendar, Check, ChevronDown, CreditCard, FolderOpen, HandCoins, Landmark, MapPin, Plus, RefreshCw, ShieldCheck, Shield, Smartphone, User, UserCheck, UserPlus, Wallet, X, XCircle, Loader2, Banknote } from 'lucide-react'
 import api from '@/lib/api'
 import { cn, formatAmount, formatDate, formatDateTime, LOCALISATION_FONDS_LABELS, MODE_PAIEMENT_LABELS, ROLE_LABELS, TRANSFER_TYPE_LABELS, contributorKind, contributorName } from '@/lib/utils'
 import { Avatar } from '@/components/ui/Avatar'
@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { SkeletonTableRow } from '@/components/ui/Skeleton'
 import { Modal } from '@/components/ui/Modal'
 import { ContributorBadge } from '@/components/ui/CompactList'
+import { useAppStore } from '@/store/appStore'
 import type { CollecteurSummary, CollecteursResponse, Contribution, LocalisationFonds, TransferType, UserRole } from '@/types'
 
 const LOCATION_LABELS: Record<string, string> = {
@@ -36,6 +37,11 @@ export function Collecteurs() {
   const [depositProof, setDepositProof] = useState<File | null>(null)
   const [bankError, setBankError] = useState('')
   const [bankOpen, setBankOpen] = useState<string[]>([])
+  // Demande de remise (EF-M07-04) : notification au détenteur, sans effet comptable
+  const [remiseFor, setRemiseFor] = useState<CollecteurSummary | null>(null)
+  const [remiseMessage, setRemiseMessage] = useState('')
+  const [remiseError, setRemiseError] = useState('')
+  const { addToast } = useAppStore()
 
   const { data, isLoading, refetch } = useQuery<CollecteursResponse>({
     queryKey: ['collecteurs'],
@@ -67,6 +73,19 @@ export function Collecteurs() {
   // Circuit officiel : on ne remet que les fonds que l'on détient (l'ADMIN peut
   // initier pour un détenteur) ; le destinataire confirme dans « Fonds à réceptionner ».
   const canTransferAny = myRole === 'ADMIN' || myRole === 'DEVELOPER'
+  const canRequestRemise = ['TRESORIER', 'ADMIN', 'DEVELOPER'].includes(myRole)
+  const remiseMutation = useMutation({
+    mutationFn: (p: { detenteurId: string; message: string }) =>
+      api.post('/funds/remise-requests', { detenteurId: p.detenteurId, ...(p.message.trim() ? { message: p.message.trim() } : {}) }),
+    onSuccess: () => {
+      addToast({ title: 'Demande envoyée', message: `Notification envoyée à ${remiseFor?.detenteurName ?? 'la personne concernée'}.`, variant: 'success' })
+      setRemiseFor(null); setRemiseMessage(''); setRemiseError('')
+    },
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { error?: { message?: string } } } }
+      setRemiseError(e.response?.data?.error?.message ?? 'Demande impossible')
+    },
+  })
   const { data: eligibleRecipients = [] } = useQuery<Array<{ id: string; fullName: string; role: string }>>({
     queryKey: ['funds-eligible-receivers'],
     queryFn: async () => (await api.get('/funds/eligible-receivers')).data.data,
@@ -198,6 +217,9 @@ export function Collecteurs() {
               isSelectable={isTransferable}
               onToggle={toggle}
               onToggleGroup={ids => setSelected(cur => ids.every(id => cur.includes(id)) ? cur.filter(id => !ids.includes(id)) : Array.from(new Set([...cur, ...ids])))}
+              onRequestRemise={canRequestRemise && group.summary.detenteurId !== 'sans-detenteur' && group.summary.detenteurId !== data?.myUserId && group.summary.totalDetenu > 0
+                ? () => { setRemiseError(''); setRemiseMessage(''); setRemiseFor(group.summary) }
+                : undefined}
             />
           ))
         )}
@@ -329,6 +351,24 @@ export function Collecteurs() {
       {canSeeDeposits && <BankDepositHistory />}
 
       <TraceSection />
+
+      <Modal open={!!remiseFor} onClose={() => setRemiseFor(null)} size="sm"
+        title="Demander la remise des fonds"
+        description={remiseFor ? `${remiseFor.detenteurName} détient ${formatAmount(remiseFor.totalDetenu)}. Une notification lui est envoyée ; aucun mouvement de fonds n'est enregistré.` : ''}>
+        <label className="block text-sm font-medium text-gray-700">
+          Message (facultatif)
+          <textarea value={remiseMessage} onChange={e => setRemiseMessage(e.target.value)} maxLength={300} rows={3}
+            className="mt-1 w-full rounded-[10px] border border-gray-200 px-3 py-2 text-base focus:border-[#1A6B1A] focus:outline-none"
+            placeholder="Ex. : avant le culte de dimanche" />
+        </label>
+        {remiseError && <p role="alert" className="mt-2 text-sm text-red-600">{remiseError}</p>}
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setRemiseFor(null)}>Annuler</Button>
+          <Button loading={remiseMutation.isPending} onClick={() => remiseFor && remiseMutation.mutate({ detenteurId: remiseFor.detenteurId, message: remiseMessage })}>
+            <BellRing size={16} /> Envoyer la demande
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }
@@ -492,7 +532,7 @@ function BankDepositHistory() {
       {/* Détail d'un dépôt : contributions couvertes par la preuve */}
       <Modal open={!!detail} onClose={() => setDetail(null)} size="lg"
         title={`Dépôt ${detail?.referenceBordereau ?? ''}`}
-        description={`${formatAmount(detail?.totalAmount ?? 0)} FCFA · déposé par ${detail?.depositedByName ?? ''} · ${detail ? formatDateTime(detail.createdAt) : ''}`}>
+        description={`${formatAmount(detail?.totalAmount ?? 0)} · déposé par ${detail?.depositedByName ?? ''} · ${detail ? formatDateTime(detail.createdAt) : ''}`}>
         {detail?.note && <p className="mb-3 text-xs text-gray-500 italic">Note : « {detail.note} »</p>}
         <div className="max-h-[45vh] overflow-y-auto">
           <table className="w-full text-sm table-mobile-cards">
@@ -665,7 +705,7 @@ function FlowBar({ color, value, total }: { color: string; value: number; total:
   return <div className={color} style={{ width: `${Math.max(4, (value / total) * 100)}%` }} />
 }
 
-function CollectorGroup({ summary, items, open, onToggleOpen, selected, isSelectable, onToggle, onToggleGroup }: {
+function CollectorGroup({ summary, items, open, onToggleOpen, selected, isSelectable, onToggle, onToggleGroup, onRequestRemise }: {
   summary: CollecteurSummary
   items: Contribution[]
   open: boolean
@@ -674,6 +714,7 @@ function CollectorGroup({ summary, items, open, onToggleOpen, selected, isSelect
   isSelectable: (c: Contribution) => boolean
   onToggle: (id: string) => void
   onToggleGroup: (ids: string[]) => void
+  onRequestRemise?: () => void
 }) {
   const selectableIds = items.filter(isSelectable).map(c => c.id)
   const allSelected = selectableIds.length > 0 && selectableIds.every(id => selected.includes(id))
@@ -701,6 +742,13 @@ function CollectorGroup({ summary, items, open, onToggleOpen, selected, isSelect
       </button>
       {open && (
         <div className="bg-gray-50/40">
+          {onRequestRemise && (
+            <div className="px-4 pt-2">
+              <Button size="sm" variant="outline" onClick={onRequestRemise}>
+                <BellRing size={14} /> Demander la remise
+              </Button>
+            </div>
+          )}
           {selectableIds.length > 0 && (
             <label className="flex min-h-11 items-center gap-3 px-4 text-xs font-semibold text-slate-600">
               <input type="checkbox" className="h-5 w-5 accent-[#1A6B1A]" checked={allSelected} onChange={() => onToggleGroup(selectableIds)} />

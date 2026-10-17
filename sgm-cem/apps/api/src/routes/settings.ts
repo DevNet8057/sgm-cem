@@ -14,6 +14,9 @@ const settingsSchema = z.object({
   inactivityMonthsThreshold: z.number().int().min(1).max(60).optional(),
   reminderDelayDays: z.number().int().min(0).max(365).optional(),
   maxFundsRetentionDays: z.number().int().min(1).max(90).optional(),
+  // Relances des transferts en attente (0 : désactivé)
+  transferPendingReminderHours: z.number().int().min(0).max(720).optional(),
+  transferAlertTresorierHours: z.number().int().min(0).max(720).optional(),
   communityName: z.string().min(3).max(120).optional(),
   communityVerse: z.string().min(3).max(600).optional(),
 })

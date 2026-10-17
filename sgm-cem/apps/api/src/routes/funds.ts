@@ -12,6 +12,9 @@ import { generateBorderauPdf, generateAndStoreBorderau } from '../services/borde
 import { getFileStream, getManagedStorageKey, storeFile } from '../services/storage'
 import { getPrisma } from '../lib/prisma'
 import { DEPOSITABLE_LOCATIONS, TRANSFERABLE_LOCATIONS, checkLedger, positionAt, receptionLocation, recordMovements } from '../services/fund-ledger.service'
+import { REMINDER_TITLES, heldFunds, notifiedSince } from '../services/reminders.service'
+import { notifyInApp } from '../services/notification'
+import { audit } from '../services/audit.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -121,6 +124,40 @@ router.get('/eligible-receivers', authenticate, requireLevel(2), async (req, res
   const eligible = users.filter(u => u.id !== myUserId)
 
   res.json({ success: true, data: eligible })
+})
+
+// POST /api/funds/remise-requests - Demande de remise (EF-M07-04) : le trésorier
+// demande à un détenteur de lui remettre ses fonds. Notification ciblée seulement,
+// aucun effet comptable ; une demande par détenteur et par heure au plus.
+const remiseRequestSchema = z.object({
+  detenteurId: z.string().min(1),
+  message: z.string().trim().max(300).optional(),
+})
+
+router.post('/remise-requests', authenticate, requireLevel(4), async (req, res) => {
+  const { detenteurId, message } = remiseRequestSchema.parse(req.body)
+  if (detenteurId === req.user!.userId) throw new AppError('BUSINESS_RULE', 'Vous ne pouvez pas vous adresser une demande de remise.', 400)
+  const holder = await prisma.user.findUnique({ where: { id: detenteurId }, select: { id: true, fullName: true, isActive: true } })
+  if (!holder || !holder.isActive) throw new AppError('NOT_FOUND', 'Détenteur introuvable', 404)
+
+  const held = await heldFunds(detenteurId)
+  if (held.total <= 0) throw new AppError('BUSINESS_RULE', `${holder.fullName} ne détient aucun fonds à remettre.`, 400)
+  if (await notifiedSince(detenteurId, REMINDER_TITLES.remise, new Date(Date.now() - 60 * 60 * 1000))) {
+    throw new AppError('DUPLICATE', 'Une demande de remise lui a déjà été envoyée il y a moins d\'une heure.', 409)
+  }
+
+  const requester = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { fullName: true } })
+  const requesterName = requester?.fullName ?? req.user!.email
+  await notifyInApp(detenteurId, REMINDER_TITLES.remise,
+    `${requesterName} vous demande de lui remettre ${formatAmount(held.total)} (${held.count} contribution(s)).${message ? ` Message : ${message}` : ''}`,
+    'REMISE', { kind: 'demande-remise', requesterId: req.user!.userId }, { view: 'collecteurs' })
+  await audit({
+    req, userId: req.user!.userId, userName: req.user!.email, action: 'CREATE',
+    entityType: 'DemandeRemise', entityId: detenteurId,
+    details: { detenteurName: holder.fullName, montant: held.total, count: held.count, ...(message ? { message } : {}) },
+  })
+
+  res.status(201).json({ success: true, data: { detenteurId, detenteurName: holder.fullName, montant: held.total, count: held.count } })
 })
 
 // POST /api/funds/transfer - Initier un transfert
@@ -573,7 +610,7 @@ async function notifyTransferInitiated(p: {
     data: {
       userId: p.receiverId,
       title: 'Transfert à valider',
-      body: `${p.senderName} vous a transféré ${formatAmount(p.totalAmount)} FCFA (${p.count} contribution(s)). Ouvrez l'application pour confirmer.`,
+      body: `${p.senderName} vous a transféré ${formatAmount(p.totalAmount)} (${p.count} contribution(s)). Ouvrez l'application pour confirmer.`,
       type: 'TRANSFER',
       isRead: false,
       targetView: 'transfer-validations',
@@ -594,7 +631,7 @@ async function notifyTransferConfirmed(p: {
     data: {
       userId: p.senderId,
       title: 'Transfert confirmé',
-      body: `${p.receiverName} a confirmé la réception de ${formatAmount(p.totalAmount)} FCFA (${p.count} contribution(s)).`,
+      body: `${p.receiverName} a confirmé la réception de ${formatAmount(p.totalAmount)} (${p.count} contribution(s)).`,
       type: 'TRANSFER',
       isRead: false,
       targetView: 'collecteurs',
@@ -614,7 +651,7 @@ async function notifyTransferRefused(p: {
     data: {
       userId: p.senderId,
       title: 'Transfert refusé',
-      body: `${p.receiverName} a refusé votre transfert de ${formatAmount(p.totalAmount)} FCFA. Motif: ${p.reason}`,
+      body: `${p.receiverName} a refusé votre transfert de ${formatAmount(p.totalAmount)}. Motif: ${p.reason}`,
       type: 'TRANSFER',
       isRead: false,
       targetView: 'collecteurs',

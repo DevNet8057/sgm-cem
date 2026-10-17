@@ -12,6 +12,7 @@ import { getConfigNumber } from '../services/config.service'
 import { runPaymentReconciliation } from './payment-reconciliation'
 import { runLedgerCheck, runMonthlyStatements } from '../services/cron'
 import { pruneExpiredActivity } from '../services/activity-write.service'
+import { runDailyReminders, runTransferReminders } from '../services/reminders.service'
 
 const QUEUE = 'sgm-maintenance'
 const TZ = 'Africa/Douala'
@@ -35,6 +36,8 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
   { name: 'paiements-reconciliation', label: 'Réconciliation des paiements', repeat: { every: 60_000 }, run: reconciliationTick },
   { name: 'grand-livre-controle', label: 'Contrôle quotidien du grand livre', repeat: { pattern: '10 6 * * *', tz: TZ }, run: () => runLedgerCheck() },
   { name: 'releves-mensuels', label: 'Relevés mensuels', repeat: { pattern: '0 8 1 * *', tz: TZ }, run: () => runMonthlyStatements() },
+  { name: 'relances-quotidiennes', label: 'Relances : paiements à confirmer, fonds à remettre', repeat: { pattern: '0 9 * * *', tz: TZ }, run: () => runDailyReminders() },
+  { name: 'relances-transferts', label: 'Relances : transferts en attente', repeat: { pattern: '20 * * * *', tz: TZ }, run: () => runTransferReminders() },
   { name: 'activite-retention', label: "Purge des données d'activité", repeat: { pattern: '30 3 * * *', tz: TZ }, run: () => pruneExpiredActivity() },
 ]
 

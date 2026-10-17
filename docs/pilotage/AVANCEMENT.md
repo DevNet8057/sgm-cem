@@ -26,7 +26,7 @@ Référence : [`07_FEUILLE_DE_ROUTE.md`](07_FEUILLE_DE_ROUTE.md).
 | 1 Fiabiliser | ✅ 17/10/2026 | Voir « Phase 1 — détail » ; jalon J1 : reste la partie serveur et juridique de la check-list GO |
 | 2 Mobile-first | ✅ 17/10/2026 | Voir « Phase 2 — détail » ; jalon J2 : reste la validation des parcours sur appareils réels |
 | 3 Socle et domaine | ✅ 17/10/2026 (avec reports) | Voir « Phase 3 — détail » ; jalon J3 : contrôle d'invariant quotidien en place, position à date disponible |
-| 4 Gouvernance | ⏳ en cours | — |
+| 4 Gouvernance | ⏳ en cours | Voir « Phase 4 — détail » |
 
 ## Phase 0 — détail (livré)
 | Lot | Livré | Vérification |
@@ -90,6 +90,11 @@ Reporté (avec raison) :
 - **3.7 OpenAPI + client typé** : non commencé ; utile pour une équipe de plusieurs développeurs, sans effet pour les utilisateurs.
 - Machine à états unique des statuts de contribution, file d'attente (outbox) des notifications et boîte de réception des webhooks, reversements du portefeuille électronique avec frais : à planifier.
 
+## Phase 4 — détail (en cours)
+| Lot | Livré | Vérification |
+|---|---|---|
+| 4.3 Relances et demande de remise | **Relance quotidienne** (9 h, Yaoundé) : paiements en espèces/virement non confirmés depuis plus de `reminderDelayDays` jours → leur collecteur ; fonds confirmés détenus depuis plus de `maxFundsRetentionDays` jours → leur détenteur ; au-delà du **double** de ces délais → un récapitulatif à la trésorerie. **Transferts non reçus** (contrôle horaire) : rappel au destinataire après `transferPendingReminderHours`, renouvelé à chaque intervalle (`remindersSentCount`), alerte **unique** à la trésorerie après `transferAlertTresorierHours`. Au plus une relance par personne et par jour ; un délai à 0 désactive la relance. **Demande de remise** (trésorier, administrateur) : bouton « Demander la remise » sur chaque détenteur dans *Fonds collecteurs*, message facultatif, notification ciblée, journal d'audit, **aucun effet comptable**, une demande par heure et par détenteur. Délais des transferts réglables dans *Paramètres*. Toutes ces relances sont des notifications dans l'application (doublées d'un push navigateur) : **aucun WhatsApp, SMS ni e-mail**. Corrigé au passage : « FCFA FCFA » dans les textes de notification des transferts | Tests `phase4-relances` (10) ; 343 tests API ; parcours navigateur à 360 px sur la base de vérification : demande envoyée (201, 4 000 FCFA, 2 contributions), seconde demande refusée avec message lisible (409) |
+
 ## ⚠️ Avant de déployer cette version
 1. **Sauvegarder** la base (`scripts/backup-db.ps1`) — l'API le fait aussi automatiquement au démarrage.
 2. Dans le `.env` racine : `CSRF_SECRET`, `JWT_SECRET`, `REFRESH_TOKEN_SECRET` et **`CONFIG_ENCRYPTION_KEY`** (nouveau) doivent faire **≥ 32 caractères** (`openssl rand -base64 48`), sinon l'API refuse de démarrer en production. Conserver `CONFIG_ENCRYPTION_KEY` hors du serveur : au premier démarrage, les secrets d'intégration en base sont chiffrés avec elle.
@@ -99,6 +104,7 @@ Reporté (avec raison) :
 6. Après la mise à jour, les trésoriers peuvent recevoir des alertes sur d'anciens paiements Mobile Money bloqués : c'est la réconciliation qui reprend enfin les paiements répartis.
 7. Si un téléphone garde des contributions saisies hors ligne avec l'ancienne version, elles sont envoyées normalement à la reconnexion (sans protection anti-doublon pour ces anciennes saisies seulement) : vérifier la file avant la mise à jour si possible.
 8. Au premier démarrage, le **grand livre des fonds** est initialisé avec la position du jour (positions antérieures non reconstituables) ; les virements confirmés « En transit » passent « Remis trésorier ». Prévenir le trésorier : tout dépôt en banque exige désormais le **reçu de dépôt** (photo ou PDF).
+9. Les **relances automatiques** démarrent avec les délais déjà enregistrés dans *Paramètres* (7 jours, 24 h, 48 h par défaut) : dès le premier jour, les collecteurs ayant d'anciens paiements non confirmés ou des fonds anciens recevront une relance. Ajuster les délais (ou les mettre à 0) avant la mise à jour si le Bureau le souhaite.
 
 ## Actions qui restent à faire par l'association (hors code)
 - **Révoquer la clé Yelii** qui figurait dans `docs/reference/PAYMENT_FLOWS_SGM_CEM.md` (exposée dans l'historique Git) et en générer une nouvelle dans la console Yelii, puis la saisir dans le panneau développeur.
