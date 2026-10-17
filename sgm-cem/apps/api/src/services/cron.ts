@@ -1,4 +1,3 @@
-import cron from 'node-cron'
 import { alertTresoriers, sendMonthlyStatement } from './notification'
 import { getPrisma } from '../lib/prisma'
 import { checkLedger } from './fund-ledger.service'
@@ -6,28 +5,7 @@ import { logger } from '../lib/logger'
 
 const prisma = getPrisma()
 
-/**
- * H4 — Relevé mensuel automatique.
- * Runs on the 1st of each month at 08:00.
- * Sends each active member a summary of their previous month's contributions.
- */
-export function scheduleMonthlyCron(): void {
-  // '0 8 1 * *' = At 08:00 on the 1st of every month
-  cron.schedule('0 8 1 * *', async () => {
-    console.log('[Cron] Starting monthly statement job...')
-    try {
-      await runMonthlyStatements()
-      console.log('[Cron] Monthly statement job complete.')
-    } catch (e) {
-      console.error('[Cron] Monthly statement job failed:', e)
-    }
-  }, { timezone: 'Africa/Douala' })
-
-  console.log('[Cron] Monthly statement job scheduled (1st of each month at 08:00 WAT)')
-
-  // Contrôle quotidien du grand livre des fonds (jalon J3), 06:10 heure de Yaoundé
-  cron.schedule('10 6 * * *', () => { void runLedgerCheck() }, { timezone: 'Africa/Douala' })
-}
+// Planification de ces tâches : jobs/scheduler.ts
 
 /** Contrôle d'invariant du grand livre : alerte la trésorerie au premier écart. */
 export async function runLedgerCheck(): Promise<number> {

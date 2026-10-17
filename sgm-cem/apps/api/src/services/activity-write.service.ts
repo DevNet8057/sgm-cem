@@ -14,9 +14,7 @@ import { getConfigNumber } from './config.service'
 
 const prisma = getPrisma()
 const MAX_TABS_PER_SESSION = 100
-const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000
 
-let retentionTimer: NodeJS.Timeout | null = null
 
 export interface BrowserActivityContext {
   userId: string
@@ -522,16 +520,3 @@ export async function pruneExpiredActivity(now = new Date()): Promise<number> {
   return deletedSessions.count
 }
 
-export function startActivityRetentionJob(): void {
-  if (process.env.NODE_ENV === 'test' || retentionTimer) return
-
-  void pruneExpiredActivity().catch(() => {
-    console.error("[Activity] Purge des données d'activité impossible")
-  })
-  retentionTimer = setInterval(() => {
-    void pruneExpiredActivity().catch(() => {
-      console.error("[Activity] Purge des données d'activité impossible")
-    })
-  }, RETENTION_INTERVAL_MS)
-  retentionTimer.unref()
-}

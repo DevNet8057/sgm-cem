@@ -127,6 +127,12 @@ Aucun mot de passe n'est écrit dans le code (phase 0, 17/10/2026).
 - Comptes encore sur un ancien mot de passe commun : `docker exec -e CANDIDATE_PASSWORDS='ancien1|ancien2' sgm-cem-api-1 sh -c 'cd /app/apps/api && pnpm exec ts-node prisma/audit-default-passwords.ts'`
   (liste seulement ; `-e FORCE_CHANGE=1` impose le changement, sur décision du Bureau).
 
+## Tâches planifiées (réconciliation, grand livre, relevés, purge)
+Catalogue unique : `apps/api/src/jobs/scheduler.ts`. Avec Redis (`REDIS_URL`), planificateurs
+BullMQ : **une seule exécution par échéance**, même avec plusieurs processus. Ce compose les
+exécute dans l'API ; la production les confie au service `worker` (`node dist/worker.js`,
+même image) avec `RUN_SCHEDULED_JOBS=false` sur l'API (voir `deploy/docker-compose.prod.yml`).
+
 ## Variables de sécurité vérifiées au démarrage (NODE_ENV=production)
 L'API **refuse de démarrer** si l'une manque ou fait moins de 32 caractères :
 `JWT_SECRET`, `REFRESH_TOKEN_SECRET`, `CSRF_SECRET`, `CONFIG_ENCRYPTION_KEY` (générer : `openssl rand -base64 48`).

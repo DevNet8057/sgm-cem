@@ -29,9 +29,7 @@ import { publicRouter } from './routes/public'
 import { errorHandler } from './middleware/errorHandler'
 import { paymentsRouter } from './routes/payments'
 import { activityRouter } from './routes/activity'
-import { startActivityRetentionJob } from './services/activity-write.service'
-import { schedulePaymentReconciliation } from './jobs/payment-reconciliation'
-import { scheduleMonthlyCron } from './services/cron'
+import { startScheduledJobs } from './jobs/scheduler'
 import { initSocketIO } from './lib/socket'
 import { loadConfigCache } from './services/config.service'
 import { apiLimiter } from './middleware/rate-limit'
@@ -188,14 +186,13 @@ async function bootstrap(): Promise<void> {
   assertEncryptionKeyForProduction()
   await loadConfigCache()
   applyLogLevel(getConfig('LOG_LEVEL'))
-  startActivityRetentionJob()
   const server = http.createServer(app)
   initSocketIO(server)
   server.listen(Number(PORT), () => {
     console.log(`✅ SGM-CEM API running on port ${PORT}`)
   })
-  schedulePaymentReconciliation()
-  scheduleMonthlyCron()
+  // Tâches planifiées : ici par défaut, ou dans le worker (RUN_SCHEDULED_JOBS=false)
+  if (process.env.RUN_SCHEDULED_JOBS !== 'false') await startScheduledJobs()
 }
 
 if (process.env.NODE_ENV !== 'test') {

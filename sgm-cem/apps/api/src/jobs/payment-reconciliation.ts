@@ -1,4 +1,3 @@
-import cron from 'node-cron'
 import { alertTresoriers } from '../services/notification'
 import { getConfigNumber } from '../services/config.service'
 import { CONTRIBUTION_SYNC_SELECT, syncPaymentContributionStatus } from '../services/payment-status.service'
@@ -15,32 +14,8 @@ const alertedStale = new Set<string>()
  * I8 — Job de réconciliation failsafe (section 11 Cas 2 du doc paiements).
  * Vérifie les contributions Mobile Money et carte bloquées en PROCESSING
  * depuis plus de 15 minutes (cas où le webhook n'est jamais arrivé).
- *
- * Fréquence DYNAMIQUE (panneau développeur, section E) : le cron tourne chaque
- * minute et n'exécute le job que si RECONCILIATION_INTERVAL_MINUTES se sont
- * écoulées depuis la dernière exécution — un changement de fréquence prend
- * effet sans redémarrage.
+ * Planification : jobs/scheduler.ts (fréquence RECONCILIATION_INTERVAL_MINUTES).
  */
-let lastRunAt = 0
-
-export function schedulePaymentReconciliation(): void {
-  cron.schedule('* * * * *', async () => {
-    const intervalMinutes = Math.max(1, getConfigNumber('RECONCILIATION_INTERVAL_MINUTES', 10))
-    if (Date.now() - lastRunAt < intervalMinutes * 60_000) return
-    lastRunAt = Date.now()
-
-    console.log(`[Cron] Starting payment reconciliation job (intervalle ${intervalMinutes} min)...`)
-    try {
-      const result = await runPaymentReconciliation()
-      console.log(`[Cron] Payment reconciliation complete: ${result.checked} checked, ${result.confirmed} confirmed, ${result.failed} failed.`)
-    } catch (e) {
-      console.error('[Cron] Payment reconciliation job failed:', e)
-    }
-  })
-
-  console.log('[Cron] Payment reconciliation job scheduled (intervalle dynamique, défaut 10 min)')
-}
-
 export async function runPaymentReconciliation(): Promise<{ checked: number; confirmed: number; failed: number }> {
   const staleSince = new Date(Date.now() - STALE_AFTER_MS)
 
