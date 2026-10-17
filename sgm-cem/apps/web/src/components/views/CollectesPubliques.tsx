@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Copy, CreditCard, Download, Edit3, List, Megaphone, Plus, Trash2, X } from 'lucide-react'
-import api from '@/lib/api'
+import api, { downloadFromApi } from '@/lib/api'
 import { cn, formatAmount, formatDateTime, MODE_PAIEMENT_LABELS, progressGradient } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -12,7 +12,6 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Avatar } from '@/components/ui/Avatar'
 import { useAppStore } from '@/store/appStore'
 import { useFocusHighlight } from '@/hooks/useFocusHighlight'
-import { downloadXlsx } from '@/lib/exportXlsx'
 import type { ChampPersonnalise, ChampPersonnaliseType } from '@sgm-cem/shared'
 
 /** Ligne renvoyée par GET /collectes/:id/contributions — vue trésorier détaillée. */
@@ -381,32 +380,7 @@ function CollecteContributionsDrawer({ collecte, open, onClose }: {
     if (!collecte) return
     setExporting(true)
     try {
-      const allRows = await fetchAllContributions(collecte.id)
-      await downloadXlsx({
-        filename: `collecte-${collecte.publicSlug}-${slugDate()}.xlsx`,
-        sheetName: 'Contributions',
-        title: `Contributions — ${collecte.titre}`,
-        columns: [
-          { header: 'Date', key: 'date', width: 18 },
-          { header: 'Nom', key: 'nom', width: 26 },
-          { header: 'Type', key: 'type', width: 12 },
-          { header: 'Téléphone', key: 'phone', width: 16 },
-          { header: 'Montant', key: 'montant', width: 16, type: 'number' },
-          { header: 'Statut', key: 'statut', width: 16 },
-          { header: 'Mode', key: 'mode', width: 16 },
-          ...champs.map(champ => ({ header: champ.label, key: champ.key, width: 18 })),
-        ],
-        rows: allRows.map(r => ({
-          date: formatDateTime(r.date),
-          nom: r.nom,
-          type: r.type === 'MEMBRE' ? 'Membre' : 'Externe',
-          phone: r.phone ?? '',
-          montant: r.montant,
-          statut: STATUT_LABELS[r.statut] ?? r.statut,
-          mode: MODE_PAIEMENT_LABELS[r.modePaiement] ?? r.modePaiement,
-          ...Object.fromEntries(champs.map(champ => [champ.key, formatChampValue(r.valeursChamps?.[champ.key])])),
-        })),
-      })
+      await downloadFromApi(`/exports/collectes/${collecte.id}.xlsx`, undefined, `collecte-${collecte.publicSlug}.xlsx`)
       addToast({ title: 'Export généré', variant: 'success' })
     } catch {
       addToast({ title: 'Erreur', message: 'Export impossible pour le moment', variant: 'error' })
@@ -484,31 +458,12 @@ function CollecteContributionsDrawer({ collecte, open, onClose }: {
   )
 }
 
-/** Récupère toutes les pages (l'API plafonne `limit` à 100) pour un export exhaustif. */
-async function fetchAllContributions(collecteId: string): Promise<ContributionRow[]> {
-  const limit = 100
-  let page = 1
-  let all: ContributionRow[] = []
-  while (true) {
-    const res = (await api.get(`/collectes/${collecteId}/contributions`, { params: { page, limit } })).data as ContributionsResponse
-    all = all.concat(res.data)
-    if (page >= res.pagination.totalPages || res.data.length === 0) break
-    page += 1
-  }
-  return all
-}
-
 /** Formate une valeur de champ personnalisé pour affichage/export (booléens -> Oui/Non). */
 function formatChampValue(value: unknown): string | number {
   if (value == null || value === '') return ''
   if (typeof value === 'boolean') return value ? 'Oui' : 'Non'
   if (typeof value === 'number' || typeof value === 'string') return value
   return String(value)
-}
-
-function slugDate(): string {
-  const d = new Date()
-  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
 }
 
 function CollecteEditor({ open, mode, form, setForm, error, loading, onClose, onSubmit }: {

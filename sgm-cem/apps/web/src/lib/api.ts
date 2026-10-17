@@ -18,6 +18,24 @@ export function getBaseURL() {
   return raw.endsWith('/api') ? raw : `${raw.replace(/\/$/, '')}/api`
 }
 
+/**
+ * Télécharge un fichier produit par l'API (exports Excel, données personnelles) :
+ * session et CSRF portés par le client axios, nom tiré de Content-Disposition.
+ */
+export async function downloadFromApi(path: string, params?: Record<string, string | undefined>, fallbackName = 'export'): Promise<void> {
+  const res = await api.get(path, { params, responseType: 'blob' })
+  const disposition = String(res.headers['content-disposition'] ?? '')
+  const name = /filename="([^"]+)"/.exec(disposition)?.[1] ?? fallbackName
+  const url = URL.createObjectURL(res.data as Blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
+}
+
 const api = axios.create({
   baseURL: getBaseURL(),
   // Required so the browser sends HttpOnly auth cookies on every request

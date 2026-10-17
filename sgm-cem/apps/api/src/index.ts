@@ -13,6 +13,7 @@ import { authRouter } from './routes/auth'
 import { membresRouter } from './routes/membres'
 import { rubriquesRouter } from './routes/rubriques'
 import { contributionsRouter } from './routes/contributions'
+import { exportsRouter } from './routes/exports'
 import { collecteursRouter } from './routes/collecteurs'
 import { collectesRouter } from './routes/collectes'
 import { commissionsRouter } from './routes/commissions'
@@ -152,6 +153,7 @@ mount('/api/auth', authRouter)
 mount('/api/membres', membresRouter)
 mount('/api/rubriques', rubriquesRouter)
 mount('/api/contributions', contributionsRouter)
+mount('/api/exports', exportsRouter)
 mount('/api/payments', paymentsRouter)
 mount('/api/collecteurs', collecteursRouter)
 mount('/api/collectes', collectesRouter)

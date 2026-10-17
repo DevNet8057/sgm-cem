@@ -173,6 +173,8 @@ enum AuditAction {
   TRANSFER_CANCELLED
   DEVELOPER_PANEL_CONFIG_CHANGED // panneau développeur — changement de config technique
   IMPERSONATE // développeur connecté en tant qu'un autre utilisateur (début/fin)
+  EXPORT // export de données (Excel, données personnelles d'un membre)
+  ANONYMIZE // effacement de l'identité d'une personne (montants conservés)
 }
 
 // Catégories du panneau développeur (DEVELOPER_PANEL_SGM_CEM.md §2)

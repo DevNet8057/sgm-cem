@@ -323,7 +323,7 @@ Voir la matrice détaillée au §8.
 | EF-M10-01 | **Accueil par rôle** (mobile-first) :<br>• Membre → reste à payer et 3 derniers paiements ;<br>• Collecteur → fonds détenus, « À valider (n) », « Transferts à recevoir (n) » ;<br>• Trésorier et responsables → liste « À traiter aujourd'hui » (validations, transferts, litiges, paiements bloqués), puis 4 indicateurs en grille 2×2 avec tendance par rapport au mois précédent ;<br>• Admin → santé du système. | M | 🟡 |
 | EF-M10-02 | Statistiques filtrables par mois et par année : collecte mensuelle, statut des contributions, répartition par moyen, taux de recouvrement par rubrique. | S | ✅ |
 | EF-M10-03 | Rapport financier annuel PDF : synthèse, rubriques, top contributeurs, moyens de paiement. | S | ✅ (à sécuriser, V-06) |
-| EF-M10-04 | Exports Excel des membres, rubriques, contributions (filtrés) et collectes. Ils sont générés **côté serveur** et ne sont pas limités à 500 lignes. | S | 🟡 (côté client, limité à 500 lignes) |
+| EF-M10-04 | Exports Excel des membres, rubriques, contributions (filtrés) et collectes. Ils sont générés **côté serveur** et ne sont pas limités à 500 lignes. | S | ✅ (lot 4.6) |
 | EF-M10-05 | Tous les indicateurs sont calculés **côté serveur** sur l'ensemble du périmètre autorisé, jamais sur une page chargée. | M | ⚠️ (calculs sur la page dans plusieurs vues) |
 
 ### M11 — GED des commissions

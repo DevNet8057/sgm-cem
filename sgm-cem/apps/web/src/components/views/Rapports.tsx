@@ -1,11 +1,8 @@
 'use client'
 import { useState } from 'react'
 import { Download, Eye, FileText, Printer } from 'lucide-react'
-import api, { fetchAllPages, getBaseURL } from '@/lib/api'
+import { downloadFromApi, getBaseURL } from '@/lib/api'
 import { Button } from '@/components/ui/Button'
-import { formatDate, contributorName } from '@/lib/utils'
-import { downloadXlsx } from '@/lib/exportXlsx'
-import type { Contribution, Membre, Rubrique } from '@/types'
 
 // getBaseURL() garantit le suffixe /api quel que soit l'environnement
 
@@ -15,89 +12,12 @@ export function Rapports() {
   const [loading, setLoading] = useState<ReportKey | 'pdf-view' | 'pdf-download' | null>(null)
   const [error, setError] = useState('')
 
+  // Exports générés par le serveur (toutes les lignes, journalisés)
   async function exportReport(type: ReportKey) {
     setLoading(type)
     setError('')
     try {
-      if (type === 'membres') {
-        const rows = await fetchAllPages<Membre>('/membres')
-        await downloadXlsx({
-          filename: 'membres.xlsx',
-          sheetName: 'Membres',
-          title: 'Liste des membres',
-          columns: [
-            { header: 'Matricule', key: 'matricule', width: 16 },
-            { header: 'Nom', key: 'nom', width: 26 },
-            { header: 'Email', key: 'email', width: 26 },
-            { header: 'Téléphone', key: 'phone', width: 16 },
-            { header: 'Catégorie', key: 'categorie', width: 16 },
-            { header: 'Groupe', key: 'groupe', width: 16 },
-            { header: 'Statut', key: 'statut', width: 16 },
-            { header: 'Profil financier', key: 'profil', width: 16 },
-            { header: 'Date adhésion', key: 'adhesion', width: 16 },
-          ],
-          rows: rows.map(m => ({
-            matricule: m.memberId, nom: m.user.fullName, email: m.user.email, phone: m.phone ?? '',
-            categorie: m.categorie, groupe: m.groupe, statut: m.statut, profil: m.profilFinancier,
-            adhesion: formatDate(m.dateAdhesion),
-          })),
-        })
-      }
-
-      if (type === 'rubriques') {
-        const rows = (await api.get('/rubriques')).data.data as Rubrique[]
-        await downloadXlsx({
-          filename: 'rubriques.xlsx',
-          sheetName: 'Rubriques',
-          title: 'Rubriques budgétaires',
-          columns: [
-            { header: 'Code', key: 'code', width: 14 },
-            { header: 'Titre', key: 'titre', width: 30 },
-            { header: 'Type', key: 'type', width: 14 },
-            { header: 'Priorité', key: 'priorite', width: 12 },
-            { header: 'Statut', key: 'statut', width: 12 },
-            { header: 'Année', key: 'annee', width: 10 },
-            { header: 'Travailleur', key: 'travailleur', width: 14, type: 'number' },
-            { header: 'Étudiant', key: 'etudiant', width: 14, type: 'number' },
-            { header: 'Couple', key: 'couple', width: 14, type: 'number' },
-            { header: 'Objectif', key: 'objectif', width: 14, type: 'number' },
-            { header: 'Collecte', key: 'collecte', width: 14, type: 'number' },
-            { header: 'Contributions', key: 'nb', width: 14, type: 'number' },
-          ],
-          rows: rows.map(r => ({
-            code: r.code, titre: r.title, type: r.type, priorite: r.priority, statut: r.status, annee: r.fiscalYear,
-            travailleur: r.amountTravailleur ?? 0, etudiant: r.amountEtudiant ?? 0, couple: r.amountCouple ?? 0,
-            objectif: r.targetAmount ?? 0, collecte: r.totalCollecte ?? 0, nb: r.nbContributions ?? 0,
-          })),
-        })
-      }
-
-      if (type === 'contributions') {
-        const rows = await fetchAllPages<Contribution>('/contributions')
-        await downloadXlsx({
-          filename: 'contributions.xlsx',
-          sheetName: 'Contributions',
-          title: 'Historique des contributions',
-          columns: [
-            { header: 'Membre', key: 'membre', width: 26 },
-            { header: 'Rubrique', key: 'rubrique', width: 16 },
-            { header: 'Montant', key: 'montant', width: 16, type: 'number' },
-            { header: 'Mode', key: 'mode', width: 16 },
-            { header: 'Statut', key: 'statut', width: 20 },
-            { header: 'Localisation', key: 'localisation', width: 18 },
-            { header: 'Date', key: 'date', width: 16 },
-          ],
-          rows: rows.map(c => ({
-            membre: contributorName(c),
-            rubrique: c.rubrique?.code ?? '',
-            montant: c.montant,
-            mode: c.modePaiement,
-            statut: c.statut,
-            localisation: c.localisationFonds ?? '',
-            date: formatDate(c.createdAt),
-          })),
-        })
-      }
+      await downloadFromApi(`/exports/${type}.xlsx`, undefined, `${type}.xlsx`)
     } catch {
       setError('Export impossible pour le moment')
     } finally {

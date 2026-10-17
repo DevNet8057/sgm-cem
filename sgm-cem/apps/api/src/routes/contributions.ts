@@ -81,27 +81,27 @@ const declareSchema = z.object({
   { message: 'Fournissez soit rubriqueId et montant, soit allocations — jamais les deux ni aucun des deux' }
 )
 
-router.get('/', authenticate, requireLevel(2), async (req, res) => {
-  const { page = '1', limit = '20', statut, rubriqueId, membreId, localisation, search, modePaiement } = req.query as Record<string, string>
-  const currentPage = Math.max(1, parseInt(page, 10) || 1)
-  const pageSize = Math.min(100, Math.max(1, parseInt(limit, 10) || 20))
-  const skip = (currentPage - 1) * pageSize
-  // Filtres côté serveur (jamais de filtrage d'une seule page dans le navigateur)
-  const localisations = localisation
-    ? z.array(z.nativeEnum(LocalisationFonds)).parse(localisation.split(',').filter(Boolean))
+/**
+ * Filtres de la liste des contributions, dans le périmètre de l'utilisateur
+ * (un collecteur ne voit que les contributions qui lui sont attribuées).
+ * Partagé avec l'export Excel (routes/exports.ts).
+ */
+export function contributionListWhere(actor: ContributionActor, q: {
+  statut?: string; rubriqueId?: string; membreId?: string; localisation?: string; search?: string; modePaiement?: string
+}): Prisma.ContributionWhereInput {
+  const localisations = q.localisation
+    ? z.array(z.nativeEnum(LocalisationFonds)).parse(q.localisation.split(',').filter(Boolean))
     : undefined
-  const term = search?.trim().slice(0, 80)
-
-  // Périmètre : un collecteur ne voit que les contributions qui lui sont attribuées
-  const where: Prisma.ContributionWhereInput = {
+  const term = q.search?.trim().slice(0, 80)
+  return {
     AND: [
-      getContributionScope(actorOf(req)),
+      getContributionScope(actor),
       {
-        ...(statut && { statut: statut as never }),
-        ...(rubriqueId && { rubriqueId }),
-        ...(membreId && { membreId }),
+        ...(q.statut && { statut: z.enum(['EN_ATTENTE_CONFIRMATION', 'CONFIRME', 'LITIGE', 'ANNULE']).parse(q.statut) }),
+        ...(q.rubriqueId && { rubriqueId: q.rubriqueId }),
+        ...(q.membreId && { membreId: q.membreId }),
         ...(localisations && { localisationFonds: { in: localisations } }),
-        ...(modePaiement && { modePaiement: z.nativeEnum(ModePaiement).parse(modePaiement) }),
+        ...(q.modePaiement && { modePaiement: z.nativeEnum(ModePaiement).parse(q.modePaiement) }),
       },
       ...(term ? [{
         OR: [
@@ -113,6 +113,15 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
       }] : []),
     ],
   }
+}
+
+router.get('/', authenticate, requireLevel(2), async (req, res) => {
+  const { page = '1', limit = '20', statut, rubriqueId, membreId, localisation, search, modePaiement } = req.query as Record<string, string>
+  const currentPage = Math.max(1, parseInt(page, 10) || 1)
+  const pageSize = Math.min(100, Math.max(1, parseInt(limit, 10) || 20))
+  const skip = (currentPage - 1) * pageSize
+  // Filtres côté serveur (jamais de filtrage d'une seule page dans le navigateur)
+  const where = contributionListWhere(actorOf(req), { statut, rubriqueId, membreId, localisation, search, modePaiement })
 
   const [contributions, total, sum] = await Promise.all([
     prisma.contribution.findMany({
