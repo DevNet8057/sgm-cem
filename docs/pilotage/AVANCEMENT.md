@@ -76,6 +76,7 @@ Non fait (avec raison) : budget Lighthouse en CI (mesure ponctuelle ci-dessous, 
 |---|---|---|
 | 3.5 Express 5 | Express 5.3 ; `express-async-errors` retiré (erreurs asynchrones natives) ; `req.body` toujours objet, analyse de query étendue conservée ; routeurs montés via une table (`ROUTE_MOUNTS`) relue par la matrice RBAC ; middleware de validation mort supprimé | 310 tests ; parcours navigateur (connexion, listes, recherche, rejeu hors ligne) sur l'API réelle : 0 erreur 5xx ; `pnpm audit --prod` propre |
 | 3.5 Zod 4 | Zod 4.6 (API et web), `@hookform/resolvers` 5 ; messages de validation **par défaut en français** (ils étaient en anglais et remontaient à l'utilisateur) | 310 tests ; formulaire de connexion et erreurs API vérifiés en réel |
+| 3.5 Next 16 | Next 16.4 (build Turbopack), ESLint natif en flat config (`eslint .`), `images.remotePatterns` ; la nouvelle règle `react-hooks/set-state-in-effect` relève 19 cas, laissés en avertissement **à reprendre un par un** | Build, 23 tests web, parcours navigateur (polices, push, hors ligne, listes, feuilles), ordre des couches CSS et captures identiques |
 
 ## ⚠️ Avant de déployer cette version
 1. **Sauvegarder** la base (`scripts/backup-db.ps1`) — l'API le fait aussi automatiquement au démarrage.

@@ -35,7 +35,7 @@ docker compose up -d --build  # redéployer après modification du code
 | postgres | postgres:15-alpine   | 5432 | Base de données (volume `pgdata`) |
 | redis    | redis:7-alpine       | 6379 | Cache + BullMQ |
 | api      | build `apps/api`     | 3001 | Express + Prisma + Puppeteer (Chromium système) |
-| web      | build `apps/web`     | 3000 | Next.js 15 en mode production |
+| web      | build `apps/web`     | 3000 | Next.js 16 en mode production |
 
 Ordre de démarrage géré par les healthchecks : postgres/redis → api → web.
 

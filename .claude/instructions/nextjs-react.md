@@ -1,4 +1,6 @@
-# Conventions frontend — Next.js 15 + React 19 (SGM-CEM)
+# Conventions frontend — Next.js 16 + React 19 (SGM-CEM)
+
+> Next 16 : build Turbopack, lint par `eslint .` (`pnpm --filter web lint`, plus de `next lint`), `params`/`searchParams` asynchrones dans les composants serveur (les vues passent par `useParams`/`useSearchParams`), `images.remotePatterns`. Accessibilité : `pnpm --filter web a11y` (axe, API et web démarrés).
 
 À lire avant tout travail dans `sgm-cem/apps/web`.
 

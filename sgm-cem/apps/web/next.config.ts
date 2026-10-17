@@ -15,10 +15,10 @@ const apiProxyTarget = process.env.API_PROXY_URL
 const nextConfig: NextConfig = {
   transpilePackages: ['@sgm-cem/shared'],
   experimental: {
-    optimizePackageImports: ['lucide-react', 'recharts', '@radix-ui/react-dialog'],
+    optimizePackageImports: ['lucide-react', 'recharts'],
   },
   images: {
-    domains: ['localhost'],
+    remotePatterns: [{ protocol: 'http', hostname: 'localhost' }],
   },
   async rewrites() {
     if (!apiProxyTarget) return []

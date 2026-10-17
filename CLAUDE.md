@@ -20,7 +20,7 @@ commissions collecteurs, trésorerie, rapports PDF/Excel, notifications (push we
 - **Monorepo pnpm** : `sgm-cem/` → `apps/api`, `apps/web`, `packages/shared`
 - **Backend** : Express 5 + TypeScript, Prisma 5 (PostgreSQL 15), Redis 7 + BullMQ,
   Socket.IO, Puppeteer (PDF), Zod, JWT + CSRF (csrf-csrf)
-- **Frontend** : Next.js 15 (App Router) + React 19, Tailwind 4, antd 6,
+- **Frontend** : Next.js 16 (App Router) + React 19, Tailwind 4, antd 6,
   TanStack Query, Zustand, framer-motion, Recharts
 - **Déploiement** : Docker Compose (4 services), voir `DEPLOIEMENT_DOCKER.md`
 - Langue du produit et des messages : **français**
@@ -33,7 +33,7 @@ Pour toute tâche non triviale, travailler comme une équipe — l'**architect**
 |---|---|
 | `architect` | Décompose la demande, délègue aux leads, assemble, tranche les arbitrages |
 | `backend-lead` | Planifie les tâches Express/Prisma (routes, services, schéma, webhooks) |
-| `frontend-lead` | Planifie les tâches Next.js 15 (pages, vues, composants, état) |
+| `frontend-lead` | Planifie les tâches Next.js 16 (pages, vues, composants, état) |
 | `nano` | Écrit le code — un fichier à la fois, en suivant le plan d'un lead |
 | `builder` | Vérifie que ça compile : `pnpm type-check`, `next build`, tests vitest |
 | `reviewer` | Relit le code selon les conventions SGM-CEM (`.claude/instructions/`) |

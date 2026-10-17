@@ -1,6 +1,6 @@
 ---
 name: frontend-lead
-description: Lead frontend SGM-CEM. Planifie (sans coder) les tâches Next.js 15 + React 19 — pages App Router, vues, composants, état, appels API. Retourne un plan fichier-par-fichier prêt pour l'agent nano.
+description: Lead frontend SGM-CEM. Planifie (sans coder) les tâches Next.js 16 + React 19 — pages App Router, vues, composants, état, appels API. Retourne un plan fichier-par-fichier prêt pour l'agent nano.
 tools: Read, Grep, Glob, Bash
 model: inherit
 ---

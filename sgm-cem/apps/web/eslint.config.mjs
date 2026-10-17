@@ -1,19 +1,15 @@
-// Flat config ESLint 9 — l'ancien contenu était du JSON .eslintrc collé dans
-// un .mjs : Node le parsait comme module ES et ESLint plantait au chargement.
-import { dirname } from 'path'
-import { fileURLToPath } from 'url'
-import { FlatCompat } from '@eslint/eslintrc'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-
-const compat = new FlatCompat({ baseDirectory: __dirname })
+// Flat config ESLint 9 — configuration Next 16 (native en flat config)
+import nextVitals from 'eslint-config-next/core-web-vitals'
 
 const eslintConfig = [
-  ...compat.extends('next/core-web-vitals'),
+  ...nextVitals,
+  { ignores: ['.next/**', 'node_modules/**', 'public/sw.js', 'next-env.d.ts', 'scripts/**'] },
   {
     rules: {
       'react-hooks/exhaustive-deps': 'warn',
+      // Règle introduite par Next 16 (React Compiler) : 19 cas existants à revoir
+      // un par un (indicateurs d'hydratation, synchronisation avec le navigateur).
+      'react-hooks/set-state-in-effect': 'warn',
       'no-console': ['warn', { allow: ['warn', 'error'] }],
     },
   },

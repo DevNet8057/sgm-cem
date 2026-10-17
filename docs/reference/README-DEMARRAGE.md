@@ -168,7 +168,7 @@ pnpm dev
 cd sgm-cem/apps/web
 pnpm dev
 # Devrait afficher:
-# ▲ Next.js 15.1.6
+# ▲ Next.js 16.4.2 (Turbopack)
 # - Local:        http://localhost:3000
 ```
 

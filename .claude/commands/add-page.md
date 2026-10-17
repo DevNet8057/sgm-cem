@@ -1,5 +1,5 @@
 ---
-description: Crée une page/vue Next.js 15 complète (route, vue, données, RBAC, états UI)
+description: Crée une page/vue Next.js 16 complète (route, vue, données, RBAC, états UI)
 argument-hint: <nom et rôle de la page>
 ---
 
