@@ -28,3 +28,7 @@ apps/api/tests
 Thumbs.db
 *.swp
 *.swo
+
+# Sauvegardes de base (données personnelles)
+**/backups
+*.dump

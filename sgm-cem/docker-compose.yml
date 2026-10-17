@@ -83,6 +83,8 @@ services:
     # Monter le dossier uploads pour que les fichiers persistents (S3 hors prod)
     volumes:
       - uploads:/app/apps/api/uploads
+      # Sauvegardes automatiques de la base prises avant chaque démarrage (entrypoint)
+      - dbbackups:/app/apps/api/backups
     networks:
       - sgm-net
     healthcheck:
@@ -130,6 +132,8 @@ volumes:
     # Stocke le cache Redis
   uploads:
     # Stocke les fichiers uploadés par l'API
+  dbbackups:
+    # Sauvegardes pg_dump automatiques (10 dernières) prises au démarrage de l'API
 
   # ── Réseau privé ────────────────────────────────────────────────────
   # Les conteneurs peuvent se parler par leur nom de service

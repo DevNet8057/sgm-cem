@@ -50,6 +50,28 @@ fi
 
 echo ">>> [API] ✅ PostgreSQL prêt"
 
+# ── Sauvegarde automatique AVANT toute modification de schéma ─────────
+# Une base déjà peuplée est sauvegardée (pg_dump -Fc) dans le volume
+# « dbbackups » avant la synchronisation du schéma. Sans sauvegarde
+# réussie, le démarrage s'arrête : aucune évolution de schéma sans filet.
+# Contournement explicite (déconseillé) : SKIP_PRE_START_BACKUP=1.
+BACKUP_DIR=/app/apps/api/backups
+PG_URL="${DATABASE_URL%%\?*}"   # libpq refuse les paramètres Prisma (?schema=…)
+HAS_DATA=$(psql "$PG_URL" -tAc "select to_regclass('public.users') is not null" 2>/dev/null || echo "f")
+if [ "$HAS_DATA" = "t" ] && [ "${SKIP_PRE_START_BACKUP:-0}" != "1" ]; then
+  mkdir -p "$BACKUP_DIR"
+  BACKUP_FILE="$BACKUP_DIR/pre-start_$(date -u +%Y%m%dT%H%M%SZ).dump"
+  echo ">>> [API] Sauvegarde préalable de la base → $BACKUP_FILE"
+  if pg_dump "$PG_URL" -Fc --no-owner -f "$BACKUP_FILE" && pg_restore --list "$BACKUP_FILE" > /dev/null; then
+    echo ">>> [API] ✅ Sauvegarde vérifiée"
+    # Conserver les 10 sauvegardes de démarrage les plus récentes
+    ls -1t "$BACKUP_DIR"/pre-start_*.dump 2>/dev/null | tail -n +11 | xargs -r rm -f
+  else
+    echo ">>> [API] ❌ Sauvegarde préalable impossible — démarrage interrompu (aucune modification de schéma)."
+    exit 1
+  fi
+fi
+
 # Le projet n'a pas de dossier prisma/migrations (schéma appliqué via db push
 # en dev) : `migrate deploy` ne créerait AUCUNE table. `db push` synchronise
 # le schéma de façon idempotente sans perte de données.

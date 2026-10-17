@@ -4,6 +4,16 @@
 > aux variables d'environnement ou à la configuration. Référencé par `CLAUDE.md`.
 > Dernière mise à jour : 2026-07-16 — déploiement vérifié fonctionnel de bout en bout.
 
+## Avant toute mise à jour : sauvegarder la base
+
+```powershell
+cd sgm-cem
+powershell -ExecutionPolicy Bypass -File .\scripts\backup-db.ps1   # Windows
+./scripts/backup-db.sh                                               # Linux/macOS
+```
+Le script produit `backups/sgm_cem_<date>.dump` (vérifié, non versionné). L'API prend en plus
+une sauvegarde automatique au démarrage (volume `dbbackups`) avant toute évolution de schéma.
+
 ## Démarrage rapide
 
 ```bash
