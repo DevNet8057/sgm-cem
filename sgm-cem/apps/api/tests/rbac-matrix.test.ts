@@ -3,8 +3,7 @@
 // fait échouer ce test ; 2) droits par rôle des opérations sensibles.
 import { describe, it, expect, beforeAll } from 'vitest'
 import request from 'supertest'
-import type { Express } from 'express'
-import app from '../src/index'
+import app, { ROUTE_MOUNTS } from '../src/index'
 import { getPrisma } from '../src/lib/prisma'
 import { testCookie } from './helpers/session'
 
@@ -19,19 +18,15 @@ const PUBLIC_ROUTES = [
   /^POST \/api\/auth\/(login|forgot-password|otp\/request|otp\/verify|google|refresh)$/,
 ]
 
-type Layer = { route?: { path: string | string[]; methods: Record<string, boolean> }; name: string; regexp: RegExp; handle: { stack?: Layer[] } }
+type Layer = { route?: { path: string | string[]; methods: Record<string, boolean> } }
 
 function listRoutes(stack: Layer[], prefix = ''): string[] {
   const out: string[] = []
   for (const layer of stack) {
-    if (layer.route) {
-      const paths = Array.isArray(layer.route.path) ? layer.route.path : [layer.route.path]
-      for (const method of Object.keys(layer.route.methods)) {
-        for (const path of paths) out.push(`${method.toUpperCase()} ${prefix}${path}`)
-      }
-    } else if (layer.name === 'router' && layer.handle.stack) {
-      const mount = layer.regexp.source.replace('^\\', '').replace('\\/?(?=\\/|$)', '').replace(/\\\//g, '/')
-      out.push(...listRoutes(layer.handle.stack, prefix + (mount.startsWith('/') ? mount : `/${mount}`)))
+    if (!layer.route) continue
+    const paths = Array.isArray(layer.route.path) ? layer.route.path : [layer.route.path]
+    for (const method of Object.keys(layer.route.methods)) {
+      for (const path of paths) out.push(`${method.toUpperCase()} ${prefix}${path}`)
     }
   }
   return out
@@ -43,7 +38,11 @@ async function anonymousCsrf() {
   return { cookie, token: res.body.token as string }
 }
 
-const routes = listRoutes((app as unknown as Express & { _router: { stack: Layer[] } })._router.stack)
+// Routes de l'application (santé, CSRF…) + celles de chaque routeur monté (index.ts)
+const routes = [
+  ...listRoutes((app as unknown as { router: { stack: Layer[] } }).router.stack),
+  ...ROUTE_MOUNTS.flatMap(([prefix, router]) => listRoutes((router as unknown as { stack: Layer[] }).stack, prefix)),
+]
   .map(r => r.replace(/\/$/, '') || r)
   .filter((r, i, all) => all.indexOf(r) === i)
 const protectedRoutes = routes.filter(r => !PUBLIC_ROUTES.some(p => p.test(r)))

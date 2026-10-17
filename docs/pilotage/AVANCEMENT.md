@@ -71,6 +71,11 @@ Reporté (avec raison) : utilisateur non-root dans les images (propriété des v
 
 Non fait (avec raison) : budget Lighthouse en CI (mesure ponctuelle ci-dessous, pas de seuil bloquant tant que la CI GitHub ne tourne pas) ; validation sur appareils réels (jalon J2) — à faire par l'équipe avec 2 ou 3 téléphones Android d'entrée de gamme.
 
+## Phase 3 — détail (en cours)
+| Lot | Livré | Vérification |
+|---|---|---|
+| 3.5 Express 5 | Express 5.3 ; `express-async-errors` retiré (erreurs asynchrones natives) ; `req.body` toujours objet, analyse de query étendue conservée ; routeurs montés via une table (`ROUTE_MOUNTS`) relue par la matrice RBAC ; middleware de validation mort supprimé | 310 tests ; parcours navigateur (connexion, listes, recherche, rejeu hors ligne) sur l'API réelle : 0 erreur 5xx ; `pnpm audit --prod` propre |
+
 ## ⚠️ Avant de déployer cette version
 1. **Sauvegarder** la base (`scripts/backup-db.ps1`) — l'API le fait aussi automatiquement au démarrage.
 2. Dans le `.env` racine : `CSRF_SECRET`, `JWT_SECRET`, `REFRESH_TOKEN_SECRET` doivent faire **≥ 32 caractères** (`openssl rand -base64 48`), sinon l'API refuse de démarrer en production.

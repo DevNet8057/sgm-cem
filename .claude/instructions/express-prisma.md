@@ -3,7 +3,8 @@
 À lire avant tout travail dans `sgm-cem/apps/api`.
 
 ## Structure
-- `src/index.ts` — app Express : middlewares globaux, montage des routeurs `/api/<domaine>`, webhooks `/webhooks` (sans `/api`), démarrage après `loadConfigCache()`.
+- `src/index.ts` — app Express **5** : middlewares globaux, montage des routeurs `/api/<domaine>` **via `mount()`** (table `ROUTE_MOUNTS`, lue par la matrice RBAC : un routeur monté autrement échappe au test d'authentification), webhooks `/webhooks` (sans `/api`), démarrage après `loadConfigCache()`.
+- Express 5 : les erreurs des handlers `async` remontent nativement au errorHandler (plus de `express-async-errors`) ; `req.query` est en lecture seule ; `req.body` vaut `{}` sans corps (middleware dans `index.ts`) ; analyse de query « extended » conservée.
 - `src/routes/` — un routeur par domaine métier (auth, membres, rubriques, contributions, payments, collecteurs, commissions, prestations, stats, settings, notifications, profile, funds, webhooks, developer, users, audit).
 - `src/services/` — logique réutilisable (yelii, cinetpay, config, receipt, financial-report…).
 - `src/middleware/` — `auth`, `rbac` (`requireRole`), gestion d'erreurs.

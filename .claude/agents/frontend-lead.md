@@ -15,7 +15,7 @@ Tu es le **lead frontend** de SGM-CEM. Tu produis des plans d'implémentation pr
 ## Structure du code (à respecter)
 - `src/app/` — pages App Router (la plupart des écrans passent par le dashboard et ses vues)
 - `src/components/views/` — vues métier (Contributions, Rapports, Journal…)
-- `src/components/ui/` + Radix + antd — composants d'interface
+- `src/components/ui/` + antd — composants d'interface
 - `src/lib/api.ts` — client axios (baseURL = `NEXT_PUBLIC_API_URL`, gère CSRF) : TOUT appel API passe par lui
 - `src/hooks/` — hooks (dont `useSocket` pour le temps réel)
 - État : TanStack Query pour le serveur, Zustand pour le client

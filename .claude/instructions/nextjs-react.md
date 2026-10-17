@@ -5,7 +5,7 @@
 ## Structure
 - `src/app/` — App Router. Les écrans métier vivent surtout dans le dashboard qui rend des vues.
 - `src/components/views/` — vues métier (Contributions, Rapports, Journal, Collecteurs…) ; une nouvelle vue = composant ici + entrée dans `src/components/layout/Sidebar.tsx` (avec ses rôles).
-- `src/components/ui/` — primitives (Radix UI + antd + Tailwind).
+- `src/components/ui/` — primitives (antd + Tailwind ; liste compacte et feuille de détail : `CompactList.tsx`).
 - `src/lib/api.ts` — client axios : baseURL `NEXT_PUBLIC_API_URL`, enveloppe CSRF. **Tout appel réseau passe par lui** — jamais de `fetch`/axios nu vers l'API.
 - `src/hooks/` — dont `useSocket` (Socket.IO, temps réel).
 - État serveur : **TanStack Query** (clés par domaine, invalidation après mutation). État client : **Zustand**.

@@ -18,9 +18,9 @@ commissions collecteurs, trésorerie, rapports PDF/Excel, notifications (push we
 ## Stack (réelle — ne pas supposer autre chose)
 
 - **Monorepo pnpm** : `sgm-cem/` → `apps/api`, `apps/web`, `packages/shared`
-- **Backend** : Express 4 + TypeScript, Prisma 5 (PostgreSQL 15), Redis 7 + BullMQ,
+- **Backend** : Express 5 + TypeScript, Prisma 5 (PostgreSQL 15), Redis 7 + BullMQ,
   Socket.IO, Puppeteer (PDF), Zod, JWT + CSRF (csrf-csrf)
-- **Frontend** : Next.js 15 (App Router) + React 19, Tailwind 4, Radix UI + antd,
+- **Frontend** : Next.js 15 (App Router) + React 19, Tailwind 4, antd 6,
   TanStack Query, Zustand, framer-motion, Recharts
 - **Déploiement** : Docker Compose (4 services), voir `DEPLOIEMENT_DOCKER.md`
 - Langue du produit et des messages : **français**

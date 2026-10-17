@@ -1,8 +1,7 @@
 import 'dotenv/config'
-import 'express-async-errors'
 import http from 'http'
 import path from 'path'
-import express, { type Request, type Response, type NextFunction } from 'express'
+import express, { type Request, type Response, type NextFunction, type Router } from 'express'
 import helmet from 'helmet'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
@@ -48,6 +47,9 @@ const PORT = process.env.PORT ?? 3001
 
 // Derrière Caddy : req.ip et req.secure reflètent le vrai client (voir lib/security.ts)
 app.set('trust proxy', getTrustProxy())
+// Express 5 analyse la query string en mode « simple » par défaut : on garde
+// l'analyse étendue (qs) d'Express 4, dont dépendent les paramètres existants.
+app.set('query parser', 'extended')
 
 initErrorTracking()
 
@@ -97,11 +99,25 @@ app.use(cors({
 app.use(cookieParser())
 
 // Les webhooks sont montés avant les parseurs globaux : Yelii exige le corps brut.
-app.use('/webhooks', yeliiWebhookRouter)
-app.use('/webhooks', cinetpayWebhookRouter)
+// Table des montages, exportée pour la matrice RBAC (Express 5 ne garde pas
+// le chemin de montage d'un routeur).
+export const ROUTE_MOUNTS: Array<[string, Router]> = []
+function mount(path: string, router: Router) {
+  ROUTE_MOUNTS.push([path, router])
+  app.use(path, router)
+}
+
+mount('/webhooks', yeliiWebhookRouter)
+mount('/webhooks', cinetpayWebhookRouter)
 
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
+// Express 5 laisse req.body à undefined sans corps : les schémas Zod
+// (souvent tous champs facultatifs) attendent un objet, comme sous Express 4.
+app.use((req, _res, next) => {
+  if (req.body === undefined) req.body = {}
+  next()
+})
 
 app.use('/api/', apiLimiter)
 
@@ -132,25 +148,25 @@ app.use('/api', (req: Request, res: Response, next: NextFunction) => {
   doubleCsrfProtection(req, res, next)
 })
 
-app.use('/api/auth', authRouter)
-app.use('/api/membres', membresRouter)
-app.use('/api/rubriques', rubriquesRouter)
-app.use('/api/contributions', contributionsRouter)
-app.use('/api/payments', paymentsRouter)
-app.use('/api/collecteurs', collecteursRouter)
-app.use('/api/collectes', collectesRouter)
-app.use('/api/commissions', commissionsRouter)
-app.use('/api/prestations', prestationsRouter)
-app.use('/api/stats', statsRouter)
-app.use('/api/settings', settingsRouter)
-app.use('/api/notifications', notificationsRouter)
-app.use('/api/profile', profileRouter)
-app.use('/api/funds', fundsRouter)
-app.use('/api/developer', developerRouter)
-app.use('/api/users', usersRouter)
-app.use('/api/audit', auditRouter)
-app.use('/api/public', publicRouter)
-app.use('/api/activity', activityRouter)
+mount('/api/auth', authRouter)
+mount('/api/membres', membresRouter)
+mount('/api/rubriques', rubriquesRouter)
+mount('/api/contributions', contributionsRouter)
+mount('/api/payments', paymentsRouter)
+mount('/api/collecteurs', collecteursRouter)
+mount('/api/collectes', collectesRouter)
+mount('/api/commissions', commissionsRouter)
+mount('/api/prestations', prestationsRouter)
+mount('/api/stats', statsRouter)
+mount('/api/settings', settingsRouter)
+mount('/api/notifications', notificationsRouter)
+mount('/api/profile', profileRouter)
+mount('/api/funds', fundsRouter)
+mount('/api/developer', developerRouter)
+mount('/api/users', usersRouter)
+mount('/api/audit', auditRouter)
+mount('/api/public', publicRouter)
+mount('/api/activity', activityRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }))
 
