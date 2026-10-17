@@ -1,4 +1,3 @@
-import '@ant-design/v5-patch-for-react-19'
 import type { Metadata, Viewport } from 'next'
 import Script from 'next/script'
 import './globals.css'

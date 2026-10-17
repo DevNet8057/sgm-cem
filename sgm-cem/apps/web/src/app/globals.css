@@ -74,19 +74,7 @@
   }
   *::-webkit-scrollbar-thumb:hover { background-color: var(--cem-text-muted); }
 
-  /* Hiérarchie d'élévation des surfaces Ant Design. */
-  .ant-card {
-    border-color: var(--cem-border);
-    box-shadow: var(--cem-shadow-sm);
-  }
-  :where(.ant-popover-inner, .ant-dropdown-menu) {
-    border-color: var(--cem-border);
-    box-shadow: var(--cem-shadow-md);
-  }
-  :where(.ant-modal-content, .ant-drawer-content) {
-    border-color: var(--cem-border);
-    box-shadow: var(--cem-shadow-lg);
-  }
+  /* Élévation des surfaces Ant Design : voir surfaceConfig (lib/antd-theme.ts). */
 }
 
 @keyframes fadein {

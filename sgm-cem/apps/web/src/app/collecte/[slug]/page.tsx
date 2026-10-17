@@ -47,7 +47,7 @@ export default function CollectePubliquePage() {
             <Alert
               type="info"
               showIcon
-              message="Besoin d’aide ?"
+              title="Besoin d’aide ?"
               description="Vérifiez le lien reçu ou contactez l’organisateur de la collecte."
               className="text-left"
             />

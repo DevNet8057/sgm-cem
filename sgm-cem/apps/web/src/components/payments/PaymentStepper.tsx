@@ -468,9 +468,14 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
       keyboard={canClose}
       maskClosable={canClose}
       onCancel={onClose}
-      className="max-sm:!m-0 max-sm:!top-0 max-sm:!w-full max-sm:!max-w-none [&_.ant-modal-content]:flex [&_.ant-modal-content]:max-h-[calc(100dvh-32px)] [&_.ant-modal-content]:flex-col [&_.ant-modal-content]:overflow-hidden max-sm:[&_.ant-modal-content]:h-[100dvh] max-sm:[&_.ant-modal-content]:max-h-none max-sm:[&_.ant-modal-content]:rounded-none [&_.ant-modal-body]:min-h-0 [&_.ant-modal-body]:flex-1 [&_.ant-modal-body]:overflow-y-auto"
+      className="max-sm:!m-0 max-sm:!top-0 max-sm:!w-full max-sm:!max-w-none"
+      // API sémantique d'antd v6 (jamais de sélecteur .ant-* interne) : plein écran sur mobile
+      classNames={{
+        container: 'flex max-h-[calc(100dvh-32px)] flex-col overflow-hidden max-sm:h-[100dvh] max-sm:max-h-none max-sm:!rounded-none',
+        body: 'min-h-0 flex-1 overflow-y-auto',
+      }}
       styles={{
-        content: { padding: 0, overflow: 'hidden', borderRadius: 16 },
+        container: { padding: 0, overflow: 'hidden', borderRadius: 16 },
         header: { margin: 0, padding: '20px 48px 16px 24px', borderBottom: '1px solid #f3f4f6' },
         body: { padding: 0 },
         footer: { margin: 0, padding: '16px 24px max(16px, env(safe-area-inset-bottom))', borderTop: '1px solid #f3f4f6', background: 'rgba(249, 250, 251, 0.5)' },
@@ -962,7 +967,7 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
 
           {/* Erreur de validation */}
           {error && step < 3 && (
-            <Alert className="mt-3" type="error" showIcon message={error} />
+            <Alert className="mt-3" type="error" showIcon title={error} />
           )}
         </motion.div>
 

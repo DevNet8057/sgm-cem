@@ -6,7 +6,7 @@ import fr_FR from 'antd/locale/fr_FR'
 import { MotionConfig } from 'framer-motion'
 import { useState, useEffect } from 'react'
 import { initCsrf } from '@/lib/api'
-import { lightTheme } from '@/lib/antd-theme'
+import { lightTheme, surfaceConfig } from '@/lib/antd-theme'
 import { SplashScreen } from '@/components/ui/SplashScreen'
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -32,7 +32,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <MotionConfig reducedMotion="user">
       <SplashScreen />
       <AntdRegistry layer>
-        <ConfigProvider locale={fr_FR} theme={lightTheme}>
+        <ConfigProvider locale={fr_FR} theme={lightTheme} {...surfaceConfig}>
           <App>
             <QueryClientProvider client={queryClient}>
               {children}

@@ -60,6 +60,10 @@ export const lightTheme: ThemeConfig = {
       darkItemHoverColor:  '#FFFFFF',
       darkItemSelectedColor: CEM_DARK,
       darkItemSelectedBg:  CEM_YELLOW,
+      // Titres de section du menu latéral (plus de surcharge CSS .ant-menu-item-group-title)
+      groupTitleColor:     'rgba(255,255,255,0.35)',
+      groupTitleFontSize:  10,
+      darkGroupTitleColor: 'rgba(255,255,255,0.35)',
     },
     Input: {
       activeBorderColor:   CEM_GREEN,
@@ -367,3 +371,19 @@ export const darkTheme: ThemeConfig = {
     },
   },
 }
+
+// Élévation des surfaces par l'API sémantique d'antd v6 (ConfigProvider) —
+// remplace les anciennes surcharges .ant-card / .ant-modal-content de globals.css.
+const ELEVATION = {
+  sm: { borderColor: 'var(--cem-border)', boxShadow: 'var(--cem-shadow-sm)' },
+  md: { borderColor: 'var(--cem-border)', boxShadow: 'var(--cem-shadow-md)' },
+  lg: { borderColor: 'var(--cem-border)', boxShadow: 'var(--cem-shadow-lg)' },
+}
+
+export const surfaceConfig = {
+  card: { styles: { root: ELEVATION.sm } },
+  popover: { styles: { container: ELEVATION.md } },
+  dropdown: { styles: { root: ELEVATION.md } },
+  modal: { styles: { container: ELEVATION.lg } },
+  drawer: { styles: { section: ELEVATION.lg } },
+} as const

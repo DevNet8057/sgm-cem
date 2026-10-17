@@ -532,5 +532,5 @@ export default function LoginPage() {
 }
 
 function ErrorBox({ message }: { message: string }) {
-  return <Alert type="error" showIcon message={message} role="alert" />
+  return <Alert type="error" showIcon title={message} role="alert" />
 }

@@ -27,7 +27,7 @@ export function ContributionGuideeStepper({ onClose, onSuccess }: Props) {
 
   if (loadingMembre || loadingRubriques) {
     return (
-      <Modal open footer={null} closable={false} centered width={320} styles={{ content: { textAlign: 'center', padding: 32 } }}>
+      <Modal open footer={null} closable={false} centered width={320} styles={{ container: { textAlign: 'center', padding: 32 } }}>
         <Loader2 size={28} className="mx-auto animate-spin text-[#1A6B1A]" />
         <p className="mt-3 text-sm text-gray-500">Préparation de votre contribution…</p>
       </Modal>

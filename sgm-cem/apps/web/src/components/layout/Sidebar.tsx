@@ -10,7 +10,7 @@ import { useAppStore } from '@/store/appStore'
 import { useAuthStore } from '@/store/authStore'
 import { BrandMark } from '@/components/ui/BrandMark'
 import { Avatar } from '@/components/ui/Avatar'
-import { ROLE_LABELS, ROLE_LEVELS } from '@/lib/utils'
+import { cn, ROLE_LABELS, ROLE_LEVELS } from '@/lib/utils'
 
 // ─── Navigation par rôle ─────────────────────────────────────────────
 // minLevel : niveau minimum pour voir l'item
@@ -84,14 +84,17 @@ export function Sidebar() {
     return [{
       type: 'group' as const,
       key: section,
-      label: SECTION_LABELS[section] || undefined,
+      // Titre de section stylé ici plutôt que par sélecteur interne .ant-menu-*
+      label: SECTION_LABELS[section]
+        ? <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/35">{SECTION_LABELS[section]}</span>
+        : undefined,
       children: items.map(item => {
         const Icon = item.icon
         const count = item.id === 'transfer-validations' ? pendingTransfersCount : item.id === 'notifications' ? unreadCount : 0
 
         return {
           key: item.id,
-          icon: <Icon size={17} className="shrink-0 text-white/65" />,
+          icon: <Icon size={17} className={cn('shrink-0', item.id === activeView ? 'text-[#0F4A0F]' : 'text-white/65')} />,
           label: (
             <span className="flex min-w-0 items-center gap-2">
               <span className="flex-1 truncate text-xs font-medium">{item.label}</span>
@@ -159,7 +162,7 @@ export function Sidebar() {
           selectable
           selectedKeys={[activeView]}
           onClick={handleMenuClick}
-          className="border-0 bg-transparent! [&_.ant-menu-item-group]:mb-2! [&_.ant-menu-item-group-title]:px-3! [&_.ant-menu-item-group-title]:pb-1! [&_.ant-menu-item-group-title]:pt-2! [&_.ant-menu-item-group-title]:text-[10px]! [&_.ant-menu-item-group-title]:font-bold! [&_.ant-menu-item-group-title]:uppercase [&_.ant-menu-item-group-title]:tracking-[0.18em]! [&_.ant-menu-item-group-title]:text-white/35! [&_.ant-menu-item-selected_.ant-menu-item-icon]:text-[#0F4A0F]!"
+          className="border-0 bg-transparent!"
           items={menuItems}
         />
       </nav>
@@ -209,11 +212,11 @@ export function Sidebar() {
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         placement="left"
-        width="min(88vw, 300px)"
+        size="min(88vw, 300px)"
         closable={false}
         destroyOnHidden
         rootClassName="lg:hidden"
-        styles={{ body: { padding: 0 }, content: { background: 'transparent' }, mask: { backdropFilter: 'blur(4px)' } }}
+        styles={{ body: { padding: 0 }, section: { background: 'transparent' }, mask: { backdropFilter: 'blur(4px)' } }}
       >
         {sidebarContent}
       </Drawer>

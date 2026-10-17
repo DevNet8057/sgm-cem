@@ -108,7 +108,7 @@ export function Dashboard() {
       </Card>
 
       {(statsQuery.isError || monthlyQuery.isError) && (
-        <Alert showIcon type="error" message="Impossible de charger le tableau de bord" description="Vérifiez votre connexion puis réessayez." action={<Button size="small" onClick={() => { void statsQuery.refetch(); void monthlyQuery.refetch() }}>Réessayer</Button>} />
+        <Alert showIcon type="error" title="Impossible de charger le tableau de bord" description="Vérifiez votre connexion puis réessayez." action={<Button size="small" onClick={() => { void statsQuery.refetch(); void monthlyQuery.refetch() }}>Réessayer</Button>} />
       )}
 
       {statsQuery.isLoading ? <DashboardSkeleton /> : (
