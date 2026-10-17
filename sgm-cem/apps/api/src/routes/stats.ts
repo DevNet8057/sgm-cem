@@ -3,6 +3,7 @@ import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { generateFinancialReportPdf } from '../services/financial-report'
 import { getPrisma } from '../lib/prisma'
+import { refundsByRubrique, refundsTotal } from '../services/refund.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -68,6 +69,9 @@ export async function computeDashboardStats(requestedYear?: number, requestedMon
     }),
   ])
 
+  // Remboursements exécutés sur la période : déduits des totaux (écritures compensatoires)
+  const [refundedPeriod, refundedByRubrique] = await Promise.all([refundsTotal(periodFilter), refundsByRubrique(periodFilter)])
+
   const rubriquesActives = await Promise.all(rubriquesOuvertes.map(async rubrique => {
     const agg = await prisma.contribution.aggregate({
       where: { rubriqueId: rubrique.id, statut: 'CONFIRME', createdAt: periodFilter },
@@ -76,7 +80,7 @@ export async function computeDashboardStats(requestedYear?: number, requestedMon
     })
     return {
       ...rubrique,
-      totalCollecte: agg._sum.montant ?? 0,
+      totalCollecte: (agg._sum.montant ?? 0) - (refundedByRubrique.get(rubrique.id) ?? 0),
       nbContributions: agg._count,
     }
   }))
@@ -137,7 +141,8 @@ export async function computeDashboardStats(requestedYear?: number, requestedMon
   const contributionRates = Array.from(rubriqueMap.values())
     .map(item => ({
       ...item,
-      rate: item.targetAmount ? Math.round((item.total / item.targetAmount) * 100) : null,
+      total: item.total - (refundedByRubrique.get(item.rubriqueId) ?? 0),
+      rate: item.targetAmount ? Math.round(((item.total - (refundedByRubrique.get(item.rubriqueId) ?? 0)) / item.targetAmount) * 100) : null,
     }))
     .sort((a, b) => (b.rate ?? 0) - (a.rate ?? 0))
     .slice(0, 8)
@@ -158,9 +163,10 @@ export async function computeDashboardStats(requestedYear?: number, requestedMon
     // Ces deux champs historiques sont conservés pour les clients existants.
     // La période sélectionnée est toujours renvoyée explicitement afin que les
     // tableaux de bord historiques ne mélangent jamais deux mois/années.
-    totalCollectedMonth: totalPeriod._sum.montant ?? 0,
-    totalCollectedYear: totalPeriod._sum.montant ?? 0,
-    totalCollectedPeriod: totalPeriod._sum.montant ?? 0,
+    totalCollectedMonth: (totalPeriod._sum.montant ?? 0) - refundedPeriod,
+    totalCollectedYear: (totalPeriod._sum.montant ?? 0) - refundedPeriod,
+    totalCollectedPeriod: (totalPeriod._sum.montant ?? 0) - refundedPeriod,
+    totalRefundedPeriod: refundedPeriod,
     totalConfirmedContributions: totalPeriod._count,
     globalConfirmationRate,
     contributionStatus: {
@@ -224,10 +230,11 @@ router.get('/monthly', authenticate, requireLevel(3), async (req, res) => {
       ])
 
       const totalCount = confirmed._count + pending + litiges
+      const refunded = await refundsTotal({ gte: start, lte: end })
       return {
         month: month + 1,
         label: new Date(year, month).toLocaleDateString('fr-FR', { month: 'short' }),
-        total: confirmed._sum.montant ?? 0,
+        total: (confirmed._sum.montant ?? 0) - refunded,
         count: confirmed._count,
         pending,
         litiges,

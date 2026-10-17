@@ -376,8 +376,8 @@ Voir la matrice détaillée au §8.
 
 | ID | Exigence | Prio. | Statut |
 |---|---|---|---|
-| EF-M16-01 | Toute annulation d'une contribution **confirmée** passe par une demande de remboursement : motif, montant, moyen (espèces, Mobile Money sortant, virement), validée par le trésorier **et** un second rôle (ADMIN ou RESPONSABLE). | S | ❌ |
-| EF-M16-02 | Le remboursement est une **écriture compensatoire** (montant négatif lié) ; la contribution d'origine n'est jamais modifiée silencieusement. | S | ❌ |
+| EF-M16-01 | Toute annulation d'une contribution **confirmée** passe par une demande de remboursement : motif, montant, moyen (espèces, Mobile Money sortant, virement), validée par le trésorier **et** un second rôle (ADMIN ou RESPONSABLE). | S | ✅ (lot 4.1 ; argent rendu hors application, preuve obligatoire) |
+| EF-M16-02 | Le remboursement est une **écriture compensatoire** (montant négatif lié) ; la contribution d'origine n'est jamais modifiée silencieusement. | S | ✅ (lot 4.1) |
 | EF-M16-03 | Trop-perçu : lorsqu'un prestataire confirme un montant supérieur au montant attendu, la différence est enregistrée comme don, comme avoir ou comme remboursement, selon la décision du trésorier. | C | ❌ |
 
 ### M17 — Données personnelles et droits des personnes (🆕)

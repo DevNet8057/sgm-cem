@@ -7,6 +7,7 @@ import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { getPrisma } from '../lib/prisma'
+import { refundsByRubrique } from '../services/refund.service'
 import { audit } from '../services/audit.service'
 import { buildXlsx, dateFr, LABELS, XLSX_MIME, type XlsxColumn, type XlsxRow } from '../services/xlsx-export.service'
 import { contributionListWhere } from './contributions'
@@ -77,6 +78,7 @@ router.get('/rubriques.xlsx', authenticate, requireLevel(3), async (req, res) =>
     prisma.contribution.groupBy({ by: ['rubriqueId'], where: { statut: 'CONFIRME' }, _sum: { montant: true }, _count: true }),
   ])
   const byId = new Map(totals.map(t => [t.rubriqueId, t]))
+  const refunded = await refundsByRubrique()
   await send(req, res, {
     name: 'rubriques', sheetName: 'Rubriques', title: 'Rubriques budgétaires', filters: { status, fiscalYear },
     columns: [
@@ -90,13 +92,13 @@ router.get('/rubriques.xlsx', authenticate, requireLevel(3), async (req, res) =>
       { header: 'Étudiant', key: 'etudiant', width: 14, type: 'amount' },
       { header: 'Couple', key: 'couple', width: 14, type: 'amount' },
       { header: 'Objectif', key: 'objectif', width: 16, type: 'amount' },
-      { header: 'Collecté (confirmé)', key: 'collecte', width: 18, type: 'amount' },
+      { header: 'Collecté (net des remboursements)', key: 'collecte', width: 20, type: 'amount' },
       { header: 'Contributions confirmées', key: 'nb', width: 14, type: 'count' },
     ],
     rows: rubriques.map(r => ({
       code: r.code, titre: r.title, type: r.type, priorite: r.priority, statut: r.status, annee: String(r.fiscalYear),
       travailleur: r.amountTravailleur ?? 0, etudiant: r.amountEtudiant ?? 0, couple: r.amountCouple ?? 0,
-      objectif: r.targetAmount ?? 0, collecte: byId.get(r.id)?._sum.montant ?? 0, nb: byId.get(r.id)?._count ?? 0,
+      objectif: r.targetAmount ?? 0, collecte: (byId.get(r.id)?._sum.montant ?? 0) - (refunded.get(r.id) ?? 0), nb: byId.get(r.id)?._count ?? 0,
     })),
   })
 })

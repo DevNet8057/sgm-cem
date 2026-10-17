@@ -104,6 +104,22 @@ enum TransferType {
   AUTRE
 }
 
+// Remboursements (lot 4.1 — M16) : demandé par le trésorier, visé par un
+// administrateur ou un responsable, exécuté hors application avec preuve
+enum RemboursementStatut {
+  DEMANDE
+  VALIDE
+  EXECUTE
+  REJETE
+  ANNULE
+}
+
+enum RemboursementMoyen {
+  ESPECES
+  MOBILE_MONEY
+  VIREMENT
+}
+
 enum FundsTransferStatus {
   PENDING_APPROVAL
   CONFIRMED
@@ -447,9 +463,10 @@ model Contribution {
 
   // Détenteur courant de l'argent (personne) ; distinct de collecteurId, l'auteur
   // de l'encaissement, qui ne change plus. Null : banque, portefeuille, trésorerie.
-  detenteurId   String?
-  detenteur     User?          @relation("ContributionDetenteur", fields: [detenteurId], references: [id])
-  fundMovements FundMovement[]
+  detenteurId    String?
+  detenteur      User?           @relation("ContributionDetenteur", fields: [detenteurId], references: [id])
+  fundMovements  FundMovement[]
+  remboursements Remboursement[]
 
   membre              Membre?              @relation(fields: [membreId], references: [id])
   rubrique            Rubrique             @relation(fields: [rubriqueId], references: [id])
@@ -919,4 +936,46 @@ model FundMovement {
   @@index([contributionId, at])
   @@index([at])
   @@map("fund_movements")
+}
+
+// Écriture compensatoire d'une contribution confirmée (EF-M16-01/02) : la
+// contribution d'origine n'est jamais modifiée ; les totaux déduisent les
+// remboursements exécutés. rubriqueId et membreId sont recopiés pour les totaux.
+model Remboursement {
+  id              String              @id @default(cuid())
+  contributionId  String
+  contribution    Contribution        @relation(fields: [contributionId], references: [id])
+  rubriqueId      String
+  membreId        String?
+  montant         Int
+  moyen           RemboursementMoyen
+  motif           String              @db.Text
+  beneficiaire    String? // à qui l'argent est rendu (nom, numéro)
+  statut          RemboursementStatut @default(DEMANDE)
+  requestedById   String
+  requestedByName String
+  requestedAt     DateTime            @default(now())
+  validatedById   String?
+  validatedByName String?
+  validatedAt     DateTime?
+  rejectedById    String?
+  rejectedAt      DateTime?
+  rejectionReason String?
+  executedById    String?
+  executedByName  String?
+  executedAt      DateTime?
+  // Emplacement d'où l'argent est sorti (caisse, portefeuille électronique, banque…)
+  sourceLocation  LocalisationFonds?
+  reference       String? // référence de l'opération (transaction Mobile Money, virement)
+  proofKey        String?
+  proofBucket     String?
+  proofMime       String?
+  proofName       String?
+  proofSize       Int?
+
+  @@index([contributionId])
+  @@index([statut])
+  @@index([rubriqueId])
+  @@index([executedAt])
+  @@map("remboursements")
 }

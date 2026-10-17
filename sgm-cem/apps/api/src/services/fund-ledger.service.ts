@@ -3,6 +3,7 @@
 // de la contribution. Les lignes ne sont jamais modifiées ni supprimées.
 import type { FundMovementReason, LocalisationFonds, ModePaiement, Prisma, PrismaClient } from '@prisma/client'
 import { AppError } from '../middleware/errorHandler'
+import { refundsByLocation } from './refund.service'
 
 type Tx = Prisma.TransactionClient
 
@@ -188,7 +189,12 @@ export async function positionAt(db: PrismaClient, at: Date): Promise<FundsPosit
       GROUP BY m."toLocation" ORDER BY m."toLocation"`,
     db.fundMovement.findFirst({ orderBy: { at: 'asc' }, select: { at: true } }),
   ])
-  const byLocation = rows.map(r => ({ location: r.location, amount: Number(r.amount), count: Number(r.count) }))
+  // Remboursements exécutés à cette date : argent sorti de l'emplacement d'où il a été rendu
+  const refunded = await refundsByLocation(db, at)
+  const byLocation = rows.map(r => ({ location: r.location, amount: Number(r.amount) - (refunded.get(r.location) ?? 0), count: Number(r.count) }))
+  for (const [location, amount] of refunded) {
+    if (!byLocation.some(r => r.location === location)) byLocation.push({ location: location as LocalisationFonds, amount: -amount, count: 0 })
+  }
   return {
     at: at.toISOString(),
     ledgerStartedAt: start?.at.toISOString() ?? null,

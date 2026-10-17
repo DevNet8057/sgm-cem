@@ -1,6 +1,5 @@
 import { getConfig } from '../services/config.service'
-import { Router, type NextFunction, type Request, type Response } from 'express'
-import multer from 'multer'
+import { Router } from 'express'
 import { randomUUID } from 'crypto'
 import { z } from 'zod'
 import { FundsTransferStatus, type LocalisationFonds, type Prisma } from '@prisma/client'
@@ -11,6 +10,8 @@ import { formatAmount } from '../lib/utils'
 import { generateBorderauPdf, generateAndStoreBorderau } from '../services/borderau'
 import { getFileStream, getManagedStorageKey, storeFile } from '../services/storage'
 import { getPrisma } from '../lib/prisma'
+import { receiveProof, requireProof } from '../lib/proof-upload'
+import { netLocationGroups } from '../services/refund.service'
 import { DEPOSITABLE_LOCATIONS, TRANSFERABLE_LOCATIONS, checkLedger, positionAt, receptionLocation, recordMovements } from '../services/fund-ledger.service'
 import { REMINDER_TITLES, heldFunds, notifiedSince } from '../services/reminders.service'
 import { notifyInApp } from '../services/notification'
@@ -44,7 +45,7 @@ router.get('/overview', authenticate, requireLevel(2), async (req, res) => {
     ;(where as { collecteurId?: string }).collecteurId = myUserId
   }
 
-  const [flowGroups, transfersPending] = await Promise.all([
+  const [rawFlowGroups, transfersPending] = await Promise.all([
     prisma.contribution.groupBy({
       by: ['localisationFonds'],
       where,
@@ -59,6 +60,8 @@ router.get('/overview', authenticate, requireLevel(2), async (req, res) => {
     }),
   ])
 
+  // Hors périmètre collecteur : déduire l'argent rendu par remboursement
+  const flowGroups = myRole === 'COLLECTEUR' ? rawFlowGroups : await netLocationGroups(rawFlowGroups)
   const flow = {
     chezCollecteur: amountFor(flowGroups, 'CHEZ_COLLECTEUR'),
     enTransit: amountFor(flowGroups, 'EN_TRANSIT'),
@@ -663,22 +666,6 @@ async function notifyTransferRefused(p: {
 // ── B6 : Trésorier marque des fonds comme déposés en banque ──────────
 // Décision du Bureau (17/10/2026) : « En banque » seulement avec le reçu de dépôt
 // (PDF ou photo), stocké et archivé — jamais public, consultable par la trésorerie.
-const PROOF_TYPES: Array<{ mime: string; ext: string; magic: (b: Buffer) => boolean }> = [
-  { mime: 'application/pdf', ext: 'pdf', magic: b => b.subarray(0, 5).toString('latin1') === '%PDF-' },
-  { mime: 'image/jpeg', ext: 'jpg', magic: b => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
-  { mime: 'image/png', ext: 'png', magic: b => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
-  { mime: 'image/webp', ext: 'webp', magic: b => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP' },
-]
-
-const proofUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } })
-
-function receiveProof(req: Request, res: Response, next: NextFunction) {
-  proofUpload.single('proof')(req, res, err => {
-    if (err) return next(new AppError('VALIDATION_ERROR', err.code === 'LIMIT_FILE_SIZE' ? 'Reçu trop volumineux (10 Mo maximum)' : 'Fichier de reçu illisible', 400))
-    next()
-  })
-}
-
 router.patch('/bank-deposit', authenticate, receiveProof, async (req, res) => {
   if (!['TRESORIER', 'ADMIN', 'DEVELOPER'].includes(req.user!.role)) {
     throw new AppError('ACCESS_DENIED', 'Seul le trésorier peut effectuer un dépôt en banque', 403)
@@ -693,11 +680,9 @@ router.patch('/bank-deposit', authenticate, receiveProof, async (req, res) => {
   })
   const { contributionIds, referenceBordereau, dateBordereau, note } = schema.parse(req.body)
 
-  const file = req.file
-  if (!file) throw new AppError('VALIDATION_ERROR', 'Le reçu de dépôt (PDF ou photo) est obligatoire', 400)
   // Type vérifié sur le contenu du fichier, pas sur ce que déclare le navigateur
-  const proofType = PROOF_TYPES.find(t => t.magic(file.buffer))
-  if (!proofType) throw new AppError('VALIDATION_ERROR', 'Reçu non reconnu : PDF, JPEG, PNG ou WebP uniquement', 400)
+  const proofType = requireProof(req.file, 'Le reçu de dépôt')
+  const file = req.file!
 
   // Déposables : fonds chez le trésorier, en caisse ou sur le portefeuille électronique
   const contributions = await prisma.contribution.findMany({

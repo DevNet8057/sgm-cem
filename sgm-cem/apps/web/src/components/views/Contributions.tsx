@@ -1,10 +1,12 @@
 'use client'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Activity, AlertTriangle, Banknote, ChevronsUpDown, Clock, CreditCard, Eye, FileText, Filter, Loader2, MapPin, Paperclip, Plus, Search, Wand2, X } from 'lucide-react'
+import { Activity, AlertTriangle, Banknote, ChevronsUpDown, Clock, CreditCard, Eye, FileText, Filter, Loader2, MapPin, Paperclip, Plus, Search, Undo2, Wand2, X } from 'lucide-react'
 import api, { fetchAllPages, getBaseURL } from '@/lib/api'
 import { cn, formatAmount, formatDate, formatDateTime, MODE_PAIEMENT_LABELS, contributorKind, contributorName } from '@/lib/utils'
 import { useAppStore } from '@/store/appStore'
+import { useAuthStore } from '@/store/authStore'
+import { RefundRequestModal } from '@/components/contributions/RefundRequestModal'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { SkeletonTableRow } from '@/components/ui/Skeleton'
@@ -43,6 +45,9 @@ const initialDeclareForm = {
 export function Contributions() {
   const queryClient = useQueryClient()
   const { addToast } = useAppStore()
+  // Remboursement (lot 4.1) : demandé par le trésorier sur une contribution confirmée
+  const isTreasurer = useAuthStore(s => s.user?.role) === 'TRESORIER'
+  const [refundFor, setRefundFor] = useState<Contribution | null>(null)
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState('')
   const [modeFilter, setModeFilter] = useState('')
@@ -359,6 +364,16 @@ export function Contributions() {
                 : <FileText size={11} />}
               <span className={withLabels ? '' : 'hidden sm:inline'}>{withLabels ? 'Partager le reçu' : 'Reçu'}</span>
             </button>
+            {isTreasurer && (
+              <button
+                onClick={() => { setDetailId(null); setRefundFor(c) }}
+                title="Demander un remboursement" aria-label="Demander un remboursement"
+                className="flex items-center gap-1.5 min-h-9 px-2.5 py-1.5 rounded-[8px] text-xs font-semibold text-amber-700 border border-amber-200 hover:bg-amber-50 active:scale-95 transition-all"
+              >
+                <Undo2 size={11} />
+                {withLabels && 'Rembourser'}
+              </button>
+            )}
         </>
       )}
       </>
@@ -808,6 +823,8 @@ export function Contributions() {
           ))}
         </div>
       </DetailSheet>
+
+      <RefundRequestModal contribution={refundFor} onClose={() => setRefundFor(null)} />
 
       {/* Détail d'une contribution (mobile) */}
       <DetailSheet open={!!detail} onClose={() => setDetailId(null)} title={detail ? contributorName(detail) : ''}

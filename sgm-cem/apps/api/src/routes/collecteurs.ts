@@ -3,6 +3,7 @@ import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { getPrisma } from '../lib/prisma'
+import { netLocationGroups } from '../services/refund.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -15,7 +16,7 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
   const myRole = req.user?.role
   const myUserId = req.user?.userId
 
-  const [contributions, flowGroups, modeGroups, users] = await Promise.all([
+  const [contributions, rawFlowGroups, modeGroups, users] = await Promise.all([
     prisma.contribution.findMany({
       // Fonds détenus par des personnes (collecteurs, responsables) ou en route ;
       // chacun voit ce qu'il détient, la trésorerie et l'administration voient tout
@@ -50,6 +51,9 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
       orderBy: { role: 'asc' },
     }),
   ])
+
+  // Argent rendu (remboursements exécutés) déduit de l'emplacement d'où il est sorti
+  const flowGroups = await netLocationGroups(rawFlowGroups)
 
   const eligibleRecipients = users
     .filter(u => myRole !== 'COLLECTEUR' || u.id !== myUserId)

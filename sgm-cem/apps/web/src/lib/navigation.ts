@@ -6,7 +6,7 @@ import {
   LayoutDashboard, FolderOpen, CreditCard, Wallet, UserCheck, Shield,
   Users, Archive, Briefcase, AlertTriangle, BarChart3, FileText,
   Bell, Settings, UserCog, CreditCard as CardIcon, UserCircle, Terminal, History, Globe, Activity,
-  HandCoins, Inbox,
+  HandCoins, Inbox, Undo2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { ROLE_LEVELS } from '@/lib/utils'
@@ -35,6 +35,8 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'transfer-validations', label: 'Fonds à réceptionner', icon: Shield,          section: 'FINANCES',     minLevel: 2, excludeRoles: ['MEMBRE'] },
   // Collectes ouvertes au public via lien — création/gestion Admin + Trésorier (+ Développeur)
   { id: 'collectes-publiques', label: 'Collectes publiques', icon: Globe,           section: 'FINANCES',     roles: ['ADMIN', 'TRESORIER', 'DEVELOPER'] },
+  // Remboursements : demande (trésorier), visa (administrateur, responsable)
+  { id: 'remboursements',  label: 'Remboursements',      icon: Undo2,           section: 'FINANCES',     roles: ['TRESORIER', 'ADMIN', 'RESPONSABLE'] },
   // ── Membres ─────────────────────────────────────────────────────────
   { id: 'membres',         label: 'Membres',             icon: Users,           section: 'MEMBRES',      minLevel: 2, excludeRoles: ['COLLECTEUR', 'MEMBRE'] },
   // ── Membre : vue perso ───────────────────────────────────────────────

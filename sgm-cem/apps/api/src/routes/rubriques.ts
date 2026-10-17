@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { getPrisma } from '../lib/prisma'
+import { refundsByRubrique } from '../services/refund.service'
 import { audit } from '../services/audit.service'
 
 const router = Router()
@@ -40,13 +41,15 @@ router.get('/', authenticate, requireLevel(1), async (req, res) => {
     orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }]
   })
 
+  const refunded = await refundsByRubrique()
   const enriched = await Promise.all(rubriques.map(async r => {
     const agg = await prisma.contribution.aggregate({
       where: { rubriqueId: r.id, statut: 'CONFIRME' },
       _sum: { montant: true },
       _count: true
     })
-    return { ...r, totalCollecte: agg._sum.montant ?? 0, nbContributions: agg._count }
+    // Net des remboursements exécutés
+    return { ...r, totalCollecte: (agg._sum.montant ?? 0) - (refunded.get(r.id) ?? 0), nbContributions: agg._count }
   }))
 
   res.json({ success: true, data: enriched })

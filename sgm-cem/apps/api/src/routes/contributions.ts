@@ -11,6 +11,7 @@ import { getConfig } from '../services/config.service'
 import { notifyCollecteurNewContribution, notifyInApp } from '../services/notification'
 import { calculateRemainingBalance } from '@sgm-cem/shared'
 import { getPrisma } from '../lib/prisma'
+import { refundsByRubrique, refundsTotal } from '../services/refund.service'
 import { confirmIntoLedger, recordDirectEntry } from '../services/fund-ledger.service'
 import { authorizationActorsValid, consumeAuthorization, revokeAuthorization, validAuthorizationIds } from '../services/confirmation-authorization.service'
 import { audit } from '../services/audit.service'
@@ -292,8 +293,10 @@ async function memberBalances(membre: { id: string; profilFinancier: Parameters<
     _sum: { montant: true },
   })
 
+  // Remboursements exécutés au membre : déduits de ce qu'il a versé
+  const refunded = await refundsByRubrique(undefined, { membreId: membre.id })
   return rubriques.map(rubrique => {
-    const confirmedAmount = aggregates.find(a => a.rubriqueId === rubrique.id && a.statut === 'CONFIRME')?._sum.montant ?? 0
+    const confirmedAmount = (aggregates.find(a => a.rubriqueId === rubrique.id && a.statut === 'CONFIRME')?._sum.montant ?? 0) - (refunded.get(rubrique.id) ?? 0)
     const pendingAmount = aggregates.find(a => a.rubriqueId === rubrique.id && a.statut === 'EN_ATTENTE_CONFIRMATION')?._sum.montant ?? 0
     const virtualContributions: { montant: number; statut: 'CONFIRME' | 'EN_ATTENTE_CONFIRMATION' }[] = []
     if (confirmedAmount > 0) virtualContributions.push({ montant: confirmedAmount, statut: 'CONFIRME' })
@@ -336,7 +339,7 @@ router.get('/me/summary', authenticate, requireLevel(1), async (req, res) => {
     success: true,
     data: {
       totalCount: byStatut.reduce((n, g) => n + g._count, 0),
-      confirmedAmount: pick('CONFIRME')?._sum.montant ?? 0,
+      confirmedAmount: (pick('CONFIRME')?._sum.montant ?? 0) - await refundsTotal(undefined, { membreId: membre.id }),
       confirmedCount: pick('CONFIRME')?._count ?? 0,
       pendingAmount: pick('EN_ATTENTE_CONFIRMATION')?._sum.montant ?? 0,
       pendingCount: pick('EN_ATTENTE_CONFIRMATION')?._count ?? 0,

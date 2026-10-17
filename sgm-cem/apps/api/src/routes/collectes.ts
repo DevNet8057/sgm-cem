@@ -14,6 +14,7 @@ import { AppError } from '../middleware/errorHandler'
 import { generatePublicSlug } from '../services/collecte.service'
 import { notifyPublicCollecteCreated, notifyPublicCollecteUrgencyChanged } from '../services/notification'
 import { getPrisma } from '../lib/prisma'
+import { refundsTotal } from '../services/refund.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -162,7 +163,7 @@ router.get('/', authenticate, requireLevel(4), async (_req, res) => {
     ])
     return {
       ...c,
-      totalCollecte: agg._sum.montant ?? 0,
+      totalCollecte: (agg._sum.montant ?? 0) - await refundsTotal(undefined, { rubriqueId: c.rubriqueId }),
       nbContributions: agg._count,
       nbDraftsActifs: draftsActifs,
     }
@@ -261,7 +262,7 @@ router.get('/:id/contributions', authenticate, requireLevel(4), async (req, res)
     success: true,
     data: rows,
     pagination: { page: currentPage, limit: pageSize, total, totalPages: Math.ceil(total / pageSize) },
-    totaux: { montantConfirme: agg._sum.montant ?? 0, nbConfirmees: agg._count },
+    totaux: { montantConfirme: (agg._sum.montant ?? 0) - await refundsTotal(undefined, { rubriqueId: collecte.rubriqueId }), nbConfirmees: agg._count },
   })
 })
 
