@@ -25,8 +25,8 @@ Référence : [`07_FEUILLE_DE_ROUTE.md`](07_FEUILLE_DE_ROUTE.md).
 | 0 Sécuriser | ✅ 17/10/2026 | Voir « Phase 0 — détail » ci-dessous |
 | 1 Fiabiliser | ✅ 17/10/2026 | Voir « Phase 1 — détail » ; jalon J1 : reste la partie serveur et juridique de la check-list GO |
 | 2 Mobile-first | ✅ 17/10/2026 | Voir « Phase 2 — détail » ; jalon J2 : reste la validation des parcours sur appareils réels |
-| 3 Socle et domaine | ⏳ en cours | — |
-| 4 Gouvernance | ⏸ | — |
+| 3 Socle et domaine | ✅ 17/10/2026 (avec reports) | Voir « Phase 3 — détail » ; jalon J3 : contrôle d'invariant quotidien en place, position à date disponible |
+| 4 Gouvernance | ⏳ en cours | — |
 
 ## Phase 0 — détail (livré)
 | Lot | Livré | Vérification |
@@ -72,7 +72,7 @@ Reporté (avec raison) : utilisateur non-root dans les images → **fait en phas
 
 Non fait (avec raison) : budget Lighthouse en CI (mesure ponctuelle ci-dessous, pas de seuil bloquant tant que la CI GitHub ne tourne pas) ; validation sur appareils réels (jalon J2) — à faire par l'équipe avec 2 ou 3 téléphones Android d'entrée de gamme.
 
-## Phase 3 — détail (en cours)
+## Phase 3 — détail (livré)
 | Lot | Livré | Vérification |
 |---|---|---|
 | 3.5 Express 5 | Express 5.3 ; `express-async-errors` retiré (erreurs asynchrones natives) ; `req.body` toujours objet, analyse de query étendue conservée ; routeurs montés via une table (`ROUTE_MOUNTS`) relue par la matrice RBAC ; middleware de validation mort supprimé | 310 tests ; parcours navigateur (connexion, listes, recherche, rejeu hors ligne) sur l'API réelle : 0 erreur 5xx ; `pnpm audit --prod` propre |
@@ -84,6 +84,11 @@ Non fait (avec raison) : budget Lighthouse en CI (mesure ponctuelle ci-dessous, 
 | 3.1 Worker | Catalogue unique des tâches planifiées (`jobs/scheduler.ts`) : **BullMQ** dès que Redis est disponible — chaque échéance exécutée **une seule fois** quel que soit le nombre de processus —, sinon exécution locale ; processus `worker` (`node dist/worker.js`, même image) et service Compose de production (l'API passe `RUN_SCHEDULED_JOBS=false`) | Deux workers simultanés sur Redis pendant 4 min 30 : **5 échéances au total** (et non ~9), réconciliations sans doublon ; tests `phase3-scheduler`. Non fait : notifications par file d'attente (outbox) et webhooks en inbox — appels encore directs |
 | 3.2 PDF | Chromium **mutualisé** (un navigateur, un contexte isolé par document, fermeture après 1 min d'inactivité) et rendus simultanés **limités** (`PDF_CONCURRENCY`, défaut 2) — chaque PDF lançait son propre navigateur, sans limite ; **Gotenberg** en option (`GOTENBERG_URL`), conteneur sur le réseau interne **sans accès Internet**, JavaScript désactivé, ajouté au Compose de production | 6 rendus simultanés en 1,3 s, 0 requête réseau ; contrat Gotenberg vérifié sur un faux serveur. **Gotenberg réel non démarré ici** (pas de démon Docker) : à valider en préproduction (`docker compose up`, puis un reçu) |
 | Conteneurs sans root | API et worker : jamais en root — Compose de production en `user: 1000:1000` (dossiers `uploads`/`backups` de l'image appartenant à `node`, hérités par les volumes neufs) ; Compose actuel : l'entrypoint démarre en root, **rend les dossiers existants à `node`** puis lance le serveur sous `node` (`setpriv`) ; web : image en `USER node` ; plus de `pnpm`/corepack au démarrage (binaires locaux) | Mécanique simulée ici : fichiers existants appartenant à root repris par uid 1000, lecture/écriture OK, écriture hors des dossiers refusée ; `docker compose config` OK. **Construction et démarrage des images non testés** (pas de démon Docker) : à valider en préproduction |
+
+Reporté (avec raison) :
+- **3.4 Découpage modulaire de l'API** : fait en partie (client Prisma unique, grand livre extrait en service de domaine, pagination bornée) ; le découpage complet en modules `http → application → domain` est une réorganisation interne sans effet visible, à faire module par module quand l'équipe le décide.
+- **3.7 OpenAPI + client typé** : non commencé ; utile pour une équipe de plusieurs développeurs, sans effet pour les utilisateurs.
+- Machine à états unique des statuts de contribution, file d'attente (outbox) des notifications et boîte de réception des webhooks, reversements du portefeuille électronique avec frais : à planifier.
 
 ## ⚠️ Avant de déployer cette version
 1. **Sauvegarder** la base (`scripts/backup-db.ps1`) — l'API le fait aussi automatiquement au démarrage.
