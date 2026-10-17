@@ -121,6 +121,37 @@ router.get('/validations', authenticate, requireLevel(2), async (req, res) => {
   res.json({ success: true, data: withActions(actorOf(req), contributions) })
 })
 
+/**
+ * GET /api/contributions/todo
+ * Ce qui attend l'utilisateur, dans son périmètre : confirmations qu'il peut
+ * réellement faire, transferts de fonds à réceptionner, litiges (niveau ≥ 3).
+ * Alimente le bloc « À traiter » des accueils.
+ */
+router.get('/todo', authenticate, requireLevel(2), async (req, res) => {
+  const actor = actorOf(req)
+  const [pending, transfersToReceive, openDisputes] = await Promise.all([
+    prisma.contribution.findMany({
+      where: { ...getContributionScope(actor), statut: 'EN_ATTENTE_CONFIRMATION' },
+      select: { id: true, collecteurId: true, statut: true, modePaiement: true, externalTransactionId: true, momoTransactionId: true, transferId: true, bankDepositId: true, localisationFonds: true, montant: true },
+      take: 500,
+    }),
+    prisma.fundsTransfer.count({ where: { receiverId: actor.userId, status: 'PENDING_APPROVAL' } }),
+    ['RESPONSABLE', 'ADJOINT_RESPONSABLE', 'TRESORIER', 'ADMIN', 'DEVELOPER'].includes(actor.role)
+      ? prisma.contribution.count({ where: { statut: 'LITIGE' } })
+      : Promise.resolve(0),
+  ])
+  const toConfirm = withActions(actor, pending).filter(c => c.actions.canConfirm)
+  res.json({
+    success: true,
+    data: {
+      toConfirmCount: toConfirm.length,
+      toConfirmAmount: toConfirm.reduce((sum, c) => sum + c.montant, 0),
+      transfersToReceive,
+      openDisputes,
+    },
+  })
+})
+
 router.get('/litiges', authenticate, requireLevel(3), async (req, res) => {
   const contributions = await prisma.contribution.findMany({
     where: { statut: 'LITIGE' },

@@ -26,6 +26,7 @@ export function TransferValidations() {
     mutationFn: (id: string) => api.patch(`/funds/transfers/${id}/confirm`),
     onSuccess: (_res, id) => {
       queryClient.invalidateQueries({ queryKey: ['pending-my-approval', 'collecteurs'] })
+      queryClient.invalidateQueries({ queryKey: ['funds-overview-badge'] })
       // Le bordereau de remise vient d'être généré — on l'ouvre immédiatement.
       window.open(`${getBaseURL()}/funds/transfers/${id}/borderau`, '_blank')
     },

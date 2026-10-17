@@ -79,6 +79,7 @@ const READ_MATRIX: Array<{ path: string; allowed: string; denied: string }> = [
   { path: '/api/membres', allowed: 'COLLECTEUR', denied: 'MEMBRE' },
   { path: '/api/commissions/documents', allowed: 'COLLECTEUR', denied: 'MEMBRE' },
   { path: '/api/contributions/me', allowed: 'MEMBRE', denied: '' },
+  { path: '/api/contributions/todo', allowed: 'COLLECTEUR', denied: 'MEMBRE' },
 ]
 
 // Écritures refusées (aucun effet si le refus fonctionne)

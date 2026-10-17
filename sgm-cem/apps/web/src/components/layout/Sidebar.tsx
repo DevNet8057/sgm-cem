@@ -1,76 +1,19 @@
 'use client'
-import {
-  LayoutDashboard, FolderOpen, CreditCard, Wallet, UserCheck, Shield,
-  Users, Archive, Briefcase, AlertTriangle, BarChart3, FileText,
-  Bell, Settings, LogOut, X, UserCog, CreditCard as CardIcon, UserCircle, Terminal, History, Globe, Activity,
-} from 'lucide-react'
+import { LogOut, X } from 'lucide-react'
 import { Badge, Drawer, Layout, Menu, type MenuProps } from 'antd'
 import { motion } from 'framer-motion'
 import { useAppStore } from '@/store/appStore'
 import { useAuthStore } from '@/store/authStore'
 import { BrandMark } from '@/components/ui/BrandMark'
 import { Avatar } from '@/components/ui/Avatar'
-import { cn, ROLE_LABELS, ROLE_LEVELS } from '@/lib/utils'
+import { cn, ROLE_LABELS } from '@/lib/utils'
+import { SECTIONS, SECTION_LABELS, visibleNav } from '@/lib/navigation'
 
-// ─── Navigation par rôle ─────────────────────────────────────────────
-// minLevel : niveau minimum pour voir l'item
-// roles : liste de rôles exclusifs (si défini, remplace minLevel)
-const NAV_ITEMS = [
-  // ── Accueil ─────────────────────────────────────────────────────────
-  { id: 'dashboard',       label: 'Tableau de Bord',    icon: LayoutDashboard, section: 'NAVIGATION',   minLevel: 1 },
-  // ── Finances ────────────────────────────────────────────────────────
-  { id: 'rubriques',       label: 'Rubriques',           icon: FolderOpen,      section: 'FINANCES',     minLevel: 1 },
-  { id: 'contributions',   label: 'Contributions',       icon: CreditCard,      section: 'FINANCES',     minLevel: 2, excludeRoles: ['MEMBRE'] },
-  { id: 'collecteurs',     label: 'Fonds Collecteurs',   icon: Wallet,          section: 'FINANCES',     minLevel: 2 },
-  { id: 'validations',     label: 'Validations',         icon: UserCheck,      section: 'FINANCES',     minLevel: 2, excludeRoles: ['MEMBRE'] },
-  { id: 'transfer-validations', label: 'Fonds à réceptionner', icon: Shield,          section: 'FINANCES',     minLevel: 2, excludeRoles: ['MEMBRE'] },
-  // Collectes ouvertes au public via lien — création/gestion Admin + Trésorier (+ Développeur)
-  { id: 'collectes-publiques', label: 'Collectes publiques', icon: Globe,           section: 'FINANCES',     roles: ['ADMIN', 'TRESORIER', 'DEVELOPER'] },
-  // ── Membres ─────────────────────────────────────────────────────────
-  { id: 'membres',         label: 'Membres',             icon: Users,           section: 'MEMBRES',      minLevel: 2, excludeRoles: ['COLLECTEUR', 'MEMBRE'] },
-  // ── Membre : vue perso ───────────────────────────────────────────────
-  { id: 'mes-contributions', label: 'Mes Contributions', icon: CardIcon,        section: 'MON_ESPACE',   roles: ['MEMBRE'] },
-  // ── Gestion ─────────────────────────────────────────────────────────
-  { id: 'ged',             label: 'GED Commissions',     icon: Archive,         section: 'GESTION',      minLevel: 2, excludeRoles: ['COLLECTEUR', 'MEMBRE'] },
-  { id: 'prestations',     label: 'Prestations',         icon: Briefcase,       section: 'GESTION',      minLevel: 2, excludeRoles: ['COLLECTEUR', 'MEMBRE'] },
-  { id: 'litiges',         label: 'Litiges',             icon: AlertTriangle,   section: 'GESTION',      minLevel: 3 },
-  // ── Outils ──────────────────────────────────────────────────────────
-  { id: 'statistiques',    label: 'Statistiques',        icon: BarChart3,       section: 'OUTILS',       minLevel: 3 },
-  { id: 'rapports',        label: 'Rapports',            icon: FileText,        section: 'OUTILS',       minLevel: 3 },
-  { id: 'notifications',   label: 'Notifications',       icon: Bell,            section: 'OUTILS',       minLevel: 1 },
-  // Journal d'audit : chacun voit au moins sa propre activité (périmètre élargi par rôle côté API)
-  { id: 'journal',         label: "Journal d'activité",  icon: History,         section: 'OUTILS',       minLevel: 1 },
-  { id: 'observabilite',   label: 'Observabilité',       icon: Activity,       section: 'OUTILS',       roles: ['ADMIN', 'DEVELOPER'] },
-  // ── Système ─────────────────────────────────────────────────────────
-  { id: 'utilisateurs',    label: 'Utilisateurs',        icon: UserCog,         section: 'SYSTEME',      roles: ['ADMIN', 'DEVELOPER'] },
-  { id: 'parametres',      label: 'Paramètres',          icon: Settings,        section: 'SYSTEME',      roles: ['ADMIN', 'DEVELOPER'] },
-  // Panneau développeur — rôle DEVELOPER exclusivement (jamais ADMIN)
-  { id: 'developer',       label: 'Développeur',         icon: Terminal,        section: 'SYSTEME',      roles: ['DEVELOPER'] },
-  // ── Mon compte ──────────────────────────────────────────────────────
-  { id: 'mon-profil',      label: 'Mon Profil',          icon: UserCircle,      section: 'MON_COMPTE',   minLevel: 1 },
-]
-
-const SECTIONS = ['NAVIGATION', 'FINANCES', 'MEMBRES', 'MON_ESPACE', 'GESTION', 'OUTILS', 'SYSTEME', 'MON_COMPTE']
-const SECTION_LABELS: Record<string, string> = {
-  NAVIGATION: '', FINANCES: 'Finances', MEMBRES: 'Membres',
-  MON_ESPACE: 'Mon espace', GESTION: 'Gestion', OUTILS: 'Outils',
-  SYSTEME: 'Système', MON_COMPTE: 'Mon compte',
-}
 export function Sidebar() {
   const { activeView, setActiveView, sidebarOpen, setSidebarOpen, unreadCount, pendingTransfersCount } = useAppStore()
   const { user, logout } = useAuthStore()
 
-  const userLevel = ROLE_LEVELS[user?.role ?? ''] ?? 1
-  const userRole  = user?.role ?? ''
-
-  const filteredNav = NAV_ITEMS.filter(item => {
-    // Rôles exclusifs
-    if (item.roles) return item.roles.includes(userRole)
-    // Rôles exclus
-    if (item.excludeRoles?.includes(userRole)) return false
-    // Niveau minimum
-    return userLevel >= (item.minLevel ?? 1)
-  })
+  const filteredNav = visibleNav(user?.role)
 
   const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
     setActiveView(key)

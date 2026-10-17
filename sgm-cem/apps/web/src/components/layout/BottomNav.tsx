@@ -1,40 +1,19 @@
 'use client'
-import { CreditCard, LayoutDashboard, Users, FolderOpen } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useAppStore } from '@/store/appStore'
 import { useAuthStore } from '@/store/authStore'
 import { cn } from '@/lib/utils'
+import { tabsFor } from '@/lib/navigation'
 
-// La cloche de notifications vit uniquement dans le TopBar (haut d'écran,
-// visible sur mobile ET desktop) — pas de doublon ici. Voir feedback
-// utilisateur : deux boutons de notification simultanés (haut + bas) n'est
-// pas normal sur mobile.
-const TABS_DEFAULT = [
-  { id: 'dashboard',      icon: LayoutDashboard, label: 'Accueil'   },
-  { id: 'rubriques',      icon: FolderOpen,       label: 'Rubriques' },
-  { id: 'contributions',  icon: CreditCard,       label: 'Paiements' },
-  { id: 'membres',        icon: Users,            label: 'Membres'   },
-]
-
-const TABS_COLLECTEUR = [
-  { id: 'dashboard',     icon: LayoutDashboard, label: 'Accueil'   },
-  { id: 'contributions', icon: CreditCard,      label: 'Paiements' },
-  { id: 'collecteurs',   icon: FolderOpen,      label: 'Fonds'     },
-]
-
-const TABS_MEMBRE = [
-  { id: 'mes-contributions', icon: CreditCard,       label: 'Mes dons'  },
-  { id: 'rubriques',         icon: FolderOpen,        label: 'Rubriques' },
-]
-
+// Onglets orientés tâches, par rôle (lib/navigation.ts — table unique). La
+// cloche reste dans la barre du haut ; l'onglet « Alertes » du membre ne fait
+// que porter le compteur, faute de cloche visible dans son parcours.
 export function BottomNav() {
-  const { activeView, setActiveView } = useAppStore()
+  const { activeView, setActiveView, unreadCount, pendingTransfersCount } = useAppStore()
   const { user } = useAuthStore()
 
-  const tabs =
-    user?.role === 'MEMBRE'     ? TABS_MEMBRE :
-    user?.role === 'COLLECTEUR' ? TABS_COLLECTEUR :
-    TABS_DEFAULT
+  const tabs = tabsFor(user?.role)
+  const badgeFor = (badge?: string) => badge === 'transfers' ? pendingTransfersCount : badge === 'notifications' ? unreadCount : 0
 
   return (
     <nav
@@ -58,7 +37,7 @@ export function BottomNav() {
                 'relative flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 px-1 py-2 text-[10px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A6B1A] focus-visible:ring-offset-2',
                 active ? 'text-[#0F5718]' : 'text-slate-500 hover:text-slate-700'
               )}
-              aria-label={tab.label}
+              aria-label={badgeFor(tab.badge) > 0 ? `${tab.label} (${badgeFor(tab.badge)} en attente)` : tab.label}
               aria-current={active ? 'page' : undefined}
             >
               <motion.span
@@ -75,6 +54,11 @@ export function BottomNav() {
                   />
                 )}
                 <Icon className="relative z-10" size={19} strokeWidth={active ? 2.4 : 2} />
+                {badgeFor(tab.badge) > 0 && (
+                  <span className="absolute -right-1 -top-1 z-20 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#DC2626] px-1 text-[10px] font-bold leading-none text-white">
+                    {badgeFor(tab.badge) > 9 ? '9+' : badgeFor(tab.badge)}
+                  </span>
+                )}
               </motion.span>
               <span className="relative z-10 block w-full min-w-0 truncate text-center leading-none">{tab.label}</span>
             </button>

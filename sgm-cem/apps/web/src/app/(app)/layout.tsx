@@ -13,6 +13,7 @@ import { useOfflineSync } from '@/hooks/useOfflineSync'
 import { useSocket } from '@/hooks/useSocket'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { useActivityTracker } from '@/hooks/useActivityTracker'
+import { usePendingCounts } from '@/hooks/usePendingCounts'
 import { Bell, X as XIcon } from 'lucide-react'
 
 // Bandeau visible pendant toute une impersonation (développeur connecté
@@ -123,6 +124,7 @@ function useViewFromUrl() {
 
 function AppLayoutInner({ children }: { children: React.ReactNode }) {
   useViewFromUrl()
+  usePendingCounts()
   useActivityTracker()
   const { isOffline, queuedCount } = useOfflineSync()
   useSocket()

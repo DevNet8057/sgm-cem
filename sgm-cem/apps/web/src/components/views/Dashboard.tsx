@@ -1,5 +1,6 @@
 'use client'
 
+import { TodoCard } from '@/components/dashboard/TodoCard'
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Alert, Button, Card, Empty, Progress, Segmented, Select, Skeleton, Statistic, Tag } from 'antd'
@@ -106,6 +107,8 @@ export function Dashboard() {
           </div>
         </div>
       </Card>
+
+      <TodoCard />
 
       {(statsQuery.isError || monthlyQuery.isError) && (
         <Alert showIcon type="error" title="Impossible de charger le tableau de bord" description="Vérifiez votre connexion puis réessayez." action={<Button size="small" onClick={() => { void statsQuery.refetch(); void monthlyQuery.refetch() }}>Réessayer</Button>} />

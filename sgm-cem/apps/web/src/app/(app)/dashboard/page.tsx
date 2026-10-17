@@ -2,7 +2,7 @@
 import { usePathname } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
 import { viewFromPath } from '@/lib/view-routing'
-import { ROLE_LEVELS } from '@/lib/utils'
+import { canAccessView } from '@/lib/navigation'
 
 import { Dashboard }            from '@/components/views/Dashboard'
 import { DashboardCollecteur }  from '@/components/views/DashboardCollecteur'
@@ -45,65 +45,41 @@ export default function AppPage() {
   // Écran dérivé de l'URL (et non d'un état en mémoire) : retour arrière et rafraîchissement fiables
   const activeView = viewFromPath(usePathname())
   const { user } = useAuthStore()
-  const level = ROLE_LEVELS[user?.role ?? ''] ?? 1
-  const isAdmin  = user?.role === 'ADMIN' || user?.role === 'DEVELOPER'
-  const isMembre = user?.role === 'MEMBRE'
+  const role = user?.role
 
-  // MEMBRE : interface simplifiée
-  if (isMembre) {
-    switch (activeView) {
-      case 'mes-contributions':
-      case 'dashboard':     return <MesContributions />
-      case 'rubriques':     return <RubriquesMembre />
-      case 'notifications': return <Notifications />
-      case 'journal':       return <Journal />
-      case 'mon-profil':    return <MonProfil />
-      default:              return <MesContributions />
-    }
-  }
+  // Droits d'accès : table unique (lib/navigation.ts), celle du menu et des onglets
+  if (!canAccessView(activeView, role)) return <AccessDenied />
 
-  // COLLECTEUR : interface limitée
-  if (user?.role === 'COLLECTEUR') {
-    switch (activeView) {
-      case 'dashboard':     return <DashboardCollecteur />
-      case 'contributions': return <Contributions />
-      case 'collecteurs':   return <Collecteurs />
-      case 'validations':   return <Validations />
-      // Menus déjà proposés au collecteur mais sans écran (UX-02) : un collecteur
-      // destinataire d'un transfert doit pouvoir le confirmer ou le refuser
-      case 'rubriques':            return <Rubriques />
-      case 'transfer-validations': return <TransferValidations />
-      case 'notifications': return <Notifications />
-      case 'journal':       return <Journal />
-      case 'mon-profil':    return <MonProfil />
-      default:              return <DashboardCollecteur />
-    }
+  // Accueil et vues propres à certains rôles
+  if (role === 'MEMBRE') {
+    if (activeView === 'dashboard' || activeView === 'mes-contributions') return <MesContributions />
+    if (activeView === 'rubriques') return <RubriquesMembre />
   }
+  if (activeView === 'dashboard') return role === 'COLLECTEUR' ? <DashboardCollecteur /> : <Dashboard />
 
-  // Vues avec contrôle d'accès par niveau
-  switch (activeView) {
-    case 'dashboard':            return <Dashboard />
-    case 'rubriques':            return level >= 1 ? <Rubriques />  : <AccessDenied />
-    case 'contributions':        return level >= 2 ? <Contributions /> : <AccessDenied />
-    case 'membres':              return level >= 2 ? <Membres />    : <AccessDenied />
-    case 'collecteurs':          return level >= 3 ? <Collecteurs /> : <AccessDenied />
-    case 'validations':          return level >= 2 ? <Validations /> : <AccessDenied />
-    case 'transfer-validations': return level >= 2 ? <TransferValidations /> : <AccessDenied />
-    // Collectes publiques : création/gestion Admin + Trésorier (+ Développeur) — rôles exacts, pas de niveau
-    case 'collectes-publiques':  return isAdmin || user?.role === 'TRESORIER' ? <CollectesPubliques /> : <AccessDenied />
-    case 'ged':                  return level >= 2 ? <Ged />        : <AccessDenied />
-    case 'prestations':          return level >= 2 ? <Prestations /> : <AccessDenied />
-    case 'litiges':              return level >= 3 ? <Litiges />    : <AccessDenied />
-    case 'statistiques':         return level >= 3 ? <Statistiques /> : <AccessDenied />
-    case 'rapports':             return level >= 3 ? <Rapports />   : <AccessDenied />
-    case 'notifications':        return <Notifications />
-    case 'journal':              return <Journal />
-    case 'observabilite':        return isAdmin ? <Observabilite /> : <AccessDenied />
-    case 'parametres':           return level >= 5 ? <Parametres /> : <AccessDenied />
-    case 'utilisateurs':         return isAdmin     ? <GestionUtilisateurs /> : <AccessDenied />
-    // Panneau développeur — rôle DEVELOPER EXACT (jamais ADMIN, jamais level >= 5)
-    case 'developer':            return user?.role === 'DEVELOPER' ? <Developer /> : <AccessDenied />
-    case 'mon-profil':           return <MonProfil />
-    default:                     return <Dashboard />
-  }
+  const View = VIEWS[activeView]
+  return View ? <View /> : <AccessDenied />
+}
+
+const VIEWS: Record<string, () => React.JSX.Element | null> = {
+  rubriques: Rubriques,
+  contributions: Contributions,
+  membres: Membres,
+  collecteurs: Collecteurs,
+  validations: Validations,
+  'transfer-validations': TransferValidations,
+  'collectes-publiques': CollectesPubliques,
+  ged: Ged,
+  prestations: Prestations,
+  litiges: Litiges,
+  statistiques: Statistiques,
+  rapports: Rapports,
+  notifications: Notifications,
+  journal: Journal,
+  observabilite: Observabilite,
+  parametres: Parametres,
+  utilisateurs: GestionUtilisateurs,
+  developer: Developer,
+  'mon-profil': MonProfil,
+  'mes-contributions': MesContributions,
 }

@@ -1,4 +1,5 @@
 'use client'
+import { TodoCard } from '@/components/dashboard/TodoCard'
 import { useQuery } from '@tanstack/react-query'
 import { CheckCircle2, Clock, CreditCard, TrendingUp, Wallet } from 'lucide-react'
 import api from '@/lib/api'
@@ -46,6 +47,8 @@ export function DashboardCollecteur() {
           </Button>
         </div>
       </div>
+
+      <TodoCard />
 
       {/* KPIs */}
       {isLoading ? (
