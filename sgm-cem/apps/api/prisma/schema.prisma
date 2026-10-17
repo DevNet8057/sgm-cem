@@ -120,6 +120,14 @@ enum RemboursementMoyen {
   VIREMENT
 }
 
+// Clôture mensuelle (lot 4.2 — EF-M07-09) : présentée par le trésorier, visée
+// par un administrateur ; un mois visé fige les montants de ses contributions
+enum ClotureStatut {
+  PRESENTEE
+  VALIDEE
+  REJETEE
+}
+
 enum FundsTransferStatus {
   PENDING_APPROVAL
   CONFIRMED
@@ -978,4 +986,37 @@ model Remboursement {
   @@index([rubriqueId])
   @@index([executedAt])
   @@map("remboursements")
+}
+
+// Clôture d'un mois : position des fonds au dernier jour (instantané), montants
+// comptés et écarts justifiés. Le déclencheur contributions_mois_clos (migration)
+// refuse toute modification de montant ou suppression dans un mois VALIDEE.
+model ClotureMensuelle {
+  id                  String        @id @default(cuid())
+  annee               Int
+  mois                Int
+  statut              ClotureStatut @default(PRESENTEE)
+  positionFin         Json
+  totalEncaisse       Int
+  totalRembourse      Int
+  nbContributions     Int
+  attenduCaisse       Int
+  attenduBanque       Int
+  attenduPortefeuille Int
+  caisseComptee       Int
+  soldeBancaire       Int
+  soldePortefeuille   Int
+  justification       String?       @db.Text
+  presentedById       String
+  presentedByName     String
+  presentedAt         DateTime      @default(now())
+  validatedById       String?
+  validatedByName     String?
+  validatedAt         DateTime?
+  rejectedById        String?
+  rejectedAt          DateTime?
+  rejectionReason     String?
+
+  @@unique([annee, mois])
+  @@map("clotures_mensuelles")
 }

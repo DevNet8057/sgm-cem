@@ -65,6 +65,15 @@ export function errorHandler(
     return;
   }
 
+  // Mois clôturé (déclencheur contributions_mois_clos) : refus métier, pas une panne
+  if (err instanceof Error && err.message.includes("MOIS_CLOS")) {
+    res.status(409).json({
+      success: false,
+      error: { code: "MOIS_CLOS", message: "Ce mois est clôturé : le montant de ses contributions ne peut plus être modifié. Passez une écriture corrective dans le mois en cours." },
+    });
+    return;
+  }
+
   // Erreur inattendue : journalisée avec l'identifiant de requête, transmise au suivi d'erreurs
   const requestId = (req as Request & { id?: string }).id
   logger.error({ err, requestId, method: req.method, path: req.path }, "Erreur inattendue")

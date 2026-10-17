@@ -44,3 +44,7 @@ La CI échoue si `schema.prisma` et les migrations divergent.
 ## Sécurité données
 - Ne jamais exécuter `docker compose down -v`, `prisma db push --force-reset`, `prisma migrate reset` ni `--accept-data-loss` (destruction des données) sans accord explicite de l'utilisateur.
 - Sauvegarde avant opération risquée : `sgm-cem/scripts/backup-db.ps1` (ou `.sh`) — l'API en prend aussi une automatiquement à chaque démarrage.
+
+## Remboursements et clôtures (phase 4)
+- Un remboursement est une **écriture distincte** (`remboursements`) : ne jamais modifier le montant ou le statut d'une contribution pour « rembourser ». Les totaux déduisent les remboursements **exécutés** (`services/refund.service.ts`) — tout nouveau total doit faire de même.
+- Mois clôturé et visé (`clotures_mensuelles.statut = VALIDEE`) : le déclencheur `contributions_mois_clos` refuse tout changement de `montant` ou de `createdAt` et toute suppression d'une contribution de ce mois (erreur `MOIS_CLOS`, 409 côté API). Ne pas le contourner ; une correction passe par une écriture du mois en cours.

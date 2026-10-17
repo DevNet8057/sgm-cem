@@ -288,7 +288,7 @@ Légende : ● = autorisé · ◐ = autorisé sur son propre périmètre · ○ 
 | EF-M07-06 | **Fonds électroniques** : les montants Mobile Money et carte sont crédités sur le compte du prestataire (wallet Yelii, compte CinetPay). Ils DOIVENT apparaître dans une localisation distincte `COMPTE_PRESTATAIRE` (🆕), puis passer `EN_BANQUE` lors d'un **reversement** enregistré, avec rapprochement des frais et du net. | S | ⚠️ (classés `REMIS_TRESORIER`, ce qui fausse la caisse physique) |
 | EF-M07-07 | Vue consolidée : total confirmé, et pour chaque localisation montant et nombre. Chaque carte ouvre la liste filtrée correspondante. Un tableau par collecteur donne montant détenu, ancienneté la plus haute, dépassement de `maxFundsRetentionDays` et action « demander une remise ». | M | 🟡 |
 | EF-M07-08 | Rappels automatiques : transfert non traité après `transferPendingReminderHours` → rappel au destinataire ; après `transferAlertTresorierHours` → alerte au trésorier. | S | ✅ (lot 4.3) |
-| EF-M07-09 | **Clôture mensuelle** : le trésorier valide la position de fin de mois (caisse comptée, banque rapprochée), avec écart justifié. Un PDF de clôture est produit et la période est verrouillée : aucune modification rétroactive sans écriture corrective. | S | ❌ 🆕 |
+| EF-M07-09 | **Clôture mensuelle** : le trésorier valide la position de fin de mois (caisse comptée, banque rapprochée), avec écart justifié. Un PDF de clôture est produit et la période est verrouillée : aucune modification rétroactive sans écriture corrective. | S | ✅ (lot 4.2 ; montants figés, statuts modifiables — décision du Bureau) |
 
 ### M08 — Collectes publiques
 

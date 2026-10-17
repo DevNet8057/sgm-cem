@@ -16,6 +16,7 @@ import { contributionsRouter } from './routes/contributions'
 import { exportsRouter } from './routes/exports'
 import { privacyRouter } from './routes/privacy'
 import { refundsRouter } from './routes/refunds'
+import { closuresRouter } from './routes/closures'
 import { maintenanceGuard, maintenanceStatus } from './middleware/maintenance'
 import { collecteursRouter } from './routes/collecteurs'
 import { collectesRouter } from './routes/collectes'
@@ -165,6 +166,7 @@ mount('/api/contributions', contributionsRouter)
 mount('/api/exports', exportsRouter)
 mount('/api/privacy', privacyRouter)
 mount('/api/refunds', refundsRouter)
+mount('/api/closures', closuresRouter)
 mount('/api/payments', paymentsRouter)
 mount('/api/collecteurs', collecteursRouter)
 mount('/api/collectes', collectesRouter)

@@ -40,6 +40,7 @@ const RubriquesMembre      = dynamic(() => import('@/components/views/RubriquesM
 const MonProfil            = dynamic(() => import('@/components/views/MonProfil').then(m => m.MonProfil), { loading })
 const Developer            = dynamic(() => import('@/components/views/Developer').then(m => m.Developer), { loading })
 const Journal              = dynamic(() => import('@/components/views/Journal').then(m => m.Journal), { loading })
+const Clotures             = dynamic(() => import('@/components/views/Clotures').then(m => m.Clotures), { loading })
 const Remboursements       = dynamic(() => import('@/components/views/Remboursements').then(m => m.Remboursements), { loading })
 const Observabilite        = dynamic(() => import('@/components/views/Observabilite').then(m => m.Observabilite), { loading })
 
@@ -86,6 +87,7 @@ const VIEWS: Record<string, React.ComponentType> = {
   'transfer-validations': TransferValidations,
   'collectes-publiques': CollectesPubliques,
   remboursements: Remboursements,
+  clotures: Clotures,
   ged: Ged,
   prestations: Prestations,
   litiges: Litiges,
