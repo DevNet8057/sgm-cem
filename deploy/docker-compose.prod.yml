@@ -47,6 +47,7 @@ services:
   api:
     <<: *app
     image: ${IMAGE_API}
+    user: "1000:1000"                            # jamais root (dossiers de l'image et volumes neufs : uid 1000)
     # L'entrypoint sauvegarde la base, applique les migrations puis lance dist/index.js
     # Tâches planifiées exécutées par le service worker (BullMQ, une exécution par échéance)
     environment: { NODE_ENV: production, TRUST_PROXY: "1", RUN_SCHEDULED_JOBS: "false", GOTENBERG_URL: "http://gotenberg:3000" }
@@ -70,6 +71,7 @@ services:
   worker:
     <<: *app
     image: ${IMAGE_API}
+    user: "1000:1000"
     working_dir: /app/apps/api
     command: ["node", "dist/worker.js"]
     environment: { NODE_ENV: production, GOTENBERG_URL: "http://gotenberg:3000" }
@@ -83,7 +85,9 @@ services:
   migrate:                                        # one-shot, lancé explicitement (§ 9.6, § 10)
     <<: *app
     image: ${IMAGE_API}
-    command: ["pnpm", "exec", "prisma", "migrate", "deploy"]
+    user: "1000:1000"
+    working_dir: /app/apps/api
+    command: ["node_modules/.bin/prisma", "migrate", "deploy"]
     read_only: false                             # le CLI Prisma écrit des fichiers temporaires
     networks: [internal]
     restart: "no"

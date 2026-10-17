@@ -87,6 +87,12 @@ RUN pnpm --filter api build \
 COPY apps/api/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh
 
+# Dossiers écrits par l'application, appartenant à l'utilisateur node (uid 1000) :
+# un volume nommé neuf hérite de ces droits. Le serveur ne tourne jamais en root
+# (Compose de production : user 1000 ; sinon l'entrypoint abandonne les privilèges).
+RUN mkdir -p /app/apps/api/uploads /app/apps/api/backups \
+  && chown -R node:node /app/apps/api/uploads /app/apps/api/backups
+
 # ── Étape 10 : Exposer le port ─────────────────────────────────────────
 EXPOSE 3001
 

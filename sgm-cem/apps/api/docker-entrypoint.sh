@@ -85,7 +85,7 @@ HAS_MIGRATIONS=$(psql "$PG_URL" -tAc "select to_regclass('public._prisma_migrati
 if [ "$HAS_DATA" = "t" ] && [ "$HAS_MIGRATIONS" != "t" ]; then
   echo ">>> [API] Base existante sans historique de migrations — adoption de la ligne de base..."
   ADOPT_SQL=$(mktemp)
-  pnpm exec prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script > "$ADOPT_SQL"
+  node_modules/.bin/prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script > "$ADOPT_SQL"
   if grep -Eiq 'DROP (TABLE|COLUMN|TYPE|SCHEMA)|TRUNCATE|DELETE FROM' "$ADOPT_SQL"; then
     echo ">>> [API] ❌ L'alignement du schéma supprimerait des données — démarrage interrompu, base inchangée."
     grep -Ei 'DROP (TABLE|COLUMN|TYPE|SCHEMA)|TRUNCATE|DELETE FROM' "$ADOPT_SQL"
@@ -93,10 +93,10 @@ if [ "$HAS_DATA" = "t" ] && [ "$HAS_MIGRATIONS" != "t" ]; then
   fi
   psql "$PG_URL" -v ON_ERROR_STOP=1 --single-transaction -q -f "$ADOPT_SQL"
   rm -f "$ADOPT_SQL"
-  pnpm exec prisma migrate resolve --applied 0_baseline
+  node_modules/.bin/prisma migrate resolve --applied 0_baseline
 fi
 echo ">>> [API] Application des migrations (migrate deploy)..."
-pnpm exec prisma migrate deploy
+node_modules/.bin/prisma migrate deploy
 
 # Seed uniquement si la base est vide (aucun utilisateur) : sans lui, aucun
 # compte admin n'existe et la connexion est impossible au premier démarrage.
@@ -105,11 +105,20 @@ if [ "$USERS" = "0" ]; then
   # Seed de BASE (admin, paramètres, rubriques, config) — jamais de données de
   # démonstration sauf SEED_DEMO=1 explicite.
   echo ">>> [API] Base vide — seed initial (admin + rubriques + config)..."
-  pnpm exec ts-node prisma/seed.ts
-  pnpm exec ts-node prisma/seed-config.ts
+  node_modules/.bin/ts-node prisma/seed.ts
+  node_modules/.bin/ts-node prisma/seed-config.ts
 else
   echo ">>> [API] Base déjà peuplée ($USERS utilisateurs) — seed ignoré."
 fi
 
+# ── Serveur sans privilèges root (lot 3) ──────────────────────────────
+# Lancé en root (Compose de développement, volumes existants) : les dossiers
+# écrits par l'application sont rendus à l'utilisateur node, puis le serveur
+# démarre sous node. Lancé directement en node (Compose de production) : rien à faire.
 echo ">>> [API] Lancement du serveur..."
+if [ "$(id -u)" = "0" ]; then
+  mkdir -p uploads backups
+  chown -R node:node uploads backups
+  exec setpriv --reuid=node --regid=node --init-groups -- node dist/index.js
+fi
 exec node dist/index.js

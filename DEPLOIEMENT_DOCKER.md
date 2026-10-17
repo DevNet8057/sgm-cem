@@ -48,7 +48,7 @@ Ordre de démarrage géré par les healthchecks : postgres/redis → api → web
 **Toute nouvelle clé API va dans le `.env` RACINE**, puis :
 ```bash
 docker compose up -d --force-recreate api
-docker exec sgm-cem-api-1 sh -c 'cd /app/apps/api && pnpm exec ts-node prisma/seed-config.ts'
+docker exec sgm-cem-api-1 sh -c 'cd /app/apps/api && node_modules/.bin/ts-node prisma/seed-config.ts'
 ```
 Incident réel : Yelii, CinetPay et le web push (VAPID) étaient silencieusement cassés en
 conteneur car leurs clés n'existaient que dans `apps/api/.env` (7 variables rapatriées).
@@ -122,9 +122,9 @@ Aucun mot de passe n'est écrit dans le code (phase 0, 17/10/2026).
   à la première connexion.
 - Démo (`SEED_DEMO=1` seulement) : 5 comptes staff + membres fictifs ; mot de passe commun
   `SEED_DEMO_PASSWORD` ou aléatoire affiché dans les journaux.
-- Compte perdu : `docker exec -e TARGET_EMAIL=… sgm-cem-api-1 sh -c 'cd /app/apps/api && pnpm exec ts-node prisma/reset-admin-password.ts'`
+- Compte perdu : `docker exec -e TARGET_EMAIL=… sgm-cem-api-1 sh -c 'cd /app/apps/api && node_modules/.bin/ts-node prisma/reset-admin-password.ts'`
   (mot de passe temporaire aléatoire, sessions fermées, action journalisée).
-- Comptes encore sur un ancien mot de passe commun : `docker exec -e CANDIDATE_PASSWORDS='ancien1|ancien2' sgm-cem-api-1 sh -c 'cd /app/apps/api && pnpm exec ts-node prisma/audit-default-passwords.ts'`
+- Comptes encore sur un ancien mot de passe commun : `docker exec -e CANDIDATE_PASSWORDS='ancien1|ancien2' sgm-cem-api-1 sh -c 'cd /app/apps/api && node_modules/.bin/ts-node prisma/audit-default-passwords.ts'`
   (liste seulement ; `-e FORCE_CHANGE=1` impose le changement, sur décision du Bureau).
 
 ## Tâches planifiées (réconciliation, grand livre, relevés, purge)

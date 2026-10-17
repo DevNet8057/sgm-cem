@@ -67,4 +67,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000',(r)=>{process.exit(r.statusCode<500?0:1)})" || exit 1
 
 # ── Lancer le serveur de production Next.js ────────────────────────────
-CMD ["pnpm", "--filter", "web", "start"]
+# Serveur sans root : .next appartient à node (cache d'images écrit à l'exécution),
+# démarrage direct de Next (pas de pnpm/corepack au lancement)
+RUN chown -R node:node /app/apps/web/.next
+USER node
+WORKDIR /app/apps/web
+CMD ["node_modules/.bin/next", "start"]

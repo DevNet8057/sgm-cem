@@ -33,7 +33,7 @@ La CI échoue si `schema.prisma` et les migrations divergent.
 
 ## Seeds
 - `prisma/seed.ts` — admin (`ADMIN_EMAIL` ; `ADMIN_PASSWORD` ou mot de passe aléatoire affiché une fois), paramètres, 11 rubriques ; comptes et contributions de démonstration **seulement avec `SEED_DEMO=1`**. Exécuté automatiquement par l'entrypoint Docker **seulement si la base est vide** (0 utilisateur).
-- `prisma/seed-config.ts` — copie les valeurs `.env` vers `system_configs` (n'écrase JAMAIS une valeur en base) + élève `ADMIN_EMAIL` au rôle DEVELOPER. À relancer après ajout d'une clé de config : `docker exec sgm-cem-api-1 sh -c 'cd /app/apps/api && pnpm exec ts-node prisma/seed-config.ts'`.
+- `prisma/seed-config.ts` — copie les valeurs `.env` vers `system_configs` (n'écrase JAMAIS une valeur en base) + élève `ADMIN_EMAIL` au rôle DEVELOPER. À relancer après ajout d'une clé de config : `docker exec sgm-cem-api-1 sh -c 'cd /app/apps/api && node_modules/.bin/ts-node prisma/seed-config.ts'`.
 
 ## Conventions de modèle
 - Identifiants membres : format `CEM-<année>-<numéro à 6 chiffres>`.
