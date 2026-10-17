@@ -116,6 +116,10 @@ const initialConfigs: SeedConf[] = [
     key: 'RECONCILIATION_INTERVAL_MINUTES', category: 'SYSTEM_BEHAVIOR', label: 'Fréquence réconciliation Yelii (min)',
     description: 'Intervalle du job qui vérifie les paiements bloqués en PROCESSING.', defaultValue: '10',
   },
+  {
+    key: 'PDF_CONCURRENCY', category: 'SYSTEM_BEHAVIOR', label: 'Rendus PDF simultanés',
+    description: 'Nombre maximal de PDF (reçus, bordereaux, rapports) rendus en même temps par le Chromium local. Sans effet si Gotenberg est utilisé.', defaultValue: '2',
+  },
   { key: 'MOBILE_MONEY_ENABLED', category: 'SYSTEM_BEHAVIOR', label: 'Mobile Money activé', defaultValue: 'true' },
   { key: 'CARD_ENABLED', category: 'SYSTEM_BEHAVIOR', label: 'Carte bancaire activée', defaultValue: 'true' },
   { key: 'CASH_ENABLED', category: 'SYSTEM_BEHAVIOR', label: 'Espèces activées', defaultValue: 'true' },

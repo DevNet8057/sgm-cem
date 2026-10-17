@@ -48,14 +48,15 @@ services:
     <<: *app
     image: ${IMAGE_API}
     # L'entrypoint sauvegarde la base, applique les migrations puis lance dist/index.js
-    environment: { NODE_ENV: production, TRUST_PROXY: "1" }
+    # Tâches planifiées exécutées par le service worker (BullMQ, une exécution par échéance)
+    environment: { NODE_ENV: production, TRUST_PROXY: "1", RUN_SCHEDULED_JOBS: "false", GOTENBERG_URL: "http://gotenberg:3000" }
     tmpfs: ["/tmp:size=256m", "/home/node:size=64m,uid=1000"]
     volumes:
       - uploads:/app/apps/api/uploads          # fichiers locaux si aucun stockage S3 n'est configuré
       - dbbackups:/app/apps/api/backups        # sauvegardes prises avant chaque démarrage
     networks: [edge, internal]
     mem_limit: 1536m
-    depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_healthy } }
+    depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_healthy }, gotenberg: { condition: service_healthy } }
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
@@ -63,7 +64,21 @@ services:
       retries: 3
       start_period: 30s
 
-  # worker (BullMQ, crons, PDF) : lot 3 — tant qu'il n'existe pas, l'API exécute ces tâches.
+  # Tâches planifiées hors du processus HTTP (lot 3.1) : réconciliation des paiements,
+  # contrôle du grand livre, relevés mensuels, purge d'activité. Même image que l'API ;
+  # démarre après elle (migrations appliquées par l'entrypoint de l'API).
+  worker:
+    <<: *app
+    image: ${IMAGE_API}
+    working_dir: /app/apps/api
+    command: ["node", "dist/worker.js"]
+    environment: { NODE_ENV: production, GOTENBERG_URL: "http://gotenberg:3000" }
+    tmpfs: ["/tmp:size=256m", "/home/node:size=64m,uid=1000"]
+    volumes:
+      - uploads:/app/apps/api/uploads          # relevés et reçus générés par les tâches
+    networks: [edge, internal]                 # edge : Yelii, CinetPay, WhatsApp, SMS, e-mail
+    mem_limit: 1024m
+    depends_on: { api: { condition: service_healthy }, redis: { condition: service_healthy } }
 
   migrate:                                        # one-shot, lancé explicitement (§ 9.6, § 10)
     <<: *app
@@ -108,7 +123,23 @@ services:
       timeout: 5s
       retries: 10
 
-  # gotenberg (rendu PDF isolé, ADR-007) : lot 3 — Chromium est pour l'instant dans l'image API.
+  # Rendu PDF isolé (lot 3.2, ADR-007) : JavaScript désactivé, réseau interne SANS
+  # accès Internet ; l'API et le worker l'appellent via GOTENBERG_URL (sans lui,
+  # repli sur le Chromium de l'image API). Version 8.38.1 épinglée le 17/10/2026.
+  gotenberg:
+    image: gotenberg/gotenberg:8.38.1@sha256:aa552cc115db488e0f0bcb07446aac13071ad51505b642c84bb894500907b42b
+    restart: unless-stopped
+    command: ["gotenberg", "--chromium-disable-javascript=true", "--api-timeout=60s", "--log-level=warn"]
+    networks: [internal]
+    tmpfs: ["/tmp:size=512m"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    mem_limit: 1024m
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 networks:
   edge: {}
