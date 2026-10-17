@@ -1,4 +1,5 @@
 'use client'
+import type { AxiosResponse } from 'axios'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button as AntButton, Form, Input, Modal, Progress, Result, Steps } from 'antd'
@@ -235,7 +236,8 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
 
   // ── Mutation : initier le paiement ───────────────────────────────────────
   const pay = useMutation({
-    mutationFn: () => selfService
+    // Type de réponse explicite : axios 1.20 typerait sinon chaque branche par son corps
+    mutationFn: (): Promise<AxiosResponse> => selfService
       ? api.post('/payments/batches/initiate', {
           idempotencyKey: typeof crypto !== 'undefined' && crypto.randomUUID
             ? crypto.randomUUID()

@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client'
-import bcrypt from 'bcrypt'
+import { hashPassword, verifyPassword } from '../src/lib/password'
 
 const prisma = new PrismaClient()
 
@@ -21,7 +21,7 @@ async function main() {
   }
 
   const developer = developers[0]
-  const passwordHash = await bcrypt.hash(password, 12)
+  const passwordHash = await hashPassword(password)
 
   const updated = await prisma.$transaction(async tx => {
     const user = await tx.user.update({
@@ -67,7 +67,7 @@ async function main() {
     where: { id: developer.id },
     select: { passwordHash: true },
   })
-  const passwordVerified = await bcrypt.compare(password, stored.passwordHash)
+  const passwordVerified = await verifyPassword(password, stored.passwordHash)
   const activeSessionCount = await prisma.userSession.count({
     where: { userId: developer.id },
   })

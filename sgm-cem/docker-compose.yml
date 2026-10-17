@@ -78,6 +78,9 @@ services:
       YELII_API_KEY: ${YELII_API_KEY}
       YELII_WEBHOOK_SECRET: ${YELII_WEBHOOK_SECRET}
       YELII_BASE_URL: ${YELII_BASE_URL}
+      # API exposée directement sur :3001 (pas de reverse proxy) : ne faire confiance
+      # à aucun en-tête X-Forwarded-For (sinon limitation par IP contournable)
+      TRUST_PROXY: ${TRUST_PROXY:-0}
     env_file:
       - .env
     # Monter le dossier uploads pour que les fichiers persistents (S3 hors prod)

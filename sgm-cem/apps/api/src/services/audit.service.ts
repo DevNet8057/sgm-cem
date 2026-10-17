@@ -3,12 +3,11 @@ import type { Request } from 'express'
 
 const prisma = new PrismaClient()
 
-// Métadonnées de traçabilité extraites de la requête HTTP.
-// x-forwarded-for d'abord : derrière un reverse proxy, req.ip est celle du proxy.
+// Métadonnées de traçabilité extraites de la requête HTTP. req.ip tient compte
+// de « trust proxy » : x-forwarded-for brut serait falsifiable par le client.
 export function requestMeta(req: Request): { ipAddress: string | null; userAgent: string | null } {
-  const forwarded = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim()
   return {
-    ipAddress: forwarded ?? req.ip ?? null,
+    ipAddress: req.ip ?? null,
     userAgent: (req.headers['user-agent'] ?? '').slice(0, 255) || null,
   }
 }

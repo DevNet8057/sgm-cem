@@ -166,12 +166,12 @@ Le `docker-entrypoint.sh` gère automatiquement :
 
 | Rôle | Email | Mot de passe |
 |------|-------|-------------|
-| Admin | `admin@cem-melen.cm` | `ChristEst!2026` |
-| Trésorier | `tresorier@cem-melen.cm` | `ChristEst!2026` |
-| Responsable | `responsable@cem-melen.cm` | `ChristEst!2026` |
-| Adjoint | `adjoint@cem-melen.cm` | `ChristEst!2026` |
-| Collecteur 1 | `collecteur.temple@cem-melen.cm` | `ChristEst!2026` |
-| Collecteur 2 | `collecteur.biscuiterie@cem-melen.cm` | `ChristEst!2026` |
+| Admin | `admin@cem-melen.cm` | `<mot-de-passe-retiré>` |
+| Trésorier | `tresorier@cem-melen.cm` | `<mot-de-passe-retiré>` |
+| Responsable | `responsable@cem-melen.cm` | `<mot-de-passe-retiré>` |
+| Adjoint | `adjoint@cem-melen.cm` | `<mot-de-passe-retiré>` |
+| Collecteur 1 | `collecteur.temple@cem-melen.cm` | `<mot-de-passe-retiré>` |
+| Collecteur 2 | `collecteur.biscuiterie@cem-melen.cm` | `<mot-de-passe-retiré>` |
 
 > ⚠️ **CHANGEZ LES MOTS DE PASSE** immédiatement après la première connexion !
 

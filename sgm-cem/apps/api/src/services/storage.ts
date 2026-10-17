@@ -25,6 +25,10 @@ function getS3Client(): S3Client | null {
     ...(endpoint ? { endpoint } : {}),
     credentials: { accessKeyId, secretAccessKey },
     forcePathStyle: !!endpoint, // MinIO / Cloudflare R2
+    // Depuis 3.729 le SDK ajoute des sommes de contrôle CRC par défaut, refusées
+    // par plusieurs stockages compatibles S3 (R2, Supabase) : uniquement si requis.
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
   })
   s3Signature = signature
   return s3Client

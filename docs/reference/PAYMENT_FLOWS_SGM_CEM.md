@@ -40,7 +40,7 @@ Tests effectués en conditions réelles (100 FCFA, numéro 680154116) via le ste
 ### Clé API et URL de base
 
 ```
-Clé API Collecte : yelii_pay_2c2c433eba426481a0003b1d4f7211f3
+Clé API Collecte : <VOTRE_CLE_YELII>
 URL de base      : https://api.yelii.xyz/api/yelii-pro-pay/v1
 Documentation    : https://www.digiii.xyz/yelii-pro-pay-api-doc.html
 Commission Yelii : 2,5% par transaction
@@ -51,7 +51,7 @@ Commission Yelii : 2,5% par transaction
 Chaque requête vers Yelii doit inclure cet en-tête EXACT :
 
 ```
-X-Collect-Api-Key: yelii_pay_2c2c433eba426481a0003b1d4f7211f3
+X-Collect-Api-Key: <VOTRE_CLE_YELII>
 ```
 
 ⚠️ **L'en-tête s'appelle `X-Collect-Api-Key`** (avec des tirets). Ne pas confondre avec `X-COLLECT-API-KEY` en majuscules (la casse de l'en-tête est généralement tolérée par HTTP, mais utiliser la forme documentée `X-Collect-Api-Key` pour éviter tout problème).
@@ -61,7 +61,7 @@ X-Collect-Api-Key: yelii_pay_2c2c433eba426481a0003b1d4f7211f3
 À placer dans `apps/api/.env` (jamais committer la vraie clé) :
 
 ```bash
-YELII_API_KEY="yelii_pay_2c2c433eba426481a0003b1d4f7211f3"
+YELII_API_KEY="<VOTRE_CLE_YELII>"
 YELII_BASE_URL="https://api.yelii.xyz/api/yelii-pro-pay/v1"
 YELII_WEBHOOK_SECRET=""
 # En développement local (ngrok) :

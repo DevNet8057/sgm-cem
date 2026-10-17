@@ -161,7 +161,7 @@ pnpm dev
 
 - 🌐 Web: http://localhost:3000
 - 📡 API: http://localhost:3001/api/health
-- 👤 Login: admin@cem-melen.cm / ChristEst!2026
+- 👤 Login: admin@cem-melen.cm / <mot-de-passe-retiré>
 
 ---
 

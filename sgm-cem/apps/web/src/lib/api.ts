@@ -70,6 +70,18 @@ api.interceptors.response.use(
       return api.request(originalRequest)
     }
 
+    // Mot de passe temporaire non changé (imposé par le serveur) : afficher
+    // l'écran de changement au lieu de laisser les vues échouer une à une.
+    if (
+      error.response?.status === 403 &&
+      error.response?.data?.error?.code === 'PASSWORD_CHANGE_REQUIRED' &&
+      typeof window !== 'undefined'
+    ) {
+      // Import différé : authStore importe déjà ce module
+      const { useAuthStore } = await import('@/store/authStore')
+      useAuthStore.setState({ mustChangePassword: true })
+    }
+
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&

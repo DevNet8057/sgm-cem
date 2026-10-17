@@ -112,7 +112,9 @@ API_URL="http://localhost:3001"
 # ─── GOOGLE OAUTH (optionnel) ──────────────────
 GOOGLE_CLIENT_ID="766407493659-iaut0eilt77a6tcmdhm40ecs39ipfd10.apps.googleusercontent.com"
 ADMIN_EMAIL="admin@cem-melen.cm"
-ADMIN_PASSWORD="ChristEst!2026"
+ADMIN_PASSWORD="<choisissez-un-mot-de-passe-local>"
+SEED_DEMO="1"                       # comptes de démonstration (développement uniquement)
+SEED_DEMO_PASSWORD="<mot-de-passe-local-des-comptes-de-demo>"
 
 # Les autres variables (SMS, WhatsApp, etc.) peuvent rester vides pour le développement
 ```
@@ -192,7 +194,7 @@ Ouvrir dans un navigateur: http://localhost:3000
 
 ```
 Email: admin@cem-melen.cm
-Mot de passe: ChristEst!2026
+Mot de passe: la valeur de ADMIN_PASSWORD (ou celle affichée par le seed)
 ```
 
 ---
@@ -206,7 +208,7 @@ curl -X POST http://localhost:3001/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "admin@cem-melen.cm",
-    "password": "ChristEst!2026"
+    "password": "<ADMIN_PASSWORD>"
   }'
 
 # Réponse attendue:

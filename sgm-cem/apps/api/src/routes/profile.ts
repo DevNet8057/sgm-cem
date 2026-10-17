@@ -2,8 +2,8 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { PrismaClient } from '@prisma/client'
 import multer from 'multer'
-import path from 'path'
 import { authenticate } from '../middleware/auth'
+import { phoneVariants } from '../lib/otp'
 import { AppError } from '../middleware/errorHandler'
 import { storeFile, deleteStoredFile, getManagedStorageKey } from '../services/storage'
 
@@ -11,6 +11,15 @@ const router = Router()
 const prisma = new PrismaClient()
 
 // Memory storage: we upload to S3/local via the storage service after receiving
+// Extension dérivée du type MIME accepté, jamais du nom fourni par le client
+// (un « photo.html » servi depuis /uploads serait exécuté par le navigateur).
+const IMAGE_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif',
+}
+function imageExtension(mimetype: string): string {
+  return IMAGE_EXTENSIONS[mimetype] ?? '.jpg'
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 Mo
@@ -59,6 +68,16 @@ router.patch('/', authenticate, async (req, res) => {
     if (existing) throw new AppError('DUPLICATE', 'Cette adresse email est déjà utilisée par un autre compte', 409)
   }
 
+  // Le numéro WhatsApp sert à la connexion par code : il doit désigner un seul compte
+  if (data.whatsappPhone) {
+    const { all } = phoneVariants(data.whatsappPhone)
+    const taken = await prisma.user.findFirst({
+      where: { whatsappPhone: { in: all }, NOT: { id: req.user!.userId } },
+      select: { id: true },
+    })
+    if (taken) throw new AppError('DUPLICATE', 'Ce numéro WhatsApp est déjà utilisé par un autre compte', 409)
+  }
+
   const user = await prisma.user.findUnique({ where: { id: req.user!.userId } })
   if (!user) throw new AppError('NOT_FOUND', 'Utilisateur introuvable', 404)
 
@@ -100,7 +119,7 @@ router.patch('/', authenticate, async (req, res) => {
 router.post('/photo', authenticate, upload.single('photo'), async (req, res) => {
   if (!req.file) throw new AppError('VALIDATION_ERROR', 'Aucun fichier fourni', 400)
 
-  const ext = path.extname(req.file.originalname).toLowerCase() || '.jpg'
+  const ext = imageExtension(req.file.mimetype)
   const key = `avatars/${req.user!.userId}-${Date.now()}${ext}`
 
   const result = await storeFile(key, req.file.buffer, req.file.mimetype)
@@ -141,7 +160,7 @@ router.post('/:userId/photo', authenticate, upload.single('photo'), async (req, 
   const target = await prisma.user.findUnique({ where: { id: userId }, select: { photoUrl: true } })
   if (!target) throw new AppError('NOT_FOUND', 'Utilisateur introuvable', 404)
 
-  const ext = path.extname(req.file.originalname).toLowerCase() || '.jpg'
+  const ext = imageExtension(req.file.mimetype)
   const key = `avatars/${userId}-${Date.now()}${ext}`
   const result = await storeFile(key, req.file.buffer, req.file.mimetype)
 

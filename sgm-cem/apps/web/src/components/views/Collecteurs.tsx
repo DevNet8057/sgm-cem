@@ -20,15 +20,13 @@ const LOCATION_LABELS: Record<string, string> = {
   EN_BANQUE: 'En banque',
 }
 
-type TransferMode = 'existing' | 'to_user'
 
 export function Collecteurs() {
   const queryClient = useQueryClient()
   const [selected, setSelected] = useState<string[]>([])
-  const [destination, setDestination] = useState<Extract<LocalisationFonds, 'EN_CAISSE' | 'EN_BANQUE'>>('EN_CAISSE')
   const [recipientId, setRecipientId] = useState('')
+  const [transferType, setTransferType] = useState<TransferType>('ESPECES_EN_MAIN')
   const [error, setError] = useState('')
-  const [transferMode, setTransferMode] = useState<TransferMode>('existing')
   // B6 — dépôt bancaire trésorier
   const [bankSelected, setBankSelected] = useState<string[]>([])
   const [referenceBordereau, setReferenceBordereau] = useState('')
@@ -59,14 +57,26 @@ export function Collecteurs() {
   const isTreasurer = myRole === 'TRESORIER'
   // L'ADMIN (et le DEVELOPER) voit les preuves de dépôt : références de bordereau
   const canSeeDeposits = ['TRESORIER', 'ADMIN', 'DEVELOPER'].includes(myRole)
-  const eligibleRecipients = data?.eligibleRecipients ?? []
+  // Circuit officiel : on ne remet que les fonds que l'on détient (l'ADMIN peut
+  // initier pour un détenteur) ; le destinataire confirme dans « Fonds à réceptionner ».
+  const canTransferAny = myRole === 'ADMIN' || myRole === 'DEVELOPER'
+  const { data: eligibleRecipients = [] } = useQuery<Array<{ id: string; fullName: string; role: string }>>({
+    queryKey: ['funds-eligible-receivers'],
+    queryFn: async () => (await api.get('/funds/eligible-receivers')).data.data,
+    enabled: !!data,
+  })
 
   const transferMutation = useMutation({
-    mutationFn: (payload: Record<string, unknown>) => api.patch('/collecteurs/transfer', payload),
+    mutationFn: () => api.post('/funds/transfer', {
+      receiverId: recipientId,
+      contributionIds: selected,
+      transferType,
+    }),
     onSuccess: async () => {
       setSelected([])
       setRecipientId('')
       setError('')
+      await queryClient.invalidateQueries({ queryKey: ['transfers'] })
       await queryClient.invalidateQueries({ queryKey: ['collecteurs'] })
       await queryClient.invalidateQueries({ queryKey: ['contributions'] })
       await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
@@ -96,52 +106,28 @@ export function Collecteurs() {
     },
   })
 
-  const claimMutation = useMutation({
-    mutationFn: () => api.patch('/collecteurs/claim', {
-      contributionIds: selected,
-      note: 'Reception des fonds en transit',
-    }),
-    onSuccess: async () => {
-      setSelected([])
-      setError('')
-      await queryClient.invalidateQueries({ queryKey: ['collecteurs'] })
-      await queryClient.invalidateQueries({ queryKey: ['contributions'] })
-      await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
-    },
-    onError: (err: unknown) => {
-      const e = err as { response?: { data?: { error?: { message?: string } } } }
-      setError(e.response?.data?.error?.message ?? 'Reception impossible')
-    },
-  })
-
   const contributions = data?.contributions ?? []
+  const isTransferable = (c: Contribution) =>
+    c.localisationFonds === 'CHEZ_COLLECTEUR' && (canTransferAny || c.collecteurId === data?.myUserId)
+  const transferable = contributions.filter(isTransferable)
   const selectedTotal = useMemo(
     () => contributions.filter(c => selected.includes(c.id)).reduce((sum, c) => sum + c.montant, 0),
     [contributions, selected]
   )
 
-  const isPending = transferMutation.isPending || claimMutation.isPending
+  const isPending = transferMutation.isPending
 
   function toggle(id: string) {
     setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])
   }
 
   function toggleAll() {
-    setSelected(current => current.length === contributions.length ? [] : contributions.map(c => c.id))
+    setSelected(current => current.length === transferable.length ? [] : transferable.map(c => c.id))
   }
 
   function submitTransfer() {
     setError('')
-    if (transferMode === 'existing') {
-      transferMutation.mutate({ contributionIds: selected, localisationFonds: destination })
-    } else {
-      transferMutation.mutate({ contributionIds: selected, toUserId: recipientId, note: 'Transfert direct vers destinataire' })
-    }
-  }
-
-  function submitClaim() {
-    setError('')
-    claimMutation.mutate()
+    transferMutation.mutate()
   }
 
   return (
@@ -171,7 +157,6 @@ export function Collecteurs() {
       <MoneyFlow
         flow={data?.flow}
         selectedTotal={selectedTotal}
-        destination={destination}
       />
 
       {(data?.summary?.length ?? 0) > 0 && (
@@ -207,39 +192,29 @@ export function Collecteurs() {
             <p className="text-white/60 text-xs">{selected.length} selectionnee(s), {formatAmount(selectedTotal)}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {isCollector ? (
-              <>
-                <select value={recipientId} onChange={e => setRecipientId(e.target.value)}
-                  className="px-3 py-2 rounded-[10px] text-sm bg-white border-0 focus:outline-none">
-                  <option value="">Transférer à...</option>
-                  {eligibleRecipients.map(u => (
-                    <option key={u.id} value={u.id}>{u.fullName} ({u.role})</option>
-                  ))}
-                </select>
-                <Button variant="yellow" disabled={selected.length === 0 || !recipientId} loading={isPending} onClick={submitTransfer}>
-                  <UserPlus size={14} />
-                  Transférer au destinataire
-                </Button>
-                <Button variant="primary" disabled={selected.length === 0} loading={isPending} onClick={submitClaim}>
-                  <ShieldCheck size={14} />
-                  Confirmer réception
-                </Button>
-              </>
-            ) : (
-              <>
-                <select value={destination} onChange={e => setDestination(e.target.value as typeof destination)}
-                  className="px-3 py-2 rounded-[10px] text-sm bg-white border-0 focus:outline-none">
-                  <option value="EN_CAISSE">Vers caisse</option>
-                  <option value="EN_BANQUE">Vers banque</option>
-                </select>
-                <Button variant="yellow" disabled={selected.length === 0} loading={isPending} onClick={() => submitTransfer()}>
-                  <Landmark size={14} />
-                  Transferer
-                </Button>
-              </>
-            )}
+            <select value={recipientId} onChange={e => setRecipientId(e.target.value)} aria-label="Destinataire"
+              className="px-3 py-2 rounded-[10px] text-sm bg-white border-0 focus:outline-none">
+              <option value="">Remettre à…</option>
+              {eligibleRecipients.map(u => (
+                <option key={u.id} value={u.id}>{u.fullName} ({ROLE_LABELS[u.role as UserRole] ?? u.role})</option>
+              ))}
+            </select>
+            <select value={transferType} onChange={e => setTransferType(e.target.value as TransferType)} aria-label="Mode de remise"
+              className="px-3 py-2 rounded-[10px] text-sm bg-white border-0 focus:outline-none">
+              {Object.entries(TRANSFER_TYPE_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+            <Button variant="yellow" disabled={selected.length === 0 || !recipientId} loading={isPending} onClick={submitTransfer}>
+              <UserPlus size={14} />
+              Remettre les fonds
+            </Button>
           </div>
         </div>
+        <p className="px-5 pt-3 text-xs text-gray-500">
+          Le destinataire confirme la réception dans « Fonds à réceptionner » ; un bordereau est alors généré.
+          {!canTransferAny && ' Seuls les fonds que vous détenez peuvent être sélectionnés.'}
+        </p>
 
         {error && <div className="m-4 px-3 py-2 rounded-[10px] bg-red-50 border border-red-100 text-sm text-red-600">{error}</div>}
 
@@ -248,7 +223,7 @@ export function Collecteurs() {
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 <th className="px-4 py-3 text-left">
-                  <input type="checkbox" checked={contributions.length > 0 && selected.length === contributions.length} onChange={toggleAll} />
+                  <input type="checkbox" aria-label="Tout sélectionner" checked={transferable.length > 0 && selected.length === transferable.length} onChange={toggleAll} disabled={transferable.length === 0} />
                 </th>
                 {['Membre', 'Rubrique', 'Collecteur', 'Montant', 'Mode', 'Localisation', 'Date'].map(col => (
                   <th key={col} className="px-4 py-3 text-left text-xs font-semibold text-gray-500">{col}</th>
@@ -262,7 +237,7 @@ export function Collecteurs() {
                 <tr><td colSpan={8}><EmptyState icon={Wallet} title="Aucun fonds a reverser" description="Les contributions confirmees chez les collecteurs apparaitront ici." /></td></tr>
               ) : (
                 contributions.map(c => (
-                  <ContributionRow key={c.id} contribution={c} selected={selected.includes(c.id)} onToggle={() => toggle(c.id)} />
+                  <ContributionRow key={c.id} contribution={c} selectable={isTransferable(c)} selected={selected.includes(c.id)} onToggle={() => toggle(c.id)} />
                 ))
               )}
             </tbody>
@@ -484,13 +459,10 @@ function BankDepositHistory() {
   )
 }
 
-function MoneyFlow({ flow, selectedTotal, destination }: {
+function MoneyFlow({ flow, selectedTotal }: {
   flow?: CollecteursResponse['flow']
   selectedTotal: number
-  destination: Extract<LocalisationFonds, 'EN_CAISSE' | 'EN_BANQUE'>
 }) {
-  const toBanque = destination === 'EN_BANQUE'
-
   const chezCollecteur = flow?.chezCollecteur ?? 0
   const enTransit = flow?.enTransit ?? 0
   const electronique = flow?.electroniqueTotal ?? 0
@@ -508,7 +480,7 @@ function MoneyFlow({ flow, selectedTotal, destination }: {
         </div>
         {selectedTotal > 0 && (
           <div className="rounded-[10px] bg-[#F5C400]/20 px-3 py-2 text-xs font-semibold text-[#0F4A0F]">
-            Selection en mouvement : {formatAmount(selectedTotal)} vers {toBanque ? 'banque' : 'caisse'}
+            Sélection à remettre : {formatAmount(selectedTotal)}
           </div>
         )}
       </div>
@@ -625,14 +597,18 @@ function FlowBar({ color, value, total }: { color: string; value: number; total:
   return <div className={color} style={{ width: `${Math.max(4, (value / total) * 100)}%` }} />
 }
 
-function ContributionRow({ contribution, selected, onToggle }: {
+function ContributionRow({ contribution, selectable, selected, onToggle }: {
   contribution: Contribution
+  selectable: boolean
   selected: boolean
   onToggle: () => void
 }) {
   return (
     <tr className="border-b border-gray-50 hover:bg-[#1A6B1A]/4 transition-colors">
-      <td className="px-4 py-3"><input type="checkbox" checked={selected} onChange={onToggle} /></td>
+      <td className="px-4 py-3">
+        <input type="checkbox" aria-label="Sélectionner" checked={selected} onChange={onToggle} disabled={!selectable}
+          title={selectable ? undefined : 'Fonds détenus par une autre personne ou déjà en transit'} />
+      </td>
       <td className="px-4 py-3 font-medium text-gray-800">
         <div className="flex items-center gap-2">
           <Avatar name={contribution.membre?.user.fullName ?? '—'} size="xs" />

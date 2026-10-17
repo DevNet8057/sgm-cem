@@ -30,12 +30,14 @@ export function formatDateTime(date: Date | string): string {
   return new Date(date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
-export function escapeHtml(value: string): string {
-  return value
+export function escapeHtml(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  return String(value)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
 /** CSS partagé — palette et typographie identiques sur tous les documents. */

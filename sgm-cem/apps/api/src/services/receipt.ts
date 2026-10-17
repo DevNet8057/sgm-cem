@@ -1,8 +1,7 @@
-import puppeteer from 'puppeteer'
-import fs from 'fs'
 import { PrismaClient } from '@prisma/client'
 import { storeFile } from './storage'
-import { getLogoDataUri, formatXAF, formatDate, formatDateTime } from './pdf-branding'
+import { getLogoDataUri, formatXAF, formatDate, formatDateTime, escapeHtml as e } from './pdf-branding'
+import { renderPdf } from './pdf-render'
 
 const prisma = new PrismaClient()
 
@@ -20,20 +19,6 @@ const STATUT_LABELS: Record<string, { label: string; color: string; bg: string }
   EN_ATTENTE_CONFIRMATION: { label: 'EN ATTENTE DE CONFIRMATION', color: '#92400E', bg: '#FFFBEB' },
   ANNULE: { label: 'PAIEMENT ANNULÉ', color: '#991B1B', bg: '#FEF2F2' },
   LITIGE: { label: 'EN LITIGE', color: '#991B1B', bg: '#FEF2F2' },
-}
-
-/**
- * Docker fournit Chromium via PUPPETEER_EXECUTABLE_PATH. En développement
- * Windows, Puppeteer est installé sans son navigateur afin d'alléger le dépôt :
- * utiliser Chrome local quand il est présent pour que les reçus restent testables.
- */
-function resolveBrowserExecutable(): string | undefined {
-  const configured = process.env.PUPPETEER_EXECUTABLE_PATH
-  if (configured) return configured
-  if (process.platform !== 'win32') return undefined
-
-  const chrome = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
-  return fs.existsSync(chrome) ? chrome : undefined
 }
 
 /** Numéro de reçu lisible et stable, dérivé de l'ID — pas de compteur séparé à maintenir. */
@@ -127,7 +112,7 @@ export async function generateReceiptHtml(contributionId: string): Promise<strin
     <div class="logo-box">${logo ? `<img src="${logo}" alt="Logo" />` : ''}</div>
     <div class="header-text">
       <h1>Reçu de Contribution</h1>
-      <p>${communityName} &bull; EEC Melen, Yaoundé</p>
+      <p>${e(communityName)} &bull; EEC Melen, Yaoundé</p>
     </div>
     <div class="header-meta">
       <div class="num">${numero}</div>
@@ -142,15 +127,15 @@ export async function generateReceiptHtml(contributionId: string): Promise<strin
   <div class="parties">
     <div class="party">
       <div class="ptitle">Émis par</div>
-      <div class="pname">${communityName}</div>
+      <div class="pname">${e(communityName)}</div>
       <div class="pline">Système de Gestion du Ministère</div>
       <div class="pline">EEC Melen &bull; Yaoundé, Cameroun</div>
     </div>
     <div class="party">
       <div class="ptitle">Reçu de</div>
-      <div class="pname">${contribution.membre?.user.fullName ?? contribution.contributeurExterne?.nom ?? 'Contributeur'}</div>
-      <div class="pline">Matricule : ${contribution.membre?.memberId ?? 'Contributeur externe'}</div>
-      ${(contribution.membre?.user.phone ?? contribution.contributeurExterne?.phone) ? `<div class="pline">${contribution.membre?.user.phone ?? contribution.contributeurExterne?.phone}</div>` : ''}
+      <div class="pname">${e(contribution.membre?.user.fullName ?? contribution.contributeurExterne?.nom ?? 'Contributeur')}</div>
+      <div class="pline">Matricule : ${e(contribution.membre?.memberId ?? 'Contributeur externe')}</div>
+      ${(contribution.membre?.user.phone ?? contribution.contributeurExterne?.phone) ? `<div class="pline">${e(contribution.membre?.user.phone ?? contribution.contributeurExterne?.phone)}</div>` : ''}
     </div>
   </div>
 
@@ -161,8 +146,8 @@ export async function generateReceiptHtml(contributionId: string): Promise<strin
     <tbody>
       <tr>
         <td class="desc">
-          <strong>${contribution.rubrique?.code ?? '-'} &mdash; ${contribution.rubrique?.title ?? '-'}</strong>
-          ${contribution.periodeLabel ? `<span>Période : ${contribution.periodeLabel}</span>` : ''}
+          <strong>${e(contribution.rubrique?.code ?? '-')} &mdash; ${e(contribution.rubrique?.title ?? '-')}</strong>
+          ${contribution.periodeLabel ? `<span>Période : ${e(contribution.periodeLabel)}</span>` : ''}
         </td>
         <td class="num">${formatXAF(contribution.montant)}</td>
       </tr>
@@ -181,9 +166,9 @@ export async function generateReceiptHtml(contributionId: string): Promise<strin
   </div>
 
   <div class="grid">
-    <div class="field"><div class="flabel">Mode de paiement</div><div class="fval">${MODE_LABELS[contribution.modePaiement] ?? contribution.modePaiement}</div></div>
-    <div class="field"><div class="flabel">Référence</div><div class="fval">${(contribution.referencePaiement ?? contribution.externalTransactionId ?? contribution.id).toString().slice(0, 24)}</div></div>
-    <div class="field"><div class="flabel">Reçu par</div><div class="fval">${contribution.collecteur?.fullName ?? 'Système (paiement en ligne)'}</div></div>
+    <div class="field"><div class="flabel">Mode de paiement</div><div class="fval">${e(MODE_LABELS[contribution.modePaiement] ?? contribution.modePaiement)}</div></div>
+    <div class="field"><div class="flabel">Référence</div><div class="fval">${e((contribution.referencePaiement ?? contribution.externalTransactionId ?? contribution.id).toString().slice(0, 24))}</div></div>
+    <div class="field"><div class="flabel">Reçu par</div><div class="fval">${e(contribution.collecteur?.fullName ?? 'Système (paiement en ligne)')}</div></div>
     <div class="field"><div class="flabel">${contribution.confirmedAt ? 'Confirmé le' : 'Enregistré le'}</div><div class="fval">${formatDateTime(contribution.confirmedAt ?? contribution.createdAt)}</div></div>
   </div>
 
@@ -194,8 +179,8 @@ export async function generateReceiptHtml(contributionId: string): Promise<strin
   </div>` : ''}
 
   <div class="footer">
-    <p>Document délivré par <strong>SGM-CEM</strong> &bull; ${communityName}</p>
-    <p class="verse">"${verse.substring(0, 90)}"</p>
+    <p>Document délivré par <strong>SGM-CEM</strong> &bull; ${e(communityName)}</p>
+    <p class="verse">"${e(verse.substring(0, 90))}"</p>
     <p class="meta">Reçu n&deg; ${numero} &bull; Généré le ${formatDateTime(new Date())} &bull; Ce document tient lieu de reçu de paiement — à conserver</p>
   </div>
 </body>
@@ -204,17 +189,7 @@ export async function generateReceiptHtml(contributionId: string): Promise<strin
 
 export async function generateReceiptPdf(contributionId: string): Promise<Buffer> {
   const html = await generateReceiptHtml(contributionId)
-  const executablePath = resolveBrowserExecutable()
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    ...(executablePath ? { executablePath } : {}),
-  })
-  const page = await browser.newPage()
-  await page.setContent(html, { waitUntil: 'networkidle0' })
-  const pdf = await page.pdf({ format: 'A5', printBackground: true })
-  await browser.close()
-  return Buffer.from(pdf)
+  return renderPdf(html, { format: 'A5', printBackground: true })
 }
 
 /**

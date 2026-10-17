@@ -1,15 +1,14 @@
 import { Router } from 'express'
-import bcrypt from 'bcrypt'
 import { z } from 'zod'
 import { PrismaClient } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireLevel, requireRole } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
+import { generateTemporaryPassword, hashPassword } from '../lib/password'
+import { forgetUserState, revokeUserSessions } from '../lib/session'
 
 const router = Router()
 const prisma = new PrismaClient()
-
-const DEFAULT_PASSWORD = 'CEM@2026!'
 
 // Hiérarchie DEVELOPER (niveau 6) > ADMIN (niveau 5) : un ADMIN ne peut pas
 // modifier/désactiver/réinitialiser un compte DEVELOPER — sinon il pourrait
@@ -42,7 +41,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'DEVELOPER'), async (req, re
     email:     z.string().email(),
     phone:     z.string().optional(),
     role:      z.enum(['ADMIN', 'TRESORIER', 'RESPONSABLE', 'ADJOINT_RESPONSABLE', 'COLLECTEUR', 'MEMBRE']),
-    password:  z.string().min(8).optional(),
+    password:  z.string().min(8).max(128).optional(),
   })
   const data = schema.parse(req.body)
   const fullName = `${data.firstName} ${data.lastName}`
@@ -50,8 +49,8 @@ router.post('/', authenticate, requireRole('ADMIN', 'DEVELOPER'), async (req, re
   const existing = await prisma.user.findUnique({ where: { email: data.email } })
   if (existing) throw new AppError('DUPLICATE', 'Un compte avec cet email existe déjà', 409)
 
-  const rawPassword = data.password ?? DEFAULT_PASSWORD
-  const passwordHash = await bcrypt.hash(rawPassword, 12)
+  const rawPassword = data.password ?? generateTemporaryPassword()
+  const passwordHash = await hashPassword(rawPassword)
 
   const count = await prisma.user.count()
   const memberId = `CEM-${new Date().getFullYear()}-${String(count + 1).padStart(6, '0')}`
@@ -90,7 +89,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'DEVELOPER'), async (req, re
   res.status(201).json({
     success: true,
     data: { ...user, temporaryPassword: rawPassword },
-    message: `Compte créé. Mot de passe temporaire : ${rawPassword}`,
+    message: 'Compte créé. Communiquez le mot de passe temporaire à son titulaire : il devra le changer à la première connexion.',
   })
 })
 
@@ -126,6 +125,9 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'DEVELOPER'), async (req
       mustChangePassword: true,
     },
   })
+  // Rôle modifié : le titulaire doit se reconnecter pour obtenir des jetons à jour
+  if (data.role && data.role !== user.role) await revokeUserSessions(id, prisma)
+  forgetUserState(id)
 
   await prisma.auditLog.create({
     data: {
@@ -156,6 +158,20 @@ router.patch('/:id/toggle-active', authenticate, requireRole('ADMIN', 'DEVELOPER
     data: { isActive: !user.isActive },
     select: { id: true, isActive: true, fullName: true },
   })
+  // Compte désactivé : toutes ses sessions sont fermées immédiatement
+  if (!updated.isActive) await revokeUserSessions(id, prisma)
+  forgetUserState(id)
+
+  await prisma.auditLog.create({
+    data: {
+      userId: req.user!.userId,
+      userName: req.user!.email,
+      action: 'UPDATE',
+      entityType: 'User',
+      entityId: id,
+      details: { action: updated.isActive ? 'account_enabled' : 'account_disabled', role: user.role },
+    },
+  })
 
   res.json({ success: true, data: updated })
 })
@@ -163,14 +179,14 @@ router.patch('/:id/toggle-active', authenticate, requireRole('ADMIN', 'DEVELOPER
 // ── Reset password (ADMIN only) ───────────────────────────────────────
 router.post('/:id/reset-password', authenticate, requireRole('ADMIN', 'DEVELOPER'), async (req, res) => {
   const id = String(req.params.id)
-  const { password } = z.object({ password: z.string().min(8).optional() }).parse(req.body)
+  const { password } = z.object({ password: z.string().min(8).max(128).optional() }).parse(req.body)
 
   const user = await prisma.user.findUnique({ where: { id } })
   if (!user) throw new AppError('NOT_FOUND', 'Utilisateur introuvable', 404)
   assertCanManageTarget(req.user!.role, user.role)
 
-  const rawPassword = password ?? DEFAULT_PASSWORD
-  const passwordHash = await bcrypt.hash(rawPassword, 12)
+  const rawPassword = password ?? generateTemporaryPassword()
+  const passwordHash = await hashPassword(rawPassword)
 
   await prisma.user.update({
     where: { id },
@@ -178,7 +194,8 @@ router.post('/:id/reset-password', authenticate, requireRole('ADMIN', 'DEVELOPER
   })
 
   // Invalider toutes les sessions existantes
-  await prisma.userSession.deleteMany({ where: { userId: id } })
+  await revokeUserSessions(id, prisma)
+  forgetUserState(id)
 
   await prisma.auditLog.create({
     data: {
@@ -194,7 +211,7 @@ router.post('/:id/reset-password', authenticate, requireRole('ADMIN', 'DEVELOPER
   res.json({
     success: true,
     data: { temporaryPassword: rawPassword },
-    message: `Mot de passe réinitialisé. Nouveau mot de passe temporaire : ${rawPassword}`,
+    message: 'Mot de passe réinitialisé. Le titulaire devra le changer à la prochaine connexion.',
   })
 })
 

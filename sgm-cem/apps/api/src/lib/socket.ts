@@ -1,8 +1,7 @@
 import { getConfig } from '../services/config.service'
 import { Server as SocketIOServer } from 'socket.io'
 import type { Server as HttpServer } from 'http'
-import jwt from 'jsonwebtoken'
-import { getJwtSecret } from './security'
+import { verifyAccessToken } from '../middleware/auth'
 
 interface JwtPayload {
   userId: string
@@ -34,7 +33,8 @@ export function initSocketIO(server: HttpServer): SocketIOServer {
   })
 
   // Verify JWT from access_token HttpOnly cookie in the upgrade request
-  io.use((socket, next) => {
+  // Même contrôle que l'API : signature + session non révoquée + compte actif
+  io.use(async (socket, next) => {
     try {
       const cookieHeader = socket.handshake.headers.cookie ?? ''
       const tokenEntry = cookieHeader.split(';').map(c => c.trim()).find(c => c.startsWith('access_token='))
@@ -42,8 +42,8 @@ export function initSocketIO(server: HttpServer): SocketIOServer {
 
       if (!token) { next(new Error('Authentication required')); return }
 
-      const payload = jwt.verify(token, getJwtSecret()) as JwtPayload
-      socket.data.user = payload
+      const payload = await verifyAccessToken(token)
+      socket.data.user = { userId: payload.userId, role: payload.role, email: payload.email } satisfies JwtPayload
       next()
     } catch {
       next(new Error('Invalid token'))

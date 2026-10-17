@@ -1,7 +1,7 @@
-import puppeteer from 'puppeteer'
+import { renderPdf } from './pdf-render'
 import { PrismaClient } from '@prisma/client'
 import { storeFile } from './storage'
-import { formatXAF, formatDate, formatDateTime, PDF_BASE_STYLES, renderDocHeader, renderDocFooter } from './pdf-branding'
+import { formatXAF, formatDate, formatDateTime, PDF_BASE_STYLES, renderDocHeader, renderDocFooter, escapeHtml as e } from './pdf-branding'
 
 const prisma = new PrismaClient()
 
@@ -42,8 +42,8 @@ export async function generateBorderauHtml(transferId: string): Promise<string> 
 
   const rows = transfer.contributions.map(c => `
     <tr>
-      <td>${c.membre?.user.fullName ?? '-'}</td>
-      <td><span class="code">${c.rubrique?.code ?? '-'}</span> ${c.rubrique?.title ?? ''}</td>
+      <td>${e(c.membre?.user.fullName ?? '-')}</td>
+      <td><span class="code">${e(c.rubrique?.code ?? '-')}</span> ${e(c.rubrique?.title ?? '')}</td>
       <td class="num">${formatXAF(c.montant)}</td>
     </tr>`).join('')
 
@@ -97,19 +97,19 @@ export async function generateBorderauHtml(transferId: string): Promise<string> 
   <div class="parties">
     <div class="party">
       <div class="ptitle">Remis par</div>
-      <div class="pname">${transfer.senderName}</div>
-      <div class="prole">${transfer.sender.role}</div>
+      <div class="pname">${e(transfer.senderName)}</div>
+      <div class="prole">${e(transfer.sender.role)}</div>
     </div>
     <div class="arrow">&#8594;</div>
     <div class="party">
       <div class="ptitle">Reçu par</div>
-      <div class="pname">${transfer.receiverName}</div>
-      <div class="prole">${transfer.receiver.role}</div>
+      <div class="pname">${e(transfer.receiverName)}</div>
+      <div class="prole">${e(transfer.receiver.role)}</div>
     </div>
   </div>
 
   <div class="grid">
-    <div class="field"><div class="flabel">Mode de remise</div><div class="fval">${TRANSFER_TYPE_LABELS[transfer.transferType] ?? transfer.transferType}</div></div>
+    <div class="field"><div class="flabel">Mode de remise</div><div class="fval">${e(TRANSFER_TYPE_LABELS[transfer.transferType] ?? transfer.transferType)}</div></div>
     <div class="field"><div class="flabel">Nombre de contributions</div><div class="fval">${transfer.contributions.length}</div></div>
     <div class="field"><div class="flabel">${isConfirmed ? 'Confirmé le' : 'Initié le'}</div><div class="fval">${formatDateTime(transfer.confirmedAt ?? transfer.createdAt)}</div></div>
   </div>
@@ -123,11 +123,11 @@ export async function generateBorderauHtml(transferId: string): Promise<string> 
     <div class="row grand"><span>Total remis</span><span class="num">${formatXAF(transfer.totalAmount)}</span></div>
   </div>
 
-  ${transfer.senderNote ? `<p style="font-size:11px;color:#64748B;margin-bottom:16px;"><strong>Note :</strong> ${transfer.senderNote}</p>` : ''}
+  ${transfer.senderNote ? `<p style="font-size:11px;color:#64748B;margin-bottom:16px;"><strong>Note :</strong> ${e(transfer.senderNote)}</p>` : ''}
 
   <div class="signatures">
-    <div class="sig"><div class="line">Signature — ${transfer.senderName}</div></div>
-    <div class="sig"><div class="line">Signature — ${transfer.receiverName}</div></div>
+    <div class="sig"><div class="line">Signature — ${e(transfer.senderName)}</div></div>
+    <div class="sig"><div class="line">Signature — ${e(transfer.receiverName)}</div></div>
   </div>
 
   ${renderDocFooter({ communityName, verse, docNumber: numero })}
@@ -137,12 +137,7 @@ export async function generateBorderauHtml(transferId: string): Promise<string> 
 
 export async function generateBorderauPdf(transferId: string): Promise<Buffer> {
   const html = await generateBorderauHtml(transferId)
-  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] })
-  const page = await browser.newPage()
-  await page.setContent(html, { waitUntil: 'networkidle0' })
-  const pdf = await page.pdf({ format: 'A4', printBackground: true })
-  await browser.close()
-  return Buffer.from(pdf)
+  return renderPdf(html, { format: 'A4', printBackground: true })
 }
 
 /** Génère le bordereau, le stocke, et enregistre son URL sur le transfert. */

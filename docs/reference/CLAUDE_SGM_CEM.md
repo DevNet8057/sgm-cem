@@ -344,7 +344,7 @@ const prisma = new PrismaClient()
 
 async function main() {
   // 1. Admin par défaut
-  const hashedPassword = await bcrypt.hash('ChristEst!2026', 12)
+  const hashedPassword = await bcrypt.hash('<mot-de-passe-retiré>', 12)
   await prisma.user.upsert({
     where: { email: 'admin@cem-melen.cm' },
     update: {},

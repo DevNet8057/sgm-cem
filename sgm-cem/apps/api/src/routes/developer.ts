@@ -7,12 +7,11 @@
 // ──────────────────────────────────────────────────────────────────────
 import { Router } from 'express'
 import { z } from 'zod'
-import jwt from 'jsonwebtoken'
 import { authenticate } from '../middleware/auth'
 import { requireDeveloper } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { getPrisma } from '../lib/prisma'
-import { getJwtSecret } from '../lib/security'
+import { signAccessToken } from '../lib/session'
 import { updateConfig, getConfigHistory, EXCLUDED_KEYS } from '../services/config.service'
 import { getYeliiWalletBalance } from '../services/yelii.service'
 import { setAuthCookies } from './auth'
@@ -187,13 +186,14 @@ router.post('/impersonate/:userId', async (req, res) => {
   })
 
   // Jeton du compte cible, marqué de l'identité du développeur initiateur
-  const payload = {
+  // La session du développeur porte le jeton : la fermer met fin à l'impersonation
+  const accessToken = signAccessToken({
     userId: target.id,
     role: target.role,
     email: target.email,
+    sid: req.user!.sid!,
     impersonatedBy: requester.id,
-  }
-  const accessToken = jwt.sign(payload, getJwtSecret(), { expiresIn: '1h' })
+  }, IMPERSONATION_MAX_AGE_MS / 1000)
   setAuthCookies(req, res, accessToken, undefined, IMPERSONATION_MAX_AGE_MS)
 
   res.json({

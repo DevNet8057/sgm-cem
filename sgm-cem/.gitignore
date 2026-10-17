@@ -11,3 +11,6 @@ apps/api/uploads/
 backups/
 apps/api/backups/
 *.dump
+
+# Cache de compilation Node (NODE_COMPILE_CACHE)
+node-compile-cache/

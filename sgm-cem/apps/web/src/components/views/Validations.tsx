@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, CheckCircle2, Clock, CreditCard, MessageSquare, Paperclip } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Clock, CreditCard, MessageSquare, Paperclip, XCircle } from 'lucide-react'
 import api from '@/lib/api'
 import { formatAmount, formatDateTime, MODE_PAIEMENT_LABELS } from '@/lib/utils'
 import { Avatar } from '@/components/ui/Avatar'
@@ -17,6 +17,8 @@ import type { Contribution } from '@/types'
 export function Validations() {
   const queryClient = useQueryClient()
   const [disputeId, setDisputeId] = useState<string | null>(null)
+  // Même fenêtre de motif pour le litige et le refus (argent non reçu)
+  const [motifKind, setMotifKind] = useState<'litige' | 'refuse'>('litige')
   const [motif, setMotif] = useState('')
   const [motifError, setMotifError] = useState('')
   const [confirmError, setConfirmError] = useState('')
@@ -49,21 +51,26 @@ export function Validations() {
       })
       void refreshCore()
     },
-    onError: () => {
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { error?: { message?: string } } } }
       setConfirmError(
-        'Impossible de confirmer ce paiement. Vérifiez votre connexion puis réessayez.'
+        e.response?.data?.error?.message ?? 'Impossible de confirmer ce paiement. Vérifiez votre connexion puis réessayez.'
       )
     },
   })
 
   const dispute = useMutation({
-    mutationFn: async ({ id, motif }: { id: string; motif: string }) =>
-      api.patch(`/contributions/${id}/litige`, { motif }),
+    mutationFn: async ({ id, motif, kind }: { id: string; motif: string; kind: 'litige' | 'refuse' }) =>
+      api.patch(`/contributions/${id}/${kind}`, { motif }),
     onSuccess: () => {
       setDisputeId(null)
       setMotif('')
       setMotifError('')
       refreshCore()
+    },
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { error?: { message?: string } } } }
+      setMotifError(e.response?.data?.error?.message ?? 'Opération impossible, réessayez.')
     },
   })
 
@@ -75,7 +82,8 @@ export function Validations() {
     await queryClient.invalidateQueries({ queryKey: ['rubriques'] })
   }
 
-  function openDisputeModal(id: string) {
+  function openDisputeModal(id: string, kind: 'litige' | 'refuse' = 'litige') {
+    setMotifKind(kind)
     setDisputeId(id)
     setMotif('')
     setMotifError('')
@@ -91,7 +99,7 @@ export function Validations() {
       setMotifError('Le motif doit faire au moins 10 caractères')
       return
     }
-    if (disputeId) dispute.mutate({ id: disputeId, motif: motif.trim() })
+    if (disputeId) dispute.mutate({ id: disputeId, motif: motif.trim(), kind: motifKind })
   }
 
   const validations = data ?? []
@@ -193,23 +201,44 @@ export function Validations() {
                             Preuve
                           </a>
                         )}
-                        <Button
-                          size="sm"
-                          loading={confirm.isPending && confirm.variables === c.id}
-                          disabled={confirm.isPending}
-                          onClick={() => confirmContribution(c.id)}
-                        >
-                          <CheckCircle2 size={13} />
-                          Confirmer
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          onClick={() => openDisputeModal(c.id)}
-                        >
-                          <AlertTriangle size={13} />
-                          Litige
-                        </Button>
+                        {c.actions?.canConfirm && (
+                          <Button
+                            size="sm"
+                            loading={confirm.isPending && confirm.variables === c.id}
+                            disabled={confirm.isPending}
+                            onClick={() => confirmContribution(c.id)}
+                          >
+                            <CheckCircle2 size={13} />
+                            Confirmer
+                          </Button>
+                        )}
+                        {c.actions?.canRefuse && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openDisputeModal(c.id, 'refuse')}
+                          >
+                            <XCircle size={13} />
+                            Refuser
+                          </Button>
+                        )}
+                        {c.actions?.canDispute && (
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            onClick={() => openDisputeModal(c.id)}
+                          >
+                            <AlertTriangle size={13} />
+                            Litige
+                          </Button>
+                        )}
+                        {c.actions && !c.actions.canConfirm && !c.actions.canRefuse && !c.actions.canDispute && (
+                          <span className="text-xs text-gray-400">
+                            {c.modePaiement === 'ESPECES' || c.modePaiement === 'VIREMENT'
+                              ? 'À confirmer par le collecteur désigné'
+                              : 'Confirmation automatique par le prestataire'}
+                          </span>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -224,13 +253,15 @@ export function Validations() {
       <Modal
         open={disputeId !== null}
         onClose={() => { setDisputeId(null); setMotif(''); setMotifError('') }}
-        title="Signaler un litige"
-        description="Décrivez le problème constaté sur ce paiement."
+        title={motifKind === 'refuse' ? 'Refuser la déclaration' : 'Signaler un litige'}
+        description={motifKind === 'refuse'
+          ? "L'argent n'a pas été reçu : la déclaration sera annulée avec ce motif."
+          : 'Décrivez le problème constaté sur ce paiement.'}
       >
         <div className="space-y-4">
           <div>
             <label className="text-xs font-semibold text-gray-600 block mb-1.5">
-              Motif du litige <span className="text-red-500">*</span>
+              {motifKind === 'refuse' ? 'Motif du refus' : 'Motif du litige'} <span className="text-red-500">*</span>
             </label>
             <textarea
               value={motif}
@@ -260,7 +291,7 @@ export function Validations() {
               onClick={submitDispute}
             >
               <MessageSquare size={14} />
-              Confirmer le litige
+              {motifKind === 'refuse' ? 'Confirmer le refus' : 'Confirmer le litige'}
             </Button>
           </div>
         </div>

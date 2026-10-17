@@ -6,19 +6,14 @@
 ## 1. ACCÈS & IDENTIFIANTS PAR DÉFAUT
 
 ### Compte Administrateur
-| Champ          | Valeur                        |
-|----------------|-------------------------------|
-| Email          | `admin@cem-melen.cm`          |
-| Mot de passe   | `ChristEst!2026`              |
-| Rôle           | ADMIN (accès total)           |
-
-> **Important :** Changez ce mot de passe immédiatement après la première connexion.
+Créé au premier démarrage avec l'adresse `ADMIN_EMAIL`. **Aucun mot de passe par défaut** :
+le mot de passe est soit `ADMIN_PASSWORD` (choisi par l'opérateur), soit généré au hasard et
+affiché une seule fois dans les journaux de l'API — voir `DEPLOIEMENT_DOCKER.md` (« Comptes seedés »).
 
 ### Mot de passe temporaire (nouveaux comptes créés par l'admin)
-```
-CEM@2026!
-```
-Chaque utilisateur est forcé de changer son mot de passe à la première connexion.
+Chaque création ou réinitialisation produit un mot de passe **aléatoire** (affiché une fois à
+l'administrateur). L'utilisateur est obligé de le changer avant d'utiliser l'application
+(contrôle fait par le serveur, pas seulement par l'écran).
 
 ### Règles du mot de passe personnel
 - Minimum **8 caractères**
@@ -136,7 +131,7 @@ Lorsqu'un collecteur enregistre lui-même un paiement reçu en présentiel :
 1. Menu **Utilisateurs** (sidebar)
 2. Bouton **Créer un compte**
 3. Remplir : Prénom, Nom, Email, Téléphone, Rôle
-4. Un mot de passe temporaire est généré (`CEM@2026!` par défaut)
+4. Un mot de passe temporaire aléatoire est généré
 5. Le mot de passe est copié dans le presse-papiers → à communiquer à l'utilisateur
 6. **L'utilisateur devra le changer à sa première connexion**
 
@@ -145,7 +140,7 @@ Dans la liste des utilisateurs → bouton photo → ou dans le formulaire de cr�
 
 ### Réinitialiser un mot de passe
 1. Icône 🔑 à côté de l'utilisateur
-2. Saisir un nouveau mot de passe temporaire (ou laisser vide = `CEM@2026!`)
+2. Saisir un nouveau mot de passe temporaire (ou laisser vide : il est généré au hasard)
 3. Toutes les sessions de l'utilisateur sont invalidées
 4. L'utilisateur devra changer son mot de passe à la prochaine connexion
 
@@ -241,7 +236,7 @@ ORANGE_CLIENT_SECRET="votre-secret"
 ORANGE_MERCHANT_KEY="votre-merchant-key"
 
 # WhatsApp 360Dialog
-DIALOG360_API_KEY="votre-api-key-360dialog"
+DIALOG360_API_KEY="<VOTRE_CLE_360DIALOG>"
 
 # SMS Twilio
 TWILIO_ACCOUNT_SID="ACxxxxxxxxxx"

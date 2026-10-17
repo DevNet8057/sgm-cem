@@ -1,7 +1,8 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { PrismaClient } from '@prisma/client'
-import bcrypt from 'bcrypt'
+import { hashPassword } from '../lib/password'
+import { forgetUserState, revokeUserSessions } from '../lib/session'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
@@ -22,7 +23,7 @@ const createSchema = z.object({
   profession:      z.string().optional(),
   nomConjoint:     z.string().optional(),
   coupleMembreId:  z.string().optional(),
-  password:        z.string().min(6).optional(),
+  password:        z.string().min(8).max(128).optional(),
 })
 
 const updateSchema = z.object({
@@ -149,7 +150,9 @@ router.post('/', authenticate, requireLevel(3), async (req, res) => {
 
   const memberId   = await nextMemberId()
   const fullName   = `${data.firstName} ${data.lastName}`
-  const passwordHash = await bcrypt.hash(data.password ?? 'ChristEst!2026', 12)
+  // Sans mot de passe fourni, le compte membre se connecte par code OTP (téléphone) :
+  // aucun mot de passe commun n'est attribué ('disabled' ne correspond à aucun hash).
+  const passwordHash = data.password ? await hashPassword(data.password) : 'disabled'
 
   // Vérifier le couple si fourni
   if (data.coupleMembreId) {
@@ -162,7 +165,7 @@ router.post('/', authenticate, requireLevel(3), async (req, res) => {
       data: {
         memberId, firstName: data.firstName, lastName: data.lastName,
         fullName, email: data.email, phone: data.phone,
-        passwordHash, role: 'MEMBRE', isActive: true,
+        passwordHash, role: 'MEMBRE', isActive: true, mustChangePassword: !!data.password,
       },
     })
 
@@ -271,6 +274,9 @@ router.patch('/:id', authenticate, requireLevel(3), async (req, res) => {
       include: MEMBRE_INCLUDE,
     })
   })
+  // Membre désactivé : ses sessions sont fermées immédiatement
+  if (data.isActive === false) await revokeUserSessions(current.userId, prisma)
+  forgetUserState(current.userId)
 
   await prisma.auditLog.create({
     data: {
@@ -324,7 +330,8 @@ router.post('/import', authenticate, requireLevel(3), async (req, res) => {
   if (existing.length) throw new AppError('DUPLICATE', `Email déjà existant: ${existing[0].email}`)
 
   const memberIds  = await nextMemberIds(membres.length)
-  const passwordHash = await bcrypt.hash('ChristEst!2026', 12)
+  // Membres importés : connexion par code OTP, aucun mot de passe commun
+  const passwordHash = 'disabled'
 
   const created = await prisma.$transaction(async tx => {
     const rows = []

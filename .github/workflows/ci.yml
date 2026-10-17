@@ -2,16 +2,37 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, 'claude/**']
   pull_request:
     branches: [main]
 
 env:
-  NODE_VERSION: '20'
-  PNPM_VERSION: '9'
+  NODE_VERSION: '24'
+
+# Le monorepo pnpm est dans le sous-dossier sgm-cem/
+defaults:
+  run:
+    working-directory: sgm-cem
 
 jobs:
-  # ── Type-check & Lint ───────────────────────────────────────────────
+  # ── Secrets : aucune clé ne doit entrer dans le dépôt ───────────────
+  secrets:
+    name: Détection de secrets (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: gitleaks (historique complet)
+        working-directory: .
+        env:
+          GITLEAKS_VERSION: '8.28.0'
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar xz gitleaks
+          ./gitleaks git --redact --no-banner -c .gitleaks.toml .
+
+  # ── Type-check & audit ──────────────────────────────────────────────
   typecheck:
     name: Type check
     runs-on: ubuntu-latest
@@ -20,15 +41,21 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: ${{ env.PNPM_VERSION }}
+          package_json_file: sgm-cem/package.json
 
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
+          cache-dependency-path: sgm-cem/pnpm-lock.yaml
 
       - name: Install dependencies
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
         run: pnpm install --frozen-lockfile
+
+      - name: Vulnérabilités des dépendances de production
+        run: pnpm audit --prod --audit-level high
 
       - name: Type-check API
         run: pnpm --filter api type-check
@@ -44,7 +71,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        image: postgres:15
         env:
           POSTGRES_PASSWORD: testpassword
           POSTGRES_DB: sgm_cem_test
@@ -60,7 +87,7 @@ jobs:
       DATABASE_URL: postgresql://postgres:testpassword@localhost:5432/sgm_cem_test
       NODE_ENV: test
       JWT_SECRET: ci-test-jwt-secret-at-least-256-bits-long-padding
-      REFRESH_TOKEN_SECRET: ci-test-refresh-secret
+      REFRESH_TOKEN_SECRET: ci-test-refresh-secret-at-least-32-characters
       CSRF_SECRET: ci-test-csrf-secret
       API_URL: http://localhost:3001
       APP_URL: http://localhost:3000
@@ -70,26 +97,34 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: ${{ env.PNPM_VERSION }}
+          package_json_file: sgm-cem/package.json
 
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
+          cache-dependency-path: sgm-cem/pnpm-lock.yaml
 
       - name: Install dependencies
-        # Skip Chromium download — tests only check route guards, no PDF generation
+        # Chromium non téléchargé : les tests ne génèrent pas de PDF
         env:
-          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 'true'
           PUPPETEER_SKIP_DOWNLOAD: 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Push Prisma schema to test DB
-        working-directory: apps/api
-        run: pnpm prisma db push --accept-data-loss
+        working-directory: sgm-cem/apps/api
+        run: pnpm prisma db push --skip-generate && pnpm prisma generate
+
+      - name: Seed (base jetable)
+        working-directory: sgm-cem/apps/api
+        env:
+          SEED_DEMO: '1'
+          ADMIN_EMAIL: admin@ci.local
+          ADMIN_PASSWORD: ci-admin-password-base-jetable
+        run: pnpm exec ts-node prisma/seed.ts && pnpm exec ts-node prisma/seed-config.ts
 
       - name: Run API tests
-        working-directory: apps/api
+        working-directory: sgm-cem/apps/api
         run: pnpm test
 
   # ── Web Build ───────────────────────────────────────────────────────
@@ -107,18 +142,21 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: ${{ env.PNPM_VERSION }}
+          package_json_file: sgm-cem/package.json
 
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
+          cache-dependency-path: sgm-cem/pnpm-lock.yaml
 
       - name: Install dependencies
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Build web app
-        working-directory: apps/web
+        working-directory: sgm-cem/apps/web
         run: pnpm build
 
   # ── API Build ───────────────────────────────────────────────────────
@@ -132,16 +170,19 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: ${{ env.PNPM_VERSION }}
+          package_json_file: sgm-cem/package.json
 
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
+          cache-dependency-path: sgm-cem/pnpm-lock.yaml
 
       - name: Install dependencies
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Build API
-        working-directory: apps/api
+        working-directory: sgm-cem/apps/api
         run: pnpm build

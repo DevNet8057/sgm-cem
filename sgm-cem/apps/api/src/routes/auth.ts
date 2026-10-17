@@ -1,13 +1,13 @@
 import { Router, type Request, type Response } from 'express'
-import bcrypt from 'bcrypt'
-import jwt from 'jsonwebtoken'
 import { z } from 'zod'
 import { PrismaClient } from '@prisma/client'
-import rateLimit from 'express-rate-limit'
+import { limiter } from '../middleware/rate-limit'
 import { OAuth2Client } from 'google-auth-library'
 import { AppError } from '../middleware/errorHandler'
 import { authenticate } from '../middleware/auth'
-import { getJwtSecret, getRefreshTokenSecret } from '../lib/security'
+import { hashPassword, needsRehash, verifyPassword } from '../lib/password'
+import { generateOtpCode, hashOtpCode, OTP_MAX_PER_PHONE_PER_HOUR, OTP_TTL_MS, otpMatches, phoneVariants } from '../lib/otp'
+import { forgetUserState, openSession, refreshSession, revokeSessionByRefreshToken, revokeUserSessions, signAccessToken } from '../lib/session'
 import { sendSMS, sendWhatsApp } from '../services/notification'
 import { getConfig } from '../services/config.service'
 import { audit } from '../services/audit.service'
@@ -30,10 +30,8 @@ function getGoogleClient(): OAuth2Client | null {
   return googleClient
 }
 
-const authLimiter  = rateLimit({ windowMs: 60 * 60 * 1000, max: 15,
-  message: { success: false, error: { code: 'RATE_LIMITED', message: 'Trop de tentatives. Réessayez dans quelques minutes.' } },
-})
-const otpLimiter   = rateLimit({ windowMs: 10 * 60 * 1000, max: 5, message: { success: false, error: { code: 'RATE_LIMITED', message: 'Trop de tentatives. Attendez 10 minutes.' } } })
+const authLimiter = limiter(60 * 60 * 1000, 15, 'Trop de tentatives. Réessayez dans quelques minutes.')
+const otpLimiter  = limiter(10 * 60 * 1000, 5, 'Trop de tentatives. Attendez 10 minutes.')
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -46,7 +44,7 @@ const IS_PROD = process.env.NODE_ENV === 'production'
 // Exporté pour routes/developer.ts (impersonation) — accessMaxAgeMs permet
 // une durée de cookie alignée sur le jeton d'impersonation (1 h).
 export function setAuthCookies(req: Request, res: Response, accessToken: string, refreshToken?: string, accessMaxAgeMs = 15 * 60 * 1000): void {
-  const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https'
+  const isSecure = req.secure // fiable grâce à « trust proxy » (index.ts)
   res.cookie('access_token', accessToken, {
     httpOnly: true,
     secure: isSecure,
@@ -88,26 +86,8 @@ function buildUser(user: {
 }
 
 async function createSessionTokens(user: { id: string; role: string; email: string }, prismaClient: PrismaClient) {
-  const payload = { userId: user.id, role: user.role, email: user.email }
-  const accessToken = jwt.sign(payload, getJwtSecret(), { expiresIn: '15m' })
-  const refreshToken = jwt.sign(payload, getRefreshTokenSecret(), { expiresIn: '7d' })
-
-  try {
-    await prismaClient.userSession.create({
-      data: {
-        userId: user.id,
-        refreshToken,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      },
-    })
-  } catch (err: any) {
-    throw new Error(`SESSION_CREATE: ${err?.message ?? err}`)
-  }
-  try {
-    await prismaClient.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
-  } catch (err: any) {
-    throw new Error(`USER_UPDATE: ${err?.message ?? err}`)
-  }
+  const { accessToken, refreshToken } = await openSession(user, prismaClient)
+  await prismaClient.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
   return { accessToken, refreshToken }
 }
 
@@ -117,9 +97,12 @@ router.post('/login', authLimiter, async (req, res) => {
   const normalizedEmail = email.toLowerCase().trim()
 
   const user = await prisma.user.findUnique({ where: { email: normalizedEmail } })
-  if (!user || !user.isActive) throw new AppError('ACCESS_DENIED', 'Identifiants incorrects', 401)
+  if (!user || !user.isActive) {
+    await verifyPassword(password, null) // même durée de réponse que pour un compte existant
+    throw new AppError('ACCESS_DENIED', 'Identifiants incorrects', 401)
+  }
 
-  const valid = await bcrypt.compare(password, user.passwordHash)
+  const valid = await verifyPassword(password, user.passwordHash)
   if (!valid) {
     await audit({
       req, userId: user.id, userName: user.fullName,
@@ -127,6 +110,11 @@ router.post('/login', authLimiter, async (req, res) => {
       details: { method: 'email', success: false, reason: 'wrong_password' },
     })
     throw new AppError('ACCESS_DENIED', 'Identifiants incorrects', 401)
+  }
+
+  // Migration transparente des anciens hachages bcrypt vers Argon2id
+  if (needsRehash(user.passwordHash)) {
+    await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(password) } })
   }
 
   const { accessToken, refreshToken } = await createSessionTokens(user, prisma)
@@ -142,27 +130,11 @@ router.post('/login', authLimiter, async (req, res) => {
 })
 
 // ── Mot de passe oublié ────────────────────────────────────────────────
-// Renvoie la marche à suivre selon le type de compte (anti-énumération :
-// même structure de réponse que le compte existe ou non).
+// Réponse STRICTEMENT identique quel que soit l'email (existant, inconnu,
+// administrateur…) : rien ne permet de deviner quels comptes existent.
 router.post('/forgot-password', authLimiter, async (req, res) => {
-  const { email } = z.object({ email: z.string().email() }).parse(req.body)
-  const normalizedEmail = email.toLowerCase().trim()
+  z.object({ email: z.string().email() }).parse(req.body)
 
-  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } })
-
-  // Compte ADMIN actif → récupération via connexion Google (pas de mot de passe à réinitialiser)
-  if ((user?.role === 'ADMIN' || user?.role === 'DEVELOPER') && user.isActive) {
-    res.json({
-      success: true,
-      data: {
-        method: 'google',
-        message: `Cliquez sur "Continuer avec Google" et connectez-vous avec le compte Google associé à ${email}.`,
-      },
-    })
-    return
-  }
-
-  // Membre (ou compte introuvable/inactif) → contacter l'administrateur
   const admin = await prisma.user.findFirst({
     where: { role: { in: ['ADMIN', 'DEVELOPER'] }, isActive: true },
     select: { fullName: true, email: true, phone: true, whatsappPhone: true },
@@ -173,7 +145,9 @@ router.post('/forgot-password', authLimiter, async (req, res) => {
     success: true,
     data: {
       method: 'admin_contact',
-      message: "Pour réinitialiser votre mot de passe, contactez l'administrateur du système qui pourra le réinitialiser depuis son espace.",
+      message: "Si un compte correspond à cette adresse, l'administrateur peut réinitialiser son mot de passe depuis son espace. "
+        + 'Les comptes associés à Google se connectent avec « Continuer avec Google ». '
+        + 'Les membres peuvent aussi se connecter par code reçu sur leur téléphone.',
       admin: admin ? {
         fullName: admin.fullName,
         email: admin.email,
@@ -185,24 +159,30 @@ router.post('/forgot-password', authLimiter, async (req, res) => {
 
 // ── OTP : demande de code (téléphone doit être en BD) ────────────────
 router.post('/otp/request', otpLimiter, async (req, res) => {
-  const { phone } = z.object({ phone: z.string().min(8) }).parse(req.body)
-  const normalized = phone.replace(/\D/g, '')
-  const full = normalized.startsWith('237') ? `+${normalized}` : `+237${normalized}`
+  const { phone } = z.object({ phone: z.string().min(8).max(20) }).parse(req.body)
+  const { full, all } = phoneVariants(phone)
+  // Réponse identique dans tous les cas (numéro inconnu, partagé, limité…) : anti-énumération
+  const genericReply = () => res.json({ success: true, message: 'Si ce numéro est enregistré, vous recevrez un code par WhatsApp ou SMS.' })
 
-  // Chercher l'utilisateur par phone OU whatsappPhone
-  const user = await prisma.user.findFirst({
-    where: {
-      OR: [
-        { phone: { in: [normalized, full, phone] } },
-        { whatsappPhone: { in: [normalized, full, phone] } },
-      ]
-    },
-    select: { id: true, isActive: true, phone: true, whatsappPhone: true },
+  // Un numéro rattaché à plusieurs comptes ne permet pas de savoir qui se connecte : refus
+  const users = await prisma.user.findMany({
+    where: { isActive: true, OR: [{ phone: { in: all } }, { whatsappPhone: { in: all } }] },
+    select: { id: true, phone: true, whatsappPhone: true },
+    take: 2,
   })
+  if (users.length !== 1) {
+    if (users.length > 1) console.warn('[OTP] Numéro partagé par plusieurs comptes actifs — connexion par code refusée')
+    genericReply()
+    return
+  }
+  const [user] = users
 
-  // Réponse identique que trouvé ou non (anti-énumération)
-  if (!user || !user.isActive) {
-    res.json({ success: true, message: 'Si ce numéro est enregistré, vous recevrez un code WhatsApp.' })
+  // Limite par numéro (en plus de la limite par IP)
+  const recent = await prisma.otpCode.count({
+    where: { phone: full, purpose: 'LOGIN', createdAt: { gt: new Date(Date.now() - 60 * 60 * 1000) } },
+  })
+  if (recent >= OTP_MAX_PER_PHONE_PER_HOUR) {
+    genericReply()
     return
   }
 
@@ -213,9 +193,9 @@ router.post('/otp/request', otpLimiter, async (req, res) => {
     data: { used: true },
   })
 
-  const code = String(Math.floor(100000 + Math.random() * 900000))
+  const code = generateOtpCode()
   await prisma.otpCode.create({
-    data: { phone: full, code, purpose: 'LOGIN', expiresAt: new Date(Date.now() + 5 * 60 * 1000) },
+    data: { phone: full, code: hashOtpCode(full, 'LOGIN', code), purpose: 'LOGIN', expiresAt: new Date(Date.now() + OTP_TTL_MS) },
   })
 
   const msg = `*SGM-CEM* — Code de connexion : *${code}*\n⏱ Valable 5 minutes.\n🔒 Ne le partagez pas.`
@@ -226,18 +206,17 @@ router.post('/otp/request', otpLimiter, async (req, res) => {
   if (!waOk && user.phone) await sendSMS(user.phone, `SGM-CEM - Code: ${code} - Valable 5 min`)
 
   // En développement, afficher le code dans les logs serveur si les services ne sont pas configurés
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.NODE_ENV === 'development') {
     console.log(`\n📱 [DEV OTP] ${full}  →  Code : ${code}\n`)
   }
 
-  res.json({ success: true, message: 'Code envoyé sur WhatsApp. Vérifiez vos messages.' })
+  genericReply()
 })
 
 // ── OTP : vérification du code ────────────────────────────────────────
 router.post('/otp/verify', otpLimiter, async (req, res) => {
-  const { phone, code } = z.object({ phone: z.string(), code: z.string().length(6) }).parse(req.body)
-  const normalized = phone.replace(/\D/g, '')
-  const full = normalized.startsWith('237') ? `+${normalized}` : `+237${normalized}`
+  const { phone, code } = z.object({ phone: z.string().max(20), code: z.string().regex(/^\d{6}$/) }).parse(req.body)
+  const { full, all } = phoneVariants(phone)
 
   const otpRecord = await prisma.otpCode.findFirst({
     where: {
@@ -263,22 +242,20 @@ router.post('/otp/verify', otpLimiter, async (req, res) => {
     throw new AppError('ACCESS_DENIED', 'Trop de tentatives. Demandez un nouveau code.', 401)
   }
 
-  if (otpRecord.code !== code) {
+  if (!otpMatches(otpRecord.code, full, 'LOGIN', code)) {
     throw new AppError('ACCESS_DENIED', `Code incorrect. ${2 - otpRecord.attempts} tentative(s) restante(s).`, 401)
   }
 
-  // Marquer le code comme utilisé
-  await prisma.otpCode.update({ where: { id: otpRecord.id }, data: { used: true } })
+  // Marquer le code comme utilisé (conditionnel : un même code ne sert qu'une fois)
+  const consumed = await prisma.otpCode.updateMany({ where: { id: otpRecord.id, used: false }, data: { used: true } })
+  if (consumed.count !== 1) throw new AppError('ACCESS_DENIED', 'Code OTP invalide ou expiré. Demandez un nouveau code.', 401)
 
-  const user = await prisma.user.findFirst({
-    where: {
-      OR: [
-        { phone: { in: [normalized, full, phone] } },
-        { whatsappPhone: { in: [normalized, full, phone] } },
-      ]
-    }
+  const users = await prisma.user.findMany({
+    where: { isActive: true, OR: [{ phone: { in: all } }, { whatsappPhone: { in: all } }] },
+    take: 2,
   })
-  if (!user || !user.isActive) throw new AppError('ACCESS_DENIED', 'Compte introuvable ou désactivé.', 403)
+  if (users.length !== 1) throw new AppError('ACCESS_DENIED', 'Compte introuvable ou désactivé.', 403)
+  const [user] = users
 
   const { accessToken, refreshToken } = await createSessionTokens(user, prisma)
 
@@ -345,6 +322,7 @@ router.post('/change-password', authenticate, async (req, res) => {
     currentPassword: z.string().min(1),
     newPassword: z.string()
       .min(8, 'Le nouveau mot de passe doit contenir au moins 8 caractères')
+      .max(128, 'Le mot de passe ne doit pas dépasser 128 caractères')
       .regex(/[A-Z]/, 'Doit contenir au moins une majuscule')
       .regex(/[0-9]/, 'Doit contenir au moins un chiffre'),
   })
@@ -353,18 +331,21 @@ router.post('/change-password', authenticate, async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.user!.userId } })
   if (!user) throw new AppError('NOT_FOUND', 'Utilisateur introuvable', 404)
 
-  const valid = await bcrypt.compare(currentPassword, user.passwordHash)
+  const valid = await verifyPassword(currentPassword, user.passwordHash)
   if (!valid) throw new AppError('ACCESS_DENIED', 'Mot de passe actuel incorrect', 401)
 
   if (currentPassword === newPassword) {
     throw new AppError('VALIDATION_ERROR', 'Le nouveau mot de passe doit être différent de l\'actuel', 400)
   }
 
-  const passwordHash = await bcrypt.hash(newPassword, 12)
+  const passwordHash = await hashPassword(newPassword)
   await prisma.user.update({
     where: { id: user.id },
     data: { passwordHash, mustChangePassword: false },
   })
+  // Un mot de passe changé ferme toutes les autres sessions ouvertes
+  await revokeUserSessions(user.id, prisma, req.user!.sid)
+  forgetUserState(user.id)
 
   await prisma.auditLog.create({
     data: {
@@ -382,29 +363,23 @@ router.post('/change-password', authenticate, async (req, res) => {
 
 // ── Refresh token ─────────────────────────────────────────────────────
 router.post('/refresh', async (req, res) => {
-  const refreshToken: string | undefined = req.cookies?.refresh_token
+  const presented: string | undefined = req.cookies?.refresh_token
+  if (!presented) throw new AppError('ACCESS_DENIED', 'Session expirée', 401)
 
-  if (!refreshToken) throw new AppError('ACCESS_DENIED', 'Session expirée', 401)
-
-  const session = await prisma.userSession.findUnique({ where: { refreshToken }, include: { user: true } })
-  if (!session || session.expiresAt < new Date()) {
-    await prisma.userSession.deleteMany({ where: { refreshToken } })
+  const outcome = await refreshSession(presented, prisma)
+  if (!outcome.ok) {
     clearAuthCookies(res)
+    if (outcome.reason === 'reused' && outcome.user) {
+      // Ancien refresh token rejoué : vol probable → session fermée et tracée
+      await audit({
+        req, userId: outcome.user.id, userName: outcome.user.fullName, action: 'LOGOUT', entityType: 'Session',
+        details: { reason: 'refresh_token_reuse', sessionRevoked: true },
+      })
+    }
     throw new AppError('ACCESS_DENIED', 'Session expirée', 401)
   }
 
-  try {
-    jwt.verify(refreshToken, getRefreshTokenSecret())
-  } catch {
-    clearAuthCookies(res)
-    throw new AppError('ACCESS_DENIED', 'Token invalide', 401)
-  }
-
-  const { user } = session
-  const payload = { userId: user.id, role: user.role, email: user.email }
-  const accessToken = jwt.sign(payload, getJwtSecret(), { expiresIn: '15m' })
-
-  setAuthCookies(req, res, accessToken)
+  setAuthCookies(req, res, outcome.accessToken, outcome.refreshToken)
   res.json({ success: true })
 })
 
@@ -412,12 +387,9 @@ router.post('/refresh', async (req, res) => {
 router.post('/logout', authenticate, async (req, res) => {
   const refreshToken: string | undefined = req.cookies?.refresh_token
   if (refreshToken) {
-    const session = await prisma.userSession.findUnique({
-      where: { refreshToken },
-      select: { id: true },
-    })
+    const session = await prisma.userSession.findUnique({ where: { refreshToken }, select: { id: true } })
     if (session) await closeActivitySessionForLogout(session.id)
-    await prisma.userSession.deleteMany({ where: { refreshToken } })
+    await revokeSessionByRefreshToken(refreshToken, prisma)
   }
 
   const user = await prisma.user.findUnique({
@@ -486,8 +458,8 @@ router.post('/stop-impersonation', authenticate, async (req, res) => {
     },
   })
 
-  const payload = { userId: developer.id, role: developer.role, email: developer.email }
-  const accessToken = jwt.sign(payload, getJwtSecret(), { expiresIn: '15m' })
+  // Le jeton d'impersonation porte la session du développeur : on la reprend
+  const accessToken = signAccessToken({ userId: developer.id, role: developer.role, email: developer.email, sid: req.user!.sid! })
   setAuthCookies(req, res, accessToken)
 
   res.json({ success: true, data: { user: buildUser(developer) } })

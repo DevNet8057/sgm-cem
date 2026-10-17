@@ -59,9 +59,10 @@ Le projet n'a **aucun dossier `prisma/migrations`**. L'entrypoint Docker fait
 
 ### 3. Seed automatique conditionnel
 L'entrypoint (`apps/api/docker-entrypoint.sh`) seed la base **uniquement si
-`user.count() == 0`** : `seed.ts` (comptes, 11 rubriques, données démo) puis
+`user.count() == 0`** : `seed.ts` (admin, paramètres, 11 rubriques, GED) puis
 `seed-config.ts` (table `system_configs`, idempotent — n'écrase jamais).
-Les redémarrages ne touchent donc jamais aux données existantes.
+Les données de **démonstration** (comptes fictifs, contributions) ne sont créées
+qu'avec `SEED_DEMO=1`. Les redémarrages ne touchent jamais aux données existantes.
 
 ### 4. La config à l'exécution vient de la BASE, pas du `.env`
 `getConfig()` (config.service.ts) lit : cache DB (`system_configs`) → fallback `process.env`.
@@ -108,8 +109,22 @@ depuis l'hôte) ; les conteneurs, eux, se parlent par le réseau Docker interne
 
 ## Comptes seedés (base neuve uniquement)
 
-Admin : `devnet8057@gmail.com` + 5 comptes staff de démo (mot de passe commun de seed —
-**à changer avant toute utilisation réelle**, voir `ADMIN_PASSWORD` dans `.env`).
+Aucun mot de passe n'est écrit dans le code (phase 0, 17/10/2026).
+- Admin : `ADMIN_EMAIL` (défaut `devnet8057@gmail.com`). Mot de passe = `ADMIN_PASSWORD`
+  s'il est fourni ; sinon un mot de passe **aléatoire** est affiché **une seule fois**
+  dans les journaux du premier démarrage (`docker compose logs api`) et doit être changé
+  à la première connexion.
+- Démo (`SEED_DEMO=1` seulement) : 5 comptes staff + membres fictifs ; mot de passe commun
+  `SEED_DEMO_PASSWORD` ou aléatoire affiché dans les journaux.
+- Compte perdu : `docker exec -e TARGET_EMAIL=… sgm-cem-api-1 sh -c 'cd /app/apps/api && pnpm exec ts-node prisma/reset-admin-password.ts'`
+  (mot de passe temporaire aléatoire, sessions fermées, action journalisée).
+- Comptes encore sur un ancien mot de passe commun : `docker exec -e CANDIDATE_PASSWORDS='ancien1|ancien2' sgm-cem-api-1 sh -c 'cd /app/apps/api && pnpm exec ts-node prisma/audit-default-passwords.ts'`
+  (liste seulement ; `-e FORCE_CHANGE=1` impose le changement, sur décision du Bureau).
+
+## Variables de sécurité vérifiées au démarrage (NODE_ENV=production)
+L'API **refuse de démarrer** si l'une manque ou fait moins de 32 caractères :
+`JWT_SECRET`, `REFRESH_TOKEN_SECRET`, `CSRF_SECRET` (générer : `openssl rand -base64 48`).
+`TRUST_PROXY` : `0` quand l'API est exposée directement (ce compose), `1` derrière Caddy.
 
 ## Mise en production (prochaine étape décidée : à faire)
 

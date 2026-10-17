@@ -172,8 +172,9 @@ export function getContributionActions(
       supervisor &&
       (pending || record.statut === 'CONFIRME') &&
       disputeFundsManageable,
+    // La résolution en « confirmée » est contrôlée à part (assertResolutionAllowed)
     canResolveDispute:
-      supervisor && disputed && manual && disputeFundsManageable,
+      supervisor && disputed && disputeFundsManageable,
     canGrantConfirmation:
       elevated &&
       manual &&
@@ -194,4 +195,38 @@ export function assertContributionAction(
   if (!getContributionActions(actor, record, now, authorizationActorsValid)[action]) {
     throw new AppError('FORBIDDEN', 'Vous n’êtes pas autorisé à effectuer cette action.', 403)
   }
+}
+
+/**
+ * Résolution d'un litige : l'annulation est ouverte aux superviseurs ; la
+ * confirmation d'un paiement manuel suit la règle de confirmation (RG-14/15),
+ * celle d'un paiement électronique exige la confirmation du prestataire (RG-13).
+ */
+export function assertResolutionAllowed(
+  actor: ContributionActor,
+  record: ContributionAccessRecord & { paymentStatus?: string | null },
+  resolution: 'CONFIRME' | 'ANNULE',
+  now = new Date(),
+  authorizationActorsValid = false,
+): void {
+  assertContributionAction(actor, record, 'canResolveDispute', now, authorizationActorsValid)
+  if (resolution === 'ANNULE') return
+
+  if (isManualContribution(record)) {
+    if (!getContributionActions(actor, record, now, authorizationActorsValid).canConfirm) {
+      throw new AppError('FORBIDDEN', 'Seul le collecteur désigné ou un administrateur peut confirmer ce paiement.', 403)
+    }
+    return
+  }
+  if (record.paymentStatus !== 'SUCCESS') {
+    throw new AppError('BUSINESS_RULE', 'Paiement électronique non confirmé par le prestataire : il ne peut pas être confirmé manuellement.', 400)
+  }
+}
+
+/** Ajoute les capacités calculées à chaque contribution renvoyée au client. */
+export function withActions<T extends ContributionAccessRecord>(
+  actor: ContributionActor,
+  records: T[],
+): Array<T & { actions: ContributionActions }> {
+  return records.map(record => ({ ...record, actions: getContributionActions(actor, record) }))
 }

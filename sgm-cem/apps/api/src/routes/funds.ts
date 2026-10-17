@@ -134,7 +134,7 @@ router.post('/transfer', authenticate, requireLevel(2), async (req, res) => {
     select: { id: true, fullName: true, role: true },
   })
 
-  if (!receiver) {
+  if (!receiver || receiver.id === myUserId) {
     throw new AppError('INVALID_TARGET', 'Destinataire invalide', 400)
   }
 
@@ -145,7 +145,9 @@ router.post('/transfer', authenticate, requireLevel(2), async (req, res) => {
       statut: 'CONFIRME',
       // RB-27: Seules les contributions en CHEZ_COLLECTEUR peuvent être transférées
       localisationFonds: 'CHEZ_COLLECTEUR',
-      ...(myRole === 'COLLECTEUR' ? { collecteurId: myUserId } : {}),
+      // Chacun ne remet que l'argent qu'il détient ; l'administrateur peut
+      // initier pour un détenteur (le destinataire confirme toujours la réception)
+      ...(['ADMIN', 'DEVELOPER'].includes(myRole) ? {} : { collecteurId: myUserId }),
     },
     select: { id: true, montant: true, collecteurId: true },
   })
@@ -178,14 +180,18 @@ router.post('/transfer', authenticate, requireLevel(2), async (req, res) => {
       },
     })
 
-    // Mettre les contributions en EN_TRANSIT
-    await tx.contribution.updateMany({
-      where: { id: { in: data.contributionIds } },
+    // Mettre les contributions en EN_TRANSIT — conditionnel : une même
+    // contribution ne peut pas partir dans deux transferts simultanés
+    const moved = await tx.contribution.updateMany({
+      where: { id: { in: data.contributionIds }, localisationFonds: 'CHEZ_COLLECTEUR', statut: 'CONFIRME' },
       data: {
         localisationFonds: 'EN_TRANSIT',
         transferId: transfer.id,
       },
     })
+    if (moved.count !== data.contributionIds.length) {
+      throw new AppError('BUSINESS_RULE', 'Une ou plusieurs contributions viennent d\'être transférées, rechargez la page', 409)
+    }
 
     // Audit log
     await tx.auditLog.create({

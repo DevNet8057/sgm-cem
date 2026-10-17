@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken'
 import app from '../src/index'
 import { getPrisma } from '../src/lib/prisma'
 import { getJwtSecret } from '../src/lib/security'
+import { testCookie } from './helpers/session'
 
 const prisma = getPrisma()
 
@@ -15,8 +16,8 @@ let devCookie = ''
 let csrfToken = ''
 let csrfCookie = ''
 
-function cookieFor(payload: object): string {
-  return `access_token=${jwt.sign(payload, getJwtSecret(), { expiresIn: '15m' })}`
+function cookieFor(payload: { userId: string; role: string; email: string; impersonatedBy?: string }): Promise<string> {
+  return testCookie(payload)
 }
 
 function extractAccessToken(res: request.Response): string {
@@ -30,7 +31,7 @@ beforeAll(async () => {
   const devUser = await prisma.user.findFirst({ where: { role: 'DEVELOPER' } })
   if (!devUser) throw new Error('Seed requis : aucun DEVELOPER')
   dev = { id: devUser.id, email: devUser.email }
-  devCookie = cookieFor({ userId: dev.id, role: 'DEVELOPER', email: dev.email })
+  devCookie = await cookieFor({ userId: dev.id, role: 'DEVELOPER', email: dev.email })
 
   const membre = await prisma.user.findFirst({ where: { role: 'MEMBRE', isActive: true } })
   if (!membre) throw new Error('Seed requis : aucun MEMBRE actif')
@@ -45,7 +46,7 @@ beforeAll(async () => {
 
 describe('POST /api/developer/impersonate/:userId — contrôle d\'accès', () => {
   it('ADMIN → 403 (réservé DEVELOPER)', async () => {
-    const adminCookie = cookieFor({ userId: dev.id, role: 'ADMIN', email: dev.email })
+    const adminCookie = await cookieFor({ userId: dev.id, role: 'ADMIN', email: dev.email })
     const csrf = await request(app).get('/api/csrf-token').set('Cookie', adminCookie)
     const aCsrfCookie = (Array.isArray(csrf.headers['set-cookie']) ? csrf.headers['set-cookie'] : [])
       .find((c: string) => c.startsWith('csrf_token=')) ?? ''

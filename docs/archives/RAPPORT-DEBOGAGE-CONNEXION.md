@@ -57,7 +57,7 @@ curl http://172.21.253.77:3001/api/csrf-token      → {"token":"..."}
 curl -b cookies.txt -X POST http://172.21.253.77:3001/api/auth/login \
   -H "Content-Type: application/json" \
   -H "X-CSRF-Token: <token>" \
-  -d '{"email":"devnet8057@gmail.com","password":"ChristEst!2026"}'
+  -d '{"email":"devnet8057@gmail.com","password":"<mot-de-passe-retiré>"}'
   → {"success":true,"data":{"user":{"email":"devnet8057@gmail.com","role":"DEVELOPER"}}}
 
 # Requête authentifiée
@@ -83,4 +83,4 @@ Machine A (dev)                    Machine B (serveur)
 
 - **URL :** `http://172.21.253.77:3000`
 - **Email :** `devnet8057@gmail.com`
-- **Mot de passe :** `ChristEst!2026`
+- **Mot de passe :** `<mot-de-passe-retiré>`

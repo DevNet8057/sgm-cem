@@ -222,8 +222,14 @@ model UserSession {
   refreshToken String   @unique
   expiresAt    DateTime
   createdAt    DateTime @default(now())
+  // Rotation du refresh token : l'ancien reste accepté quelques secondes
+  // (onglets concurrents) ; présenté plus tard, il révèle un vol → session révoquée.
+  previousRefreshToken String?
+  rotatedAt            DateTime?
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([previousRefreshToken])
   @@map("user_sessions")
 }
 

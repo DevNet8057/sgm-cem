@@ -2,11 +2,10 @@
 // Règle non négociable vérifiée ici : requireDeveloper strict — même ADMIN → 403.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import request from 'supertest'
-import jwt from 'jsonwebtoken'
 import app from '../src/index'
 import { getPrisma } from '../src/lib/prisma'
-import { getJwtSecret } from '../src/lib/security'
 import { getConfig } from '../src/services/config.service'
+import { testCookie } from './helpers/session'
 
 const prisma = getPrisma()
 const MASK = '••••••••'
@@ -19,19 +18,32 @@ let csrfCookie = ''
 let originalWebhookUrl: string | null = null
 let originalLogLevel: string | null = null
 let originalSmtpPass: string | null = null
+// Clés créées pour le test (absentes de la base) : supprimées à la fin — le test
+// ne dépend plus des vraies clés et n'en laisse aucune de factice derrière lui.
+const createdKeys: string[] = []
 
-function authCookieFor(userId: string, role: string, email: string): string {
-  const token = jwt.sign({ userId, role, email }, getJwtSecret(), { expiresIn: '15m' })
-  return `access_token=${token}`
+async function ensureConfig(key: string, value: string, category: 'INTEGRATION_KEYS' | 'SYSTEM_BEHAVIOR' | 'WEBHOOKS' | 'NOTIFICATIONS', isSecret = false) {
+  const existing = await prisma.systemConfig.findUnique({ where: { key } })
+  if (existing) return
+  await prisma.systemConfig.create({ data: { key, value, category, label: `[test] ${key}`, isSecret } })
+  createdKeys.push(key)
+}
+
+function authCookieFor(userId: string, role: string, email: string): Promise<string> {
+  return testCookie({ userId, role, email })
 }
 
 beforeAll(async () => {
   const dev = await prisma.user.findFirst({ where: { role: 'DEVELOPER' } })
   if (!dev) throw new Error('Seed requis : exécuter prisma/seed-config.ts (élévation DEVELOPER)')
+  await ensureConfig('YELII_COLLECT_API_KEY', 'cle-factice-de-test', 'INTEGRATION_KEYS', true)
+  await ensureConfig('SMTP_PASS', 'mdp-factice-de-test', 'NOTIFICATIONS', true)
+  await ensureConfig('LOG_LEVEL', 'info', 'SYSTEM_BEHAVIOR')
+  await ensureConfig('YELII_WEBHOOK_URL', 'https://exemple.test/webhooks/yelii', 'WEBHOOKS')
   devUser = { id: dev.id, email: dev.email }
-  devCookie = authCookieFor(dev.id, 'DEVELOPER', dev.email)
+  devCookie = await authCookieFor(dev.id, 'DEVELOPER', dev.email)
   // Un jeton avec rôle ADMIN (peu importe l'utilisateur : le RBAC lit le JWT)
-  adminCookie = authCookieFor(dev.id, 'ADMIN', dev.email)
+  adminCookie = await authCookieFor(dev.id, 'ADMIN', dev.email)
 
   // Jeton CSRF lié à la session du développeur (double-submit cookie)
   const res = await request(app).get('/api/csrf-token').set('Cookie', devCookie)
@@ -58,6 +70,10 @@ afterAll(async () => {
     await prisma.systemConfig.update({ where: { key: 'SMTP_PASS' }, data: { value: originalSmtpPass } })
   }
   await prisma.systemConfigHistory.deleteMany({ where: { reason: { contains: '[test-dev-routes]' } } })
+  if (createdKeys.length) {
+    await prisma.systemConfigHistory.deleteMany({ where: { configKey: { in: createdKeys } } }).catch(() => {})
+    await prisma.systemConfig.deleteMany({ where: { key: { in: createdKeys } } })
+  }
 })
 
 describe('Panneau développeur — contrôle d\'accès strict', () => {
@@ -72,7 +88,7 @@ describe('Panneau développeur — contrôle d\'accès strict', () => {
   })
 
   it('TRESORIER → 403', async () => {
-    const cookie = authCookieFor(devUser.id, 'TRESORIER', devUser.email)
+    const cookie = await authCookieFor(devUser.id, 'TRESORIER', devUser.email)
     const res = await request(app).get('/api/developer/config').set('Cookie', cookie)
     expect(res.status).toBe(403)
   })
@@ -81,7 +97,8 @@ describe('Panneau développeur — contrôle d\'accès strict', () => {
     const res = await request(app).get('/api/developer/config').set('Cookie', devCookie)
     expect(res.status).toBe(200)
     expect(Array.isArray(res.body.data)).toBe(true)
-    expect(res.body.data.length).toBeGreaterThanOrEqual(30)
+    // Toutes les clés en base sont listées (le nombre dépend de l'environnement)
+    expect(res.body.data.length).toBe(await prisma.systemConfig.count())
   })
 })
 

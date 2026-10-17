@@ -6,7 +6,6 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import helmet from 'helmet'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
-import rateLimit from 'express-rate-limit'
 import { doubleCsrf } from 'csrf-csrf'
 import yeliiWebhookRouter from './webhooks/yelii.webhook'
 import cinetpayWebhookRouter from './webhooks/cinetpay.webhook'
@@ -35,9 +34,14 @@ import { schedulePaymentReconciliation } from './jobs/payment-reconciliation'
 import { scheduleMonthlyCron } from './services/cron'
 import { initSocketIO } from './lib/socket'
 import { loadConfigCache } from './services/config.service'
+import { apiLimiter } from './middleware/rate-limit'
+import { getCsrfSecret, getTrustProxy } from './lib/security'
 
 const app = express()
 const PORT = process.env.PORT ?? 3001
+
+// Derrière Caddy : req.ip et req.secure reflètent le vrai client (voir lib/security.ts)
+app.set('trust proxy', getTrustProxy())
 
 app.use(helmet())
 
@@ -45,6 +49,11 @@ app.use(helmet())
 // reçus sont publiés localement ; les documents GED restent derrière leurs
 // routes authentifiées dédiées.
 app.use('/uploads/receipts', express.static(path.join(process.cwd(), 'uploads', 'receipts')))
+// Photos de profil (stockage local) : affichées par le web sur une autre origine
+app.use('/uploads/avatars', (_req, res, next) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
+  next()
+}, express.static(path.join(process.cwd(), 'uploads', 'avatars'), { dotfiles: 'deny', index: false }))
 
 const allowedOrigins = (process.env.APP_URL ?? 'http://localhost:3000')
   .split(',')
@@ -70,11 +79,10 @@ app.use('/webhooks', cinetpayWebhookRouter)
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 
-const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true })
-app.use('/api/', limiter)
+app.use('/api/', apiLimiter)
 
-// CSRF — double-submit cookie pattern
-const csrfSecret = process.env.CSRF_SECRET ?? 'csrf-dev-secret-change-in-prod'
+// CSRF — double-submit cookie pattern (secret obligatoire en production)
+const csrfSecret = getCsrfSecret()
 const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
   getSecret: () => csrfSecret,
   getSessionIdentifier: (req: Request) => (req.cookies?.access_token ?? '') as string,

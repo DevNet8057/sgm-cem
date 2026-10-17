@@ -1,5 +1,11 @@
 import nodemailer from 'nodemailer'
 import { getConfig, getConfigBool } from './config.service'
+import { escapeHtml } from './pdf-branding'
+
+/** Texte brut → HTML sûr (le contenu peut venir d'un utilisateur). */
+export function textToHtml(text: string): string {
+  return `<p>${escapeHtml(text).replace(/\n/g, '<br>')}</p>`
+}
 
 export interface EmailOptions {
   to: string
@@ -16,10 +22,11 @@ export interface EmailOptions {
 // Transporter mis en cache par signature de config : si le DEVELOPER change
 // les paramètres SMTP depuis le panneau, le prochain envoi reconstruit le
 // client avec les nouvelles valeurs — sans redémarrage.
-let transporter: nodemailer.Transporter | null = null
+type Transporter = ReturnType<typeof nodemailer.createTransport>
+let transporter: Transporter | null = null
 let transporterSignature = ''
 
-function getTransporter(): nodemailer.Transporter | null {
+function getTransporter(): Transporter | null {
   const host = getConfig('SMTP_HOST')
   const port = parseInt(getConfig('SMTP_PORT') ?? '587', 10)
   const secure = getConfig('SMTP_SECURE') === 'true'
@@ -89,7 +96,7 @@ export async function sendEmailWithPdfAttachment({
   return sendEmail({
     to,
     subject,
-    html: `<p>${body.replace(/\n/g, '<br>')}</p>`,
+    html: textToHtml(body),
     text: body,
     attachments: [{
       filename: filename || 'recu-cem.pdf',

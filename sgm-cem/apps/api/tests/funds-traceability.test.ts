@@ -4,15 +4,14 @@
 // 3. Une remise collecteur → trésorier reste PENDING tant que le trésorier n'a pas validé
 import { describe, it, expect, beforeAll } from 'vitest'
 import request from 'supertest'
-import jwt from 'jsonwebtoken'
 import app from '../src/index'
 import { getPrisma } from '../src/lib/prisma'
-import { getJwtSecret } from '../src/lib/security'
+import { testCookie } from './helpers/session'
 
 const prisma = getPrisma()
 
-function cookieFor(userId: string, role: string, email: string): string {
-  return `access_token=${jwt.sign({ userId, role, email }, getJwtSecret(), { expiresIn: '15m' })}`
+function cookieFor(userId: string, role: string, email: string): Promise<string> {
+  return testCookie({ userId, role, email })
 }
 
 let adminCookie = ''
@@ -22,11 +21,11 @@ beforeAll(async () => {
   // N'importe quel compte réel sert de porteur : le RBAC lit le rôle du JWT
   const anyUser = await prisma.user.findFirst()
   if (!anyUser) throw new Error('Seed requis')
-  adminCookie = cookieFor(anyUser.id, 'ADMIN', anyUser.email)
+  adminCookie = await cookieFor(anyUser.id, 'ADMIN', anyUser.email)
 
   const collecteur = await prisma.user.findFirst({ where: { role: 'COLLECTEUR', isActive: true } })
   if (!collecteur) throw new Error('Seed requis : collecteur')
-  collecteurCookie = cookieFor(collecteur.id, 'COLLECTEUR', collecteur.email)
+  collecteurCookie = await cookieFor(collecteur.id, 'COLLECTEUR', collecteur.email)
 })
 
 describe('1. ADMIN — visibilité complète des transferts (qui → qui, par quel canal)', () => {
@@ -98,7 +97,7 @@ describe('3. Remise collecteur → trésorier : PENDING tant que non validée pa
     if (!pending) return // aucun transfert en attente en base — règle couverte par le code (RB-23)
 
     const outsider = await prisma.user.findFirst({ where: { id: { notIn: [pending.receiverId] } } })
-    const outsiderCookie = cookieFor(outsider!.id, 'TRESORIER', outsider!.email)
+    const outsiderCookie = await cookieFor(outsider!.id, 'TRESORIER', outsider!.email)
     const csrf = await request(app).get('/api/csrf-token').set('Cookie', outsiderCookie)
     const csrfCookie = (Array.isArray(csrf.headers['set-cookie']) ? csrf.headers['set-cookie'] : [])
       .find((c: string) => c.startsWith('csrf_token=')) ?? ''

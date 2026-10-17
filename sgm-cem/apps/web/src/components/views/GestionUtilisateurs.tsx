@@ -293,10 +293,10 @@ export function GestionUtilisateurs() {
             </select>
           </div>
           <PasswordInput
-            label="Mot de passe temporaire (laissez vide = 'CEM@2026!')"
+            label="Mot de passe temporaire (laissez vide pour en générer un aléatoire)"
             value={form.password}
             onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))}
-            placeholder="Optionnel - Laissez vide pour mot de passe par défaut"
+            placeholder="Optionnel - un mot de passe aléatoire sera généré"
           />
           {error && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-[10px] px-3 py-2">{error}</p>}
           <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
@@ -337,10 +337,10 @@ export function GestionUtilisateurs() {
         description={`Le compte de ${resetTarget?.fullName} sera déconnecté de toutes les sessions.`}>
         <div className="space-y-4">
           <PasswordInput
-            label="Nouveau mot de passe temporaire (laissez vide = 'CEM@2026!')"
+            label="Nouveau mot de passe temporaire (laissez vide pour en générer un aléatoire)"
             value={resetPassword}
             onChange={(e) => setResetPassword(e.target.value)}
-            placeholder="Optionnel - Laissez vide pour mot de passe par défaut"
+            placeholder="Optionnel - un mot de passe aléatoire sera généré"
           />
           <div className="flex items-start gap-2 rounded-[10px] bg-amber-50 border border-amber-200 px-3 py-2.5 text-xs text-amber-800">
             <RefreshCw size={13} className="mt-0.5 shrink-0" />

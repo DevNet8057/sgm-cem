@@ -1,6 +1,6 @@
 import 'dotenv/config'
 import { PrismaClient } from '@prisma/client'
-import bcrypt from 'bcrypt'
+import { generateTemporaryPassword, hashPassword } from '../src/lib/password'
 
 const prisma = new PrismaClient()
 
@@ -49,10 +49,13 @@ async function makeMembre(userId: string, memberId: string, data: {
 
 // ─── Main ─────────────────────────────────────────────────────────────
 async function main() {
-  const adminEmail    = process.env.ADMIN_EMAIL    ?? 'devnet8057@gmail.com'
-  const adminPassword = process.env.ADMIN_PASSWORD ?? 'ChristEst!2026'
-  const defaultHash   = await bcrypt.hash('ChristEst!2026', 12)
-  const adminHash     = await bcrypt.hash(adminPassword, 12)
+  // Aucun mot de passe par défaut dans le code : ADMIN_PASSWORD ou mot de passe
+  // aléatoire affiché une seule fois, à changer à la première connexion.
+  const adminEmail    = process.env.ADMIN_EMAIL ?? 'devnet8057@gmail.com'
+  const adminPassword = process.env.ADMIN_PASSWORD || generateTemporaryPassword()
+  const adminHash     = await hashPassword(adminPassword)
+  // Données de démonstration (comptes fictifs, contributions) : opt-in explicite
+  const seedDemo      = process.env.SEED_DEMO === '1'
 
   console.log('🌱 Seeding SGM-CEM…')
 
@@ -65,20 +68,25 @@ async function main() {
         memberId: 'CEM-2026-000001', firstName: 'Administrateur', lastName: 'CEM',
         fullName: 'Administrateur CEM', email: adminEmail,
         phone: '699000000', passwordHash: adminHash,
-        role: 'ADMIN', isActive: true, mustChangePassword: false,
+        // Mot de passe généré (affiché dans les journaux) → à changer ; choisi par l'opérateur → non
+        role: 'ADMIN', isActive: true, mustChangePassword: !process.env.ADMIN_PASSWORD,
       },
     })
+    console.log(`   ✅ Admin créé : ${adminEmail}`)
+    if (!process.env.ADMIN_PASSWORD) {
+      console.log(`   🔑 Mot de passe temporaire (affiché une seule fois) : ${adminPassword}`)
+    }
   } else {
     // Mettre à jour seulement si l'email cible n'est pas déjà pris par un autre utilisateur
     const emailOwner = await prisma.user.findUnique({ where: { email: adminEmail } })
     if (!emailOwner || emailOwner.id === existingAdmin.id) {
       await prisma.user.update({
         where: { id: existingAdmin.id },
-        data: { email: adminEmail, mustChangePassword: false },
+        data: { email: adminEmail },
       })
     }
+    console.log(`   ✅ Admin existant conservé (mot de passe inchangé)`)
   }
-  console.log(`   ✅ Admin: ${adminEmail} / ${adminPassword}`)
 
   // ── 2. Paramètres système ────────────────────────────────────────────
   await prisma.systemSettings.upsert({
@@ -159,6 +167,15 @@ async function main() {
   for (const td of typeDocs) {
     await prisma.typeDocument.upsert({ where: { code: td.code }, update: {}, create: td })
   }
+
+  if (!seedDemo) {
+    console.log('\n✅ Seed de base terminé (sans données de démonstration — SEED_DEMO=1 pour les ajouter).')
+    return
+  }
+
+  // Comptes de démonstration : mot de passe commun fourni ou aléatoire, jamais en dur
+  const demoPassword = process.env.SEED_DEMO_PASSWORD || generateTemporaryPassword()
+  const defaultHash  = await hashPassword(demoPassword)
 
   // ── 6. Utilisateurs avec rôles (hors admin) ─────────────────────────
   const staff: Array<{
@@ -454,17 +471,14 @@ async function main() {
   }
 
   console.log('\n✅ Seed terminé avec succès !')
-  console.log('\n📋 Comptes de démonstration :')
-  console.log(`   Admin      : ${adminEmail} / ${adminPassword}`)
-  console.log('   Trésorier  : tresorier@cem-melen.cm / ChristEst!2026')
-  console.log('   Responsable: responsable@cem-melen.cm / ChristEst!2026')
-  console.log('   Adjoint    : adjoint@cem-melen.cm / ChristEst!2026')
-  console.log('   Collecteur1: collecteur.temple@cem-melen.cm / ChristEst!2026')
-  console.log('   Collecteur2: collecteur.biscuiterie@cem-melen.cm / ChristEst!2026')
+  console.log('\n📋 Comptes de démonstration (tresorier@, responsable@, adjoint@, collecteur.temple@, collecteur.biscuiterie@cem-melen.cm)')
+  if (!process.env.SEED_DEMO_PASSWORD) console.log(`   🔑 Mot de passe commun de démonstration : ${demoPassword}`)
   console.log('\n💑 Couples liés :')
   console.log('   Emmanuel Kouma ↔ Cécile Ateba (Temple)')
   console.log('   Alain Zang ↔ Sabine Ondo (Biscuiterie)')
   console.log('   Patrick Etoundi ↔ Martine Eloundou (Sciences)')
 }
 
-main().catch(console.error).finally(() => prisma.$disconnect())
+main()
+  .catch(error => { console.error(error); process.exitCode = 1 })
+  .finally(() => prisma.$disconnect())

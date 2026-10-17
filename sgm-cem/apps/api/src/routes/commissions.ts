@@ -41,7 +41,7 @@ const metaSchema = z.object({
 })
 
 // ── GET commissions ───────────────────────────────────────────────────
-router.get('/', authenticate, requireLevel(1), async (_req, res) => {
+router.get('/', authenticate, requireLevel(2), async (_req, res) => {
   const commissions = await prisma.commission.findMany({
     where: { isActive: true },
     include: { _count: { select: { documents: true } } },
@@ -50,18 +50,18 @@ router.get('/', authenticate, requireLevel(1), async (_req, res) => {
   res.json({ success: true, data: commissions })
 })
 
-router.get('/types', authenticate, requireLevel(1), async (_req, res) => {
+router.get('/types', authenticate, requireLevel(2), async (_req, res) => {
   const types = await prisma.typeDocument.findMany({ orderBy: { libelle: 'asc' } })
   res.json({ success: true, data: types })
 })
 
 // Storage mode indicator (so frontend can warn if S3 is not configured)
-router.get('/storage-mode', authenticate, requireLevel(1), (_req, res) => {
+router.get('/storage-mode', authenticate, requireLevel(2), (_req, res) => {
   res.json({ success: true, data: { mode: storageMode() } })
 })
 
 // ── GET documents ─────────────────────────────────────────────────────
-router.get('/documents', authenticate, requireLevel(1), async (req, res) => {
+router.get('/documents', authenticate, requireLevel(2), async (req, res) => {
   const { commissionId, statut, q } = req.query as Record<string, string>
   const documents = await prisma.document.findMany({
     where: {
@@ -85,7 +85,7 @@ router.get('/documents', authenticate, requireLevel(1), async (req, res) => {
   res.json({ success: true, data: documents })
 })
 
-router.get('/:id/documents', authenticate, requireLevel(1), async (req, res) => {
+router.get('/:id/documents', authenticate, requireLevel(2), async (req, res) => {
   const documents = await prisma.document.findMany({
     where: { commissionId: String(req.params.id) },
     include: { typeDocument: true, uploadedBy: { select: { fullName: true } } },
@@ -95,7 +95,7 @@ router.get('/:id/documents', authenticate, requireLevel(1), async (req, res) => 
 })
 
 // ── Download a document file ──────────────────────────────────────────
-router.get('/documents/:id/download', authenticate, requireLevel(1), async (req, res) => {
+router.get('/documents/:id/download', authenticate, requireLevel(2), async (req, res) => {
   const doc = await prisma.document.findUnique({ where: { id: String(req.params.id) } })
   if (!doc) throw new AppError('NOT_FOUND', 'Document introuvable', 404)
 

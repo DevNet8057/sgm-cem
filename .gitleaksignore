@@ -1,0 +1,13 @@
+# Constats HISTORIQUES (commits passés, contenu déjà retiré du dépôt actuel).
+# - DIALOG360_API_KEY : valeur d'exemple de la documentation (faux positif).
+# - Clé Yelii (PAYMENT_FLOWS_SGM_CEM*.md) : VRAIE clé exposée dans l'historique.
+#   Elle DOIT être révoquée et régénérée dans la console Yelii (voir
+#   docs/pilotage/AVANCEMENT.md) ; l'ignorer ici n'enlève rien au risque.
+aecc4d07d15794aa2ce9aecf293cc405a0bd42e5:docs/reference/GUIDE_SGM_CEM.md:generic-api-key:239
+efed2d7bd6da1b7c662d650fe001a3ba464b9f0c:GUIDE_SGM_CEM.md:generic-api-key:239
+aecc4d07d15794aa2ce9aecf293cc405a0bd42e5:docs/reference/PAYMENT_FLOWS_SGM_CEM.md:generic-api-key:29
+aecc4d07d15794aa2ce9aecf293cc405a0bd42e5:docs/reference/PAYMENT_FLOWS_SGM_CEM.md:generic-api-key:40
+aecc4d07d15794aa2ce9aecf293cc405a0bd42e5:docs/reference/PAYMENT_FLOWS_SGM_CEM.md:generic-api-key:50
+e3dd9586100f4c5f2742abbbdd246c3fbfcad953:PAYMENT_FLOWS_SGM_CEM_2.md:generic-api-key:29
+e3dd9586100f4c5f2742abbbdd246c3fbfcad953:PAYMENT_FLOWS_SGM_CEM_2.md:generic-api-key:40
+e3dd9586100f4c5f2742abbbdd246c3fbfcad953:PAYMENT_FLOWS_SGM_CEM_2.md:generic-api-key:50

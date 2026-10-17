@@ -91,7 +91,7 @@ pnpm dev
 - [x] Serveur web démarre sans erreur (port 3000)
 - [x] Connexion à la base de données réussie
 - [x] Page de connexion accessible
-- [x] Login avec admin@cem-melen.cm / ChristEst!2026
+- [x] Login avec admin@cem-melen.cm / <mot-de-passe-retiré>
 - [x] Pas d'erreurs console bloquantes
 - [x] Tokens JWT valides
 - [x] Gestion des permissions fonctionnelle

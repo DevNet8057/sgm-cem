@@ -56,9 +56,11 @@ export function Litiges() {
       await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
       await queryClient.invalidateQueries({ queryKey: ['collecteurs'] })
     },
-    onError: () => {
+    onError: (err: unknown) => {
+      // Message métier de l'API (ex. paiement électronique non confirmé par le prestataire)
+      const e = err as { response?: { data?: { error?: { message?: string } } } }
       setResolveError(
-        'Impossible de résoudre ce litige. Vérifiez votre connexion puis réessayez.'
+        e.response?.data?.error?.message ?? 'Impossible de résoudre ce litige. Vérifiez votre connexion puis réessayez.'
       )
     },
   })
@@ -160,21 +162,27 @@ export function Litiges() {
                             Preuve
                           </a>
                         )}
-                        <Button
-                          size="sm"
-                          onClick={() => openResolve(c.id, 'CONFIRME')}
-                        >
-                          <CheckCircle2 size={13} />
-                          Confirmer
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          onClick={() => openResolve(c.id, 'ANNULE')}
-                        >
-                          <XCircle size={13} />
-                          Annuler
-                        </Button>
+                        {c.actions?.canResolveDispute !== false ? (
+                          <>
+                            <Button
+                              size="sm"
+                              onClick={() => openResolve(c.id, 'CONFIRME')}
+                            >
+                              <CheckCircle2 size={13} />
+                              Confirmer
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="danger"
+                              onClick={() => openResolve(c.id, 'ANNULE')}
+                            >
+                              <XCircle size={13} />
+                              Annuler
+                            </Button>
+                          </>
+                        ) : (
+                          <span className="text-xs text-gray-400">Fonds déjà remis : à régler par le trésorier</span>
+                        )}
                       </div>
                     </td>
                   </tr>

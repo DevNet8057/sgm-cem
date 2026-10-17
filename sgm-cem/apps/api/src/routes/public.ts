@@ -12,7 +12,7 @@
 // ──────────────────────────────────────────────────────────────────────
 import { Router } from 'express'
 import { z } from 'zod'
-import rateLimit from 'express-rate-limit'
+import { limiter } from '../middleware/rate-limit'
 import { Prisma } from '@prisma/client'
 import { AppError } from '../middleware/errorHandler'
 import { getPrisma } from '../lib/prisma'
@@ -36,9 +36,9 @@ const prisma = getPrisma()
 const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 // 30 req / 15 min : suffisant pour un formulaire de don, freine le scraping.
-const publicLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30 })
+const publicLimiter = limiter(15 * 60 * 1000, 30, 'Trop de requêtes. Réessayez dans quelques minutes.')
 // Le polling de statut est plus fréquent côté client — fenêtre élargie.
-const statusLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 120 })
+const statusLimiter = limiter(15 * 60 * 1000, 120, 'Trop de requêtes. Réessayez dans quelques minutes.')
 
 /** 404 générique, identique quel que soit le motif réel (anti-énumération). */
 function draftNotFoundError(): AppError {

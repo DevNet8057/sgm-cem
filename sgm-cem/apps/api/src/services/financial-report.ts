@@ -1,7 +1,7 @@
-import puppeteer from 'puppeteer'
+import { renderPdf } from './pdf-render'
 import { PrismaClient } from '@prisma/client'
 import { computeDashboardStats } from '../routes/stats'
-import { formatXAF, formatDateTime, getLogoDataUri, renderDocFooter } from './pdf-branding'
+import { formatXAF, formatDateTime, getLogoDataUri, renderDocFooter, escapeHtml as e } from './pdf-branding'
 
 const prisma = new PrismaClient()
 
@@ -28,7 +28,7 @@ export async function generateFinancialReportHtml(year?: number): Promise<string
     const color = MODE_COLORS[item.modePaiement] ?? '#64748B'
     return `
     <div class="bar-row">
-      <div class="bar-label">${MODE_LABELS[item.modePaiement] ?? item.modePaiement}</div>
+      <div class="bar-label">${e(MODE_LABELS[item.modePaiement] ?? item.modePaiement)}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${item.share}%;background:${color};"></div></div>
       <div class="bar-value">${item.share}%</div>
       <div class="bar-amount">${formatXAF(item.total)}</div>
@@ -38,7 +38,7 @@ export async function generateFinancialReportHtml(year?: number): Promise<string
   const topRows = stats.topContributors.map((item, i) => `
     <tr>
       <td class="rank rank-${i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : 'plain'}">${i + 1}</td>
-      <td><strong>${item.fullName}</strong></td>
+      <td><strong>${e(item.fullName)}</strong></td>
       <td class="num">${item.count}</td>
       <td class="num strong">${formatXAF(item.total)}</td>
     </tr>`).join('')
@@ -48,7 +48,7 @@ export async function generateFinancialReportHtml(year?: number): Promise<string
     const pct = item.rate == null ? 0 : Math.min(100, Math.round((rate / maxRate) * 100))
     return `
     <tr>
-      <td><span class="code">${item.code}</span><br/>${item.title}</td>
+      <td><span class="code">${e(item.code)}</span><br/>${e(item.title)}</td>
       <td class="num">${formatXAF(item.total)}</td>
       <td class="rate-cell">
         ${item.rate == null
@@ -148,7 +148,7 @@ export async function generateFinancialReportHtml(year?: number): Promise<string
     <div class="ctext">
       <div class="eyebrow">Document officiel</div>
       <h1>Rapport Financier Annuel</h1>
-      <p>${communityName} &bull; EEC Melen, Yaoundé &bull; Exercice ${stats.year}</p>
+      <p>${e(communityName)} &bull; EEC Melen, Yaoundé &bull; Exercice ${stats.year}</p>
     </div>
     <div class="cmeta">
       <div class="num">${numero}</div>
@@ -165,8 +165,8 @@ export async function generateFinancialReportHtml(year?: number): Promise<string
     </div>
 
     <div class="callout">
-      Le moyen de contribution le plus utilisé est <strong>${stats.mostUsedPaymentMode ? (MODE_LABELS[stats.mostUsedPaymentMode.modePaiement] ?? stats.mostUsedPaymentMode.modePaiement) : '—'}</strong>.
-      Le plus grand contributeur de l'exercice est <strong>${stats.topContributor?.fullName ?? '—'}</strong> avec <strong>${formatXAF(stats.topContributor?.total ?? 0)}</strong> versés.
+      Le moyen de contribution le plus utilisé est <strong>${stats.mostUsedPaymentMode ? e(MODE_LABELS[stats.mostUsedPaymentMode.modePaiement] ?? stats.mostUsedPaymentMode.modePaiement) : '—'}</strong>.
+      Le plus grand contributeur de l'exercice est <strong>${e(stats.topContributor?.fullName ?? '—')}</strong> avec <strong>${formatXAF(stats.topContributor?.total ?? 0)}</strong> versés.
       ${stats.litiges > 0 ? ` <strong>${stats.litiges} contribution(s)</strong> sont actuellement en litige et méritent une attention.` : ' Aucun litige en cours — la trésorerie est saine.'}
     </div>
 
@@ -207,10 +207,5 @@ export async function generateFinancialReportHtml(year?: number): Promise<string
 
 export async function generateFinancialReportPdf(year?: number): Promise<Buffer> {
   const html = await generateFinancialReportHtml(year)
-  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] })
-  const page = await browser.newPage()
-  await page.setContent(html, { waitUntil: 'networkidle0' })
-  const pdf = await page.pdf({ format: 'A4', printBackground: true, margin: { top: '0mm', bottom: '10mm', left: '0mm', right: '0mm' } })
-  await browser.close()
-  return Buffer.from(pdf)
+  return renderPdf(html, { format: 'A4', printBackground: true, margin: { top: '0mm', bottom: '10mm', left: '0mm', right: '0mm' } })
 }

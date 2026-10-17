@@ -1,11 +1,12 @@
 # ──────────────────────────────────────────────────────────────────────
 # DOCKERFILE API — Backend Express + TypeScript + Prisma
-# Pourquoi node:20-slim ?
-#   • Node >= 20 requis par le projet (engines dans package.json)
-#   • slim = image légère (~300 Mo) mais apt-get disponible pour Puppeteer/Chromium
+# Pourquoi node:24-bookworm-slim ?
+#   • Node 24 LTS (Node 20 en fin de vie depuis le 30/04/2026 ; Puppeteer 25 exige Node >= 22.12)
+#   • bookworm figé : noms de paquets apt stables (trixie renomme libasound2…)
+#   • slim = image légère mais apt-get disponible pour Puppeteer/Chromium
 # ──────────────────────────────────────────────────────────────────────
 
-FROM node:20-slim
+FROM node:24-bookworm-slim
 
 # ── Étape 1 : apt-get pour Puppeteer / Chromium + Prisma ───────────────
 # Puppeteer a besoin de bibliothèques système pour lancer Chromium.

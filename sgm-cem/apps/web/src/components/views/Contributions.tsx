@@ -444,7 +444,8 @@ export function Contributions() {
               if (nextMode !== 'ESPECES') setSplitMode(false)
               setForm({ ...form, modePaiement: nextMode })
             }}
-            options={Object.entries(MODE_PAIEMENT_LABELS).map(([value, label]) => ({ value, label }))}
+            // Les paiements MoMo/Orange/carte se font en ligne et sont confirmés par le prestataire
+            options={STAFF_ENTRY_MODES.map(value => ({ value, label: MODE_PAIEMENT_LABELS[value] }))}
           />
           {/* Répartition multi-rubriques (staff, ESPECES uniquement) */}
           {form.modePaiement === 'ESPECES' && (
@@ -825,6 +826,8 @@ const STATUS_CHIPS = [
   { label: 'Litige',     value: 'LITIGE',                  color: 'bg-red-50 text-red-700 border-red-200',  activeColor: 'bg-red-600 text-white border-red-600' },
   { label: 'Annulé',     value: 'ANNULE',                  color: 'bg-gray-100 text-gray-500 border-gray-200', activeColor: 'bg-gray-500 text-white border-gray-500' },
 ] as const
+
+const STAFF_ENTRY_MODES: ModePaiement[] = ['ESPECES', 'VIREMENT', 'YELII']
 
 const MODE_CHIPS = [
   { label: 'Espèces',     value: 'ESPECES',      color: 'bg-green-50 text-green-700 border-green-200', activeColor: 'bg-green-700 text-white border-green-700' },

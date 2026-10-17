@@ -104,6 +104,14 @@ export interface Contribution {
   rubrique?: { title: string; code: string }
   collecteur?: { fullName: string }
   fundsTransfer?: FundsTransfer
+  // Capacités calculées par l'API pour l'utilisateur courant (seule source de vérité)
+  actions?: {
+    canConfirm: boolean
+    canRefuse: boolean
+    canDispute: boolean
+    canResolveDispute: boolean
+    canGrantConfirmation: boolean
+  }
 }
 
 export interface RemainingBalance {
@@ -172,6 +180,7 @@ export interface CollecteursResponse {
   }
   eligibleRecipients: Array<{ id: string; fullName: string; email: string; role: string }>
   myRole?: UserRole
+  myUserId?: string
   pendingValidations?: number
 }
 

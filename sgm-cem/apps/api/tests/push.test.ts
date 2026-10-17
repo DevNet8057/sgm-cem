@@ -1,12 +1,12 @@
 // Tests Web Push — abonnement navigateur + clé VAPID + purge
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import request from 'supertest'
-import jwt from 'jsonwebtoken'
 import app from '../src/index'
 import { getPrisma } from '../src/lib/prisma'
-import { getJwtSecret } from '../src/lib/security'
 import { loadConfigCache } from '../src/services/config.service'
-import { sendPushToUser } from '../src/services/push.service'
+import webpush from 'web-push'
+import { getVapidPublicKey, sendPushToUser } from '../src/services/push.service'
+import { testCookie } from './helpers/session'
 
 const prisma = getPrisma()
 const FAKE_ENDPOINT = 'https://push.example.com/fake-endpoint-test-sgm'
@@ -19,11 +19,14 @@ let csrfCookie = ''
 beforeAll(async () => {
   // Le cache config n'est pas chargé automatiquement en NODE_ENV=test
   await loadConfigCache()
+  // Sans clé VAPID en base, clé publique éphémère (la clé privée reste absente :
+  // aucun push n'est réellement émis vers le faux endpoint pendant les tests)
+  if (!getVapidPublicKey()) process.env.VAPID_PUBLIC_KEY = webpush.generateVAPIDKeys().publicKey
 
   const user = await prisma.user.findFirst({ where: { isActive: true } })
   if (!user) throw new Error('Seed requis')
   userId = user.id
-  cookie = `access_token=${jwt.sign({ userId: user.id, role: user.role, email: user.email }, getJwtSecret(), { expiresIn: '15m' })}`
+  cookie = await testCookie({ userId: user.id, role: user.role, email: user.email })
 
   const res = await request(app).get('/api/csrf-token').set('Cookie', cookie)
   csrfToken = res.body.token

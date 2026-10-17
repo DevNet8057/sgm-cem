@@ -10,16 +10,34 @@ import { getFileStream } from '../services/storage'
 import { getConfig } from '../services/config.service'
 import { notifyCollecteurNewContribution } from '../services/notification'
 import { calculateRemainingBalance } from '@sgm-cem/shared'
+import {
+  assertContributionAction,
+  assertContributionReadable,
+  assertResolutionAllowed,
+  getContributionScope,
+  withActions,
+  type ContributionActor,
+} from '../services/contribution-access.service'
 
 const router = Router()
 const prisma = new PrismaClient()
+
+function actorOf(req: { user?: { userId: string; role: string } }): ContributionActor {
+  return { userId: req.user!.userId, role: req.user!.role }
+}
+
+// Saisie manuelle par le staff : espèces, virement, ou demande de paiement Yelii.
+// Les paiements MoMo/Orange/carte ne sont confirmés QUE par le prestataire (RG-13).
+const STAFF_ENTRY_MODES = ['ESPECES', 'VIREMENT', 'YELII'] as const
 
 const createSchema = z.object({
   membreId: z.string(),
   rubriqueId: z.string(),
   collecteurId: z.string().optional(),
   montant: z.number().int().positive(),
-  modePaiement: z.enum(['ESPECES', 'MTN_MOMO', 'ORANGE_MONEY', 'YELII', 'CARTE_VISA', 'VIREMENT']),
+  modePaiement: z.enum(STAFF_ENTRY_MODES, {
+    errorMap: () => ({ message: 'Mode non saisissable : les paiements Mobile Money et carte passent par le paiement en ligne' }),
+  }),
   periodeLabel: z.string().optional(),
   mobileMoneyPhone: z.string().optional(),
   paymentChannel: z.enum(['MTN', 'ORANGE']).optional(),
@@ -54,7 +72,9 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
   const pageSize = Math.min(100, Math.max(1, parseInt(limit, 10) || 20))
   const skip = (currentPage - 1) * pageSize
 
+  // Périmètre : un collecteur ne voit que les contributions qui lui sont attribuées
   const where = {
+    ...getContributionScope(actorOf(req)),
     ...(statut && { statut: statut as never }),
     ...(rubriqueId && { rubriqueId }),
     ...(membreId && { membreId }),
@@ -77,17 +97,16 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
 
   res.json({
     success: true,
-    data: contributions,
+    data: withActions(actorOf(req), contributions),
     pagination: { page: currentPage, limit: pageSize, total, totalPages: Math.ceil(total / pageSize) }
   })
 })
 
 router.get('/validations', authenticate, requireLevel(2), async (req, res) => {
-  const isCollecteur = req.user!.role === 'COLLECTEUR'
   const contributions = await prisma.contribution.findMany({
     where: {
+      ...getContributionScope(actorOf(req)),
       statut: 'EN_ATTENTE_CONFIRMATION',
-      ...(isCollecteur && { collecteurId: req.user!.userId }),
     },
     include: {
       membre: { include: { user: { select: { fullName: true } } } },
@@ -98,10 +117,10 @@ router.get('/validations', authenticate, requireLevel(2), async (req, res) => {
     take: 100,
   })
 
-  res.json({ success: true, data: contributions })
+  res.json({ success: true, data: withActions(actorOf(req), contributions) })
 })
 
-router.get('/litiges', authenticate, requireLevel(3), async (_req, res) => {
+router.get('/litiges', authenticate, requireLevel(3), async (req, res) => {
   const contributions = await prisma.contribution.findMany({
     where: { statut: 'LITIGE' },
     include: {
@@ -113,7 +132,7 @@ router.get('/litiges', authenticate, requireLevel(3), async (_req, res) => {
     take: 100,
   })
 
-  res.json({ success: true, data: contributions })
+  res.json({ success: true, data: withActions(actorOf(req), contributions) })
 })
 
 /**
@@ -216,6 +235,20 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
   const data = createSchema.parse(req.body)
   const { directCollection, paymentChannel, ...contributionData } = data
 
+  // Un collecteur n'enregistre que ce qu'il encaisse lui-même ; un superviseur
+  // peut attribuer la remise à un autre membre du staff, actif.
+  const collecteurId = req.user!.role === 'COLLECTEUR' ? req.user!.userId : (data.collecteurId ?? req.user!.userId)
+  if (collecteurId !== req.user!.userId) {
+    const designated = await prisma.user.findFirst({
+      where: { id: collecteurId, isActive: true, role: { not: 'MEMBRE' } },
+      select: { id: true },
+    })
+    if (!designated) throw new AppError('NOT_FOUND', 'Collecteur désigné introuvable ou inactif', 404)
+  }
+  if (data.modePaiement === 'YELII' && !data.mobileMoneyPhone) {
+    throw new AppError('VALIDATION_ERROR', 'Numéro Mobile Money requis pour une demande de paiement Yelii', 400)
+  }
+
   const [rubrique, membre] = await Promise.all([
     prisma.rubrique.findUnique({ where: { id: data.rubriqueId } }),
     prisma.membre.findUnique({ where: { id: data.membreId } }),
@@ -233,13 +266,14 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
     membre.profilFinancier === 'COUPLE' ? rubrique.amountCouple :
     rubrique.amountTravailleur
 
-  // B1 — encaissement en présentiel : confirmation immédiate, sans double validation.
-  const isDirectCash = data.modePaiement === 'ESPECES' && directCollection === true
+  // B1 — encaissement en présentiel : confirmation immédiate, sans double validation,
+  // uniquement par la personne qui a l'argent en main.
+  const isDirectCash = data.modePaiement === 'ESPECES' && directCollection === true && collecteurId === req.user!.userId
 
   const contribution = await prisma.contribution.create({
     data: {
       ...contributionData,
-      collecteurId: data.collecteurId ?? req.user!.userId,
+      collecteurId,
       montantAttendu: montantAttendu ?? data.montant,
       statut: isDirectCash ? 'CONFIRME' : 'EN_ATTENTE_CONFIRMATION',
       localisationFonds: data.modePaiement === 'ESPECES' ? 'CHEZ_COLLECTEUR' : 'EN_TRANSIT',
@@ -388,6 +422,7 @@ router.post('/declare', authenticate, requireLevel(1), async (req, res) => {
 router.get('/:id/payment-status', authenticate, requireLevel(2), async (req, res) => {
   const contribution = await prisma.contribution.findUnique({ where: { id: String(req.params.id) } })
   if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
+  assertContributionReadable(actorOf(req), contribution)
 
   if (contribution.statut === 'CONFIRME' || contribution.statut === 'ANNULE' || contribution.statut === 'LITIGE') {
     res.json({ success: true, data: { id: contribution.id, statut: contribution.statut } })
@@ -422,30 +457,33 @@ router.patch('/:id/confirm', authenticate, requireLevel(2), async (req, res) => 
   const contribution = await prisma.contribution.findUnique({ where: { id } })
   if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
   if (contribution.statut !== 'EN_ATTENTE_CONFIRMATION') {
-    throw new AppError('BUSINESS_RULE', 'Cette contribution ne peut pas etre confirmee')
+    throw new AppError('BUSINESS_RULE', 'Cette contribution ne peut pas être confirmée')
   }
-  if (req.user!.role === 'COLLECTEUR' && contribution.collecteurId !== req.user!.userId) {
-    throw new AppError('ACCESS_DENIED', 'Vous ne pouvez confirmer que vos propres remises', 403)
-  }
+  // Espèces et virements seulement, par le collecteur désigné ou un administrateur
+  assertContributionAction(actorOf(req), contribution, 'canConfirm')
 
-  const updated = await prisma.contribution.update({
-    where: { id },
+  // Transition conditionnelle : deux confirmations simultanées n'en font qu'une
+  const result = await prisma.contribution.updateMany({
+    where: { id, statut: 'EN_ATTENTE_CONFIRMATION' },
     data: {
       statut: 'CONFIRME',
       paymentStatus: 'SUCCESS',
       confirmedAt: new Date(),
       confirmedById: req.user!.userId,
-    }
+    },
   })
+  if (result.count !== 1) throw new AppError('BUSINESS_RULE', 'Cette contribution a déjà été traitée')
+  const updated = await prisma.contribution.findUniqueOrThrow({ where: { id } })
 
+  const override = contribution.collecteurId !== req.user!.userId
   await prisma.auditLog.create({
     data: {
       userId: req.user!.userId,
       userName: req.user!.email,
-      action: 'CONFIRM',
+      action: override ? 'CONFIRM_OVERRIDE' : 'CONFIRM',
       entityType: 'Contribution',
       entityId: updated.id,
-      details: { montant: updated.montant },
+      details: { montant: updated.montant, modePaiement: updated.modePaiement, ...(override && { designatedCollecteurId: contribution.collecteurId }) },
     }
   })
 
@@ -453,12 +491,50 @@ router.patch('/:id/confirm', authenticate, requireLevel(2), async (req, res) => 
   res.json({ success: true, data: { ...updated, receiptUrl } })
 })
 
-router.patch('/:id/litige', authenticate, requireLevel(2), async (req, res) => {
-  const { motif } = z.object({ motif: z.string().min(10) }).parse(req.body)
-  const updated = await prisma.contribution.update({
-    where: { id: String(req.params.id) },
-    data: { statut: 'LITIGE', litigeMotif: motif }
+// Refus d'une déclaration en attente (argent non reçu) : distinct du litige,
+// la contribution est annulée avec son motif.
+router.patch('/:id/refuse', authenticate, requireLevel(2), async (req, res) => {
+  const { motif } = z.object({ motif: z.string().trim().min(10, 'Motif de 10 caractères minimum').max(500) }).parse(req.body)
+  const id = String(req.params.id)
+  const contribution = await prisma.contribution.findUnique({ where: { id } })
+  if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
+  assertContributionAction(actorOf(req), contribution, 'canRefuse')
+
+  const result = await prisma.contribution.updateMany({
+    where: { id, statut: 'EN_ATTENTE_CONFIRMATION' },
+    data: { statut: 'ANNULE', paymentStatus: 'CANCELLED', litigeMotif: `Refusée : ${motif}` },
   })
+  if (result.count !== 1) throw new AppError('BUSINESS_RULE', 'Cette contribution a déjà été traitée')
+  const updated = await prisma.contribution.findUniqueOrThrow({ where: { id } })
+
+  await prisma.auditLog.create({
+    data: {
+      userId: req.user!.userId,
+      userName: req.user!.email,
+      action: 'REJECT',
+      entityType: 'Contribution',
+      entityId: id,
+      details: { action: 'refuse', motif, montant: contribution.montant },
+    },
+  })
+
+  res.json({ success: true, data: updated })
+})
+
+router.patch('/:id/litige', authenticate, requireLevel(3), async (req, res) => {
+  const { motif } = z.object({ motif: z.string().trim().min(10).max(1000) }).parse(req.body)
+  const id = String(req.params.id)
+  const contribution = await prisma.contribution.findUnique({ where: { id } })
+  if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
+  // Superviseurs uniquement, et tant que les fonds n'ont pas quitté le collecteur
+  assertContributionAction(actorOf(req), contribution, 'canDispute')
+
+  const result = await prisma.contribution.updateMany({
+    where: { id, statut: contribution.statut },
+    data: { statut: 'LITIGE', litigeMotif: motif },
+  })
+  if (result.count !== 1) throw new AppError('BUSINESS_RULE', 'Cette contribution a changé entre-temps, rechargez la page')
+  const updated = await prisma.contribution.findUniqueOrThrow({ where: { id } })
 
   await prisma.auditLog.create({
     data: {
@@ -467,7 +543,7 @@ router.patch('/:id/litige', authenticate, requireLevel(2), async (req, res) => {
       action: 'REJECT',
       entityType: 'Contribution',
       entityId: updated.id,
-      details: { motif },
+      details: { motif, previousStatut: contribution.statut },
     }
   })
 
@@ -483,17 +559,20 @@ router.patch('/:id/resolve-litige', authenticate, requireLevel(3), async (req, r
   const id = String(req.params.id)
   const contribution = await prisma.contribution.findUnique({ where: { id } })
   if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
-  if (contribution.statut !== 'LITIGE') throw new AppError('BUSINESS_RULE', 'Cette contribution n est pas en litige')
+  if (contribution.statut !== 'LITIGE') throw new AppError('BUSINESS_RULE', 'Cette contribution n\'est pas en litige')
+  assertResolutionAllowed(actorOf(req), contribution, resolution)
 
-  const updated = await prisma.contribution.update({
-    where: { id },
+  const result = await prisma.contribution.updateMany({
+    where: { id, statut: 'LITIGE' },
     data: {
       statut: resolution,
       confirmedAt: resolution === 'CONFIRME' ? new Date() : contribution.confirmedAt,
       confirmedById: resolution === 'CONFIRME' ? req.user!.userId : contribution.confirmedById,
-      litigeMotif: note ? `${contribution.litigeMotif ?? ''}\nResolution: ${note}` : contribution.litigeMotif,
+      litigeMotif: note ? `${contribution.litigeMotif ?? ''}\nRésolution : ${note}` : contribution.litigeMotif,
     }
   })
+  if (result.count !== 1) throw new AppError('BUSINESS_RULE', 'Ce litige a déjà été traité')
+  const updated = await prisma.contribution.findUniqueOrThrow({ where: { id } })
 
   await prisma.auditLog.create({
     data: {
@@ -535,6 +614,7 @@ router.get('/:id/timeline', authenticate, requireLevel(2), async (req, res) => {
     },
   })
   if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
+  assertContributionReadable(actorOf(req), contribution)
 
   const auditLogs = await prisma.auditLog.findMany({
     where: { entityType: 'Contribution', entityId: id },
@@ -620,6 +700,7 @@ router.get('/:id/receipt', authenticate, requireLevel(2), async (req, res) => {
   const id = String(req.params.id)
   const contribution = await prisma.contribution.findUnique({ where: { id } })
   if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
+  assertContributionReadable(actorOf(req), contribution)
   if (contribution.statut !== 'CONFIRME') {
     throw new AppError('BUSINESS_RULE', 'Le reçu est disponible uniquement pour les contributions confirmées', 400)
   }

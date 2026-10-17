@@ -18,11 +18,14 @@ Tout POST/PATCH/DELETE exige le double-submit CSRF, et le jeton CSRF est LIÉ au
 JAR=/tmp/jar.txt
 T=$(curl -s -c "$JAR" http://localhost:3001/api/csrf-token | sed 's/.*"token":"\([^"]*\)".*/\1/')
 curl -s -b "$JAR" -c "$JAR" -H "x-csrf-token: $T" -H "Content-Type: application/json" \
-  -d '{"email":"admin@cem-melen.cm","password":"ChristEst!2026"}' http://localhost:3001/api/auth/login
+  -d "{\"email\":\"tresorier@cem-melen.cm\",\"password\":\"$SEED_DEMO_PASSWORD\"}" http://localhost:3001/api/auth/login
 # ensuite : GET avec -b "$JAR" ; pour un nouveau POST, refetcher le jeton CSRF d'abord
 ```
 
-## Comptes seed (mot de passe commun `ChristEst!2026`)
+## Comptes seed (base locale de démonstration)
+
+Plus aucun mot de passe n'est écrit dans le code. Base locale : `SEED_DEMO=1 SEED_DEMO_PASSWORD=<choix-local> ADMIN_PASSWORD=<choix-local> pnpm db:seed`
+(mot de passe commun des comptes de démo = `SEED_DEMO_PASSWORD`). Une base de dev plus ancienne garde ses mots de passe d'origine.
 
 - ADMIN : `admin@cem-melen.cm` · TRESORIER : `tresorier@cem-melen.cm`
 - COLLECTEUR : `collecteur.temple@cem-melen.cm` · MEMBRE : `martine.eloundou@gmail.com`

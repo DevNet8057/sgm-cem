@@ -1,14 +1,13 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import request from 'supertest'
-import jwt from 'jsonwebtoken'
 import app from '../src/index'
 import { getPrisma } from '../src/lib/prisma'
-import { getJwtSecret } from '../src/lib/security'
+import { testCookie } from './helpers/session'
 
 const prisma = getPrisma()
 
-function cookieFor(userId: string, role: string, email: string): string {
-  return `access_token=${jwt.sign({ userId, role, email }, getJwtSecret(), { expiresIn: '15m' })}`
+function cookieFor(userId: string, role: string, email: string): Promise<string> {
+  return testCookie({ userId, role, email })
 }
 
 async function csrfFor(cookie: string) {
@@ -34,7 +33,7 @@ describe('Contribution Guidée — MEMBRE', () => {
     if (!membre) throw new Error('Seed requis : membre actif')
     membreId = membre.id
     userId = membre.userId
-    membreCookie = cookieFor(userId, 'MEMBRE', membre.user.email)
+    membreCookie = await cookieFor(userId, 'MEMBRE', membre.user.email)
 
     const collecteur = await prisma.user.findFirst({ where: { role: 'COLLECTEUR', isActive: true } })
     if (!collecteur) throw new Error('Seed requis : collecteur')
@@ -96,7 +95,7 @@ describe('Contribution Guidée — comportement STAFF inchangé (régression)', 
     const collecteur = await prisma.user.findFirst({ where: { role: 'COLLECTEUR', isActive: true } })
     const rubrique = await prisma.rubrique.findFirst({ where: { status: 'OUVERTE' } })
     if (!collecteur || !rubrique) return
-    const cookie = cookieFor(collecteur.id, 'COLLECTEUR', collecteur.email)
+    const cookie = await cookieFor(collecteur.id, 'COLLECTEUR', collecteur.email)
     const { header, cookie: csrfCookie } = await csrfFor(cookie)
     const res = await request(app)
       .post('/api/contributions/declare')

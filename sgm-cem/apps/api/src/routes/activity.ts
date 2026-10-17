@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import rateLimit from 'express-rate-limit'
+import { limiter, userOrIpKey } from '../middleware/rate-limit'
 import { z } from 'zod'
 import { getPrisma } from '../lib/prisma'
 import { authenticate } from '../middleware/auth'
@@ -9,7 +9,7 @@ import { isActivityPageKey } from '@sgm-cem/shared'
 
 const router = Router()
 const prisma = getPrisma()
-const heartbeatLimiter = rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true, keyGenerator: req => req.user?.userId ?? req.ip ?? 'unknown', message: { success: false, error: { code: 'RATE_LIMITED', message: 'Trop de télémétrie' } } })
+const heartbeatLimiter = limiter(60_000, 120, 'Trop de télémétrie', { keyGenerator: userOrIpKey })
 const heartbeat = z.object({ tabId: z.string().uuid(), seq: z.number().int().min(0), pageKey: z.string(), isActive: z.boolean() })
 const ending = z.object({ tabId: z.string().uuid(), seq: z.number().int().min(0) })
 const pagination = z.object({ page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(1).max(100).default(25) })

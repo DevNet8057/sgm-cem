@@ -1,7 +1,7 @@
 import axios from 'axios'
 import twilio from 'twilio'
 import { PrismaClient } from '@prisma/client'
-import { sendEmail, sendEmailWithPdfAttachment } from './email'
+import { sendEmail, sendEmailWithPdfAttachment, textToHtml } from './email'
 import { getConfig, getConfigBool } from './config.service'
 import { sendPushToUser } from './push.service'
 
@@ -285,9 +285,9 @@ export async function notifyMemberConfirmed(p: {
           filename,
           body: msg,
         })
-        if (!ok) await sendEmail({ to: p.memberEmail, subject: `Recu de contribution - ${p.rubriqueCode}`, html: `<p>${msg.replace(/\n/g, '<br>')}</p>` })
+        if (!ok) await sendEmail({ to: p.memberEmail, subject: `Recu de contribution - ${p.rubriqueCode}`, html: textToHtml(msg) })
       } else {
-        await sendEmail({ to: p.memberEmail, subject: `Recu de contribution - ${p.rubriqueCode}`, html: `<p>${msg.replace(/\n/g, '<br>')}</p>` })
+        await sendEmail({ to: p.memberEmail, subject: `Recu de contribution - ${p.rubriqueCode}`, html: textToHtml(msg) })
       }
     } catch (e) { console.error('[Email recu]', e) }
   }

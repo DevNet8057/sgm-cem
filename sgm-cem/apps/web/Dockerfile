@@ -1,11 +1,12 @@
 # ──────────────────────────────────────────────────────────────────────
 # DOCKERFILE WEB — Frontend Next.js 15
-# Pourquoi node:20-slim ?
-#   • Node >= 20 requis
+# Pourquoi node:24-bookworm-slim ?
+#   • Node 24 LTS (Node 20 en fin de vie depuis le 30/04/2026 ; Puppeteer 25 exige Node >= 22.12)
+#   • bookworm figé : noms de paquets apt stables (trixie renomme libasound2…)
 #   • Pour next build + next start en production
 # ──────────────────────────────────────────────────────────────────────
 
-FROM node:20-slim
+FROM node:24-bookworm-slim
 
 WORKDIR /app
 

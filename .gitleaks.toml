@@ -1,0 +1,23 @@
+# Détection de secrets (gitleaks) — règles par défaut + faux positifs connus du projet.
+# Toute vraie clé détectée doit être RÉVOQUÉE chez le fournisseur, pas seulement retirée.
+title = "SGM-CEM"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Faux positifs connus"
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)\.next/''',
+  '''(^|/)pnpm-lock\.yaml$''',
+  # Secrets factices des tests automatisés (base jetable de la CI)
+  '''^\.github/workflows/ci\.yml$''',
+  '''^sgm-cem/apps/api/tests/''',
+]
+regexes = [
+  # Noms de variables (seed-config.ts, render.yaml) : DIALOG360_API_KEY, etc.
+  '''^[A-Z][A-Z0-9_]+$''',
+  # Gabarits de documentation : <VOTRE_CLE_…>
+  '''^<[^>]+>$''',
+]

@@ -1,45 +1,41 @@
 import { PrismaClient } from '@prisma/client'
-import bcrypt from 'bcrypt'
+import { generateTemporaryPassword, hashPassword } from '../src/lib/password'
 
+// Réinitialisation de secours d'un compte (ADMIN perdu, etc.) depuis le serveur :
+//   TARGET_EMAIL=admin@exemple.cm pnpm exec ts-node prisma/reset-admin-password.ts
+// Un mot de passe temporaire aléatoire est affiché une seule fois ; il doit être
+// changé à la connexion suivante et toutes les sessions du compte sont fermées.
 const prisma = new PrismaClient()
 
 async function main() {
-  const email = 'admin@cem-melen.cm'
-  const password = 'ChristEst!2026'
-  const passwordHash = await bcrypt.hash(password, 12)
+  const email = process.env.TARGET_EMAIL?.toLowerCase().trim()
+  if (!email) throw new Error('TARGET_EMAIL est requis')
 
-  const user = await prisma.user.upsert({
-    where: { email },
-    update: {
-      passwordHash,
-      isActive: true,
-      mustChangePassword: false,
-    },
-    create: {
-      firstName: 'Administrateur',
-      lastName: 'CEM',
-      fullName: 'Administrateur CEM',
-      email,
-      passwordHash,
-      role: 'ADMIN',
-      memberId: 'CEM-2026-000001',
-      isActive: true,
-      mustChangePassword: false,
-    },
-    select: {
-      email: true,
-      role: true,
-      isActive: true,
-      mustChangePassword: true,
-    },
-  })
+  const user = await prisma.user.findUnique({ where: { email } })
+  if (!user) throw new Error(`Aucun compte pour ${email}`)
 
-  console.log(JSON.stringify({ ...user, password }, null, 2))
+  const password = generateTemporaryPassword()
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: await hashPassword(password), isActive: true, mustChangePassword: true },
+    }),
+    prisma.userSession.deleteMany({ where: { userId: user.id } }),
+    prisma.auditLog.create({
+      data: {
+        userId: user.id, userName: user.fullName, action: 'UPDATE', entityType: 'User', entityId: user.id,
+        details: { action: 'password_reset', source: 'maintenance-script' },
+      },
+    }),
+  ])
+
+  console.log(`Compte ${email} (${user.role}) réinitialisé.`)
+  console.log(`Mot de passe temporaire (à changer à la connexion) : ${password}`)
 }
 
 main()
   .catch(error => {
-    console.error(error)
-    process.exit(1)
+    console.error(error instanceof Error ? error.message : error)
+    process.exitCode = 1
   })
   .finally(() => prisma.$disconnect())
