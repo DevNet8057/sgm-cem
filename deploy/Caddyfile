@@ -1,0 +1,40 @@
+# Domaine et e-mail ACME lus dans l'environnement du conteneur (APP_DOMAIN, ACME_EMAIL du .env)
+{
+	email {$ACME_EMAIL}
+}
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		-Server
+	}
+
+	request_body {
+		max_size 25MB
+	}
+
+	@backend path /api/* /webhooks/* /socket.io/* /uploads/receipts/* /uploads/avatars/*
+	handle @backend {
+		reverse_proxy api:3001 {
+			header_up X-Request-Id {http.request.uuid}
+		}
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+
+	log {
+		output file /data/access.log {
+			roll_size 50MiB
+			roll_keep 14
+		}
+		format json
+	}
+}

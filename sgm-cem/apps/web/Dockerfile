@@ -6,7 +6,15 @@
 #   • Pour next build + next start en production
 # ──────────────────────────────────────────────────────────────────────
 
-FROM node:24-bookworm-slim
+# Empreinte épinglée le 17/10/2026 — mise à jour volontaire uniquement
+FROM node:24-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5
+
+# Traçabilité de l'image (renseignées par la CI : --build-arg GIT_SHA=… --build-arg VERSION=…)
+ARG GIT_SHA=dev
+ARG VERSION=dev
+LABEL org.opencontainers.image.source="https://github.com/DevNet8057/sgm-cem" \
+      org.opencontainers.image.revision="$GIT_SHA" \
+      org.opencontainers.image.version="$VERSION"
 
 WORKDIR /app
 

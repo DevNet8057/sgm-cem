@@ -6,7 +6,15 @@
 #   • slim = image légère mais apt-get disponible pour Puppeteer/Chromium
 # ──────────────────────────────────────────────────────────────────────
 
-FROM node:24-bookworm-slim
+# Empreinte épinglée le 17/10/2026 — mise à jour volontaire uniquement
+FROM node:24-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5
+
+# Traçabilité de l'image (renseignées par la CI : --build-arg GIT_SHA=… --build-arg VERSION=…)
+ARG GIT_SHA=dev
+ARG VERSION=dev
+LABEL org.opencontainers.image.source="https://github.com/DevNet8057/sgm-cem" \
+      org.opencontainers.image.revision="$GIT_SHA" \
+      org.opencontainers.image.version="$VERSION"
 
 # ── Étape 1 : apt-get pour Puppeteer / Chromium + Prisma ───────────────
 # Puppeteer a besoin de bibliothèques système pour lancer Chromium.
@@ -69,13 +77,12 @@ COPY apps/api/tsconfig.json ./apps/api/tsconfig.json
 RUN cd /app/apps/api && pnpm exec prisma generate
 
 # ── Étape 8 : Builder le TypeScript ─────────────────────────────────────
-# `|| true` : tsc émet dist/ même avec des erreurs de type connues.
-RUN pnpm --filter api build || true \
+# Une erreur de type fait échouer le build : jamais d'image construite sur du code faux.
+RUN pnpm --filter api build \
   && test -f /app/apps/api/dist/index.js
 
-# ── Étape 9 : Copier le point d'entrée (schéma DB + seed avant démarrage)
-# Le script détecte automatiquement le contexte (Docker local vs Render managed)
-# et adapte l'attente PostgreSQL + le db push en conséquence.
+# ── Étape 9 : Point d'entrée : attente PostgreSQL, sauvegarde, migrations
+# (`migrate deploy`), seed de base si la base est vide, puis serveur.
 COPY apps/api/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh
 
