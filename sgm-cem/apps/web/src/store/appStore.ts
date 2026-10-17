@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Notification, ToastOptions } from '@/types'
+import { pushView } from '@/lib/view-routing'
 
 interface Toast extends ToastOptions {
   id: string
@@ -35,7 +36,8 @@ interface AppState {
 
 export const useAppStore = create<AppState>((set, get) => ({
   activeView: 'dashboard',
-  setActiveView: (v) => set({ activeView: v }),
+  // L'URL fait foi : changer d'écran = nouvelle entrée d'historique
+  setActiveView: (v) => { set({ activeView: v }); pushView(v) },
   sidebarOpen: false,
   setSidebarOpen: (v) => set({ sidebarOpen: v }),
 
@@ -70,6 +72,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   navigateToNotification: (n) => {
     if (!n.targetView) return
     set({ activeView: n.targetView, sidebarOpen: false, focusTarget: { view: n.targetView, id: n.targetId } })
+    pushView(n.targetView)
   },
   clearFocusTarget: () => set({ focusTarget: null }),
 }))

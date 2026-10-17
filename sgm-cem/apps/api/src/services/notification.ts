@@ -118,6 +118,12 @@ export interface NotificationTarget {
   id?: string
 }
 
+/** URL ouverte au clic sur la notification système (une URL par écran côté web). */
+function pushTarget(target?: NotificationTarget | null): { url?: string } {
+  if (!target?.view || !/^[a-z][a-z-]{1,40}$/.test(target.view)) return {}
+  return { url: target.view === 'dashboard' ? '/dashboard' : `/dashboard/${target.view}` }
+}
+
 export async function notifyInApp(
   userId: string, title: string, body: string, type = 'INFO',
   data?: Record<string, unknown>, target?: NotificationTarget
@@ -134,7 +140,7 @@ export async function notifyInApp(
     })
     // Doubler d'un push navigateur (barre de notification système) —
     // best-effort : ne bloque jamais la notification in-app.
-    void sendPushToUser(userId, { title, body, data })
+    void sendPushToUser(userId, { title, body, data: { ...data, ...pushTarget(target) } })
   } catch (e) { console.error('[InApp]', e) }
 }
 
@@ -176,7 +182,8 @@ export async function notifyPublicCollecteCreated(p: {
   })
 
   for (const user of users) {
-    void sendPushToUser(user.id, { title, body, data })
+    const canManagePublicCollectes = ['ADMIN', 'TRESORIER', 'DEVELOPER'].includes(user.role)
+    void sendPushToUser(user.id, { title, body, data: { ...data, ...pushTarget({ view: canManagePublicCollectes ? 'collectes-publiques' : 'rubriques' }) } })
   }
 }
 
@@ -214,7 +221,8 @@ export async function notifyPublicCollecteUrgencyChanged(p: {
   })
 
   for (const user of users) {
-    void sendPushToUser(user.id, { title, body, data })
+    const canManagePublicCollectes = ['ADMIN', 'TRESORIER', 'DEVELOPER'].includes(user.role)
+    void sendPushToUser(user.id, { title, body, data: { ...data, ...pushTarget({ view: canManagePublicCollectes ? 'collectes-publiques' : 'rubriques' }) } })
   }
 }
 

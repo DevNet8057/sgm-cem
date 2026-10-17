@@ -1,6 +1,8 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useLayoutEffect, useState } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
+import { useAppStore } from '@/store/appStore'
+import { viewFromPath } from '@/lib/view-routing'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { TopBar } from '@/components/layout/TopBar'
 import { BottomNav } from '@/components/layout/BottomNav'
@@ -109,7 +111,18 @@ function OfflineBanner({ isOffline, queuedCount }: { isOffline: boolean; queuedC
   )
 }
 
+// Le menu, la barre du haut et les onglets lisent l'écran courant dans le store :
+// il suit l'URL (retour arrière, lien direct, rafraîchissement) avant l'affichage.
+function useViewFromUrl() {
+  const pathname = usePathname()
+  useLayoutEffect(() => {
+    const view = viewFromPath(pathname)
+    if (useAppStore.getState().activeView !== view) useAppStore.setState({ activeView: view, sidebarOpen: false })
+  }, [pathname])
+}
+
 function AppLayoutInner({ children }: { children: React.ReactNode }) {
+  useViewFromUrl()
   useActivityTracker()
   const { isOffline, queuedCount } = useOfflineSync()
   useSocket()

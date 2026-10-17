@@ -77,14 +77,17 @@ self.addEventListener('push', event => {
   )
 })
 
-/* Clic sur la notification : focaliser l'app (ou l'ouvrir) sur le dashboard */
+/* Clic sur la notification : ouvrir l'écran concerné (une URL par écran) */
 self.addEventListener('notificationclick', event => {
   event.notification.close()
+  const wanted = event.notification.data && event.notification.data.url
+  // Uniquement un chemin interne de l'application, jamais une URL externe
+  const target = typeof wanted === 'string' && /^\/dashboard(\/[a-z-]+)?$/.test(wanted) ? wanted : '/dashboard'
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-      const existing = list.find(c => c.url.includes(self.location.origin))
-      if (existing) return existing.focus()
-      return clients.openWindow('/dashboard')
+      const existing = list.find(c => c.url.startsWith(self.location.origin))
+      if (existing) return existing.navigate(target).then(c => (c || existing).focus())
+      return clients.openWindow(target)
     })
   )
 })

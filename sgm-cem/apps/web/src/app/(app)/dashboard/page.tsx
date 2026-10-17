@@ -1,6 +1,7 @@
 'use client'
-import { useAppStore } from '@/store/appStore'
+import { usePathname } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
+import { viewFromPath } from '@/lib/view-routing'
 import { ROLE_LEVELS } from '@/lib/utils'
 
 import { Dashboard }            from '@/components/views/Dashboard'
@@ -41,7 +42,8 @@ function AccessDenied() {
 }
 
 export default function AppPage() {
-  const { activeView } = useAppStore()
+  // Écran dérivé de l'URL (et non d'un état en mémoire) : retour arrière et rafraîchissement fiables
+  const activeView = viewFromPath(usePathname())
   const { user } = useAuthStore()
   const level = ROLE_LEVELS[user?.role ?? ''] ?? 1
   const isAdmin  = user?.role === 'ADMIN' || user?.role === 'DEVELOPER'
