@@ -16,6 +16,7 @@
 import 'dotenv/config'
 import { ConfigCategory } from '@prisma/client'
 import { createPrismaClient } from '../src/lib/prisma'
+import { encryptSecret } from '../src/lib/secret-box'
 
 const prisma = createPrismaClient()
 
@@ -162,7 +163,7 @@ async function seedConfig() {
     await prisma.systemConfig.create({
       data: {
         key: conf.key,
-        value,
+        value: conf.isSecret ? encryptSecret(value, conf.key) : value,
         category: conf.category,
         label: conf.label,
         description: conf.description,

@@ -4,6 +4,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    // Comme en production : secrets en base chiffrés (lib/secret-box.ts)
+    env: { CONFIG_ENCRYPTION_KEY: process.env.CONFIG_ENCRYPTION_KEY ?? 'test-config-encryption-key-at-least-32-characters' },
     include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
     // All test files share the same module graph and server instance to avoid port conflicts.
     // The Express app binds once; re-importing it per file would cause EADDRINUSE → process.exit(1).

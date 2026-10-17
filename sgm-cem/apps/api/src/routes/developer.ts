@@ -16,6 +16,9 @@ import { applyLogLevel } from '../lib/logger'
 import { updateConfig, getConfigHistory, EXCLUDED_KEYS } from '../services/config.service'
 import { getYeliiWalletBalance } from '../services/yelii.service'
 import { setAuthCookies } from './auth'
+import { decryptSecret } from '../lib/secret-box'
+import { verifyPassword } from '../lib/password'
+import { limiter, userOrIpKey } from '../middleware/rate-limit'
 
 const router = Router()
 const prisma = getPrisma()
@@ -79,10 +82,23 @@ router.put('/config/:key', async (req, res) => {
 })
 
 // ── POST /api/developer/config/:key/reveal — afficher un secret (audité) ──
-router.post('/config/:key/reveal', async (req, res) => {
+// Réauthentification obligatoire (lot 3.6) : une session ouverte ne suffit pas
+// pour lire une clé d'intégration en clair.
+const revealLimiter = limiter(15 * 60 * 1000, 5, 'Trop de tentatives de révélation. Réessayez dans 15 minutes.', { keyGenerator: userOrIpKey })
+
+router.post('/config/:key/reveal', revealLimiter, async (req, res) => {
   const key = String(req.params.key)
+  const { password } = z.object({ password: z.string().min(1, 'Mot de passe requis pour afficher un secret') }).parse(req.body)
   const config = await prisma.systemConfig.findUnique({ where: { key } })
   if (!config) throw new AppError('NOT_FOUND', `Clé inconnue : ${key}`, 404)
+
+  const account = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { passwordHash: true } })
+  if (!(await verifyPassword(password, account?.passwordHash))) {
+    await prisma.auditLog.create({
+      data: { userId: req.user!.userId, userName: req.user!.email, action: 'DEVELOPER_PANEL_CONFIG_CHANGED', entityType: 'SystemConfig', entityId: key, details: { action: 'reveal_secret_refused' } },
+    })
+    throw new AppError('INVALID_CREDENTIALS', 'Mot de passe incorrect', 403)
+  }
 
   const requester = await getRequester(req.user!.userId)
   // Chaque révélation d'un secret est tracée dans l'audit général
@@ -97,7 +113,8 @@ router.post('/config/:key/reveal', async (req, res) => {
     },
   })
 
-  res.json({ success: true, data: { key, value: config.value } })
+  const value = config.isSecret ? decryptSecret(config.value, key).value : config.value
+  res.json({ success: true, data: { key, value } })
 })
 
 // ── GET /api/developer/config/:key/history — historique d'une clé ─────

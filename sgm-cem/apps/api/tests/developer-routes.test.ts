@@ -6,6 +6,7 @@ import app from '../src/index'
 import { getPrisma } from '../src/lib/prisma'
 import { getConfig } from '../src/services/config.service'
 import { testCookie } from './helpers/session'
+import { hashPassword } from '../src/lib/password'
 
 const prisma = getPrisma()
 const MASK = '••••••••'
@@ -205,18 +206,33 @@ describe('Historique + révélation de secret', () => {
     expect(res.body.data[0].newValue).toBe(MASK)
   })
 
-  it('POST /config/:key/reveal renvoie la valeur en clair et audite', async () => {
-    const res = await request(app)
-      .post('/api/developer/config/SMTP_PASS/reveal')
-      .set('Cookie', `${devCookie}; ${csrfCookie}`)
-      .set('x-csrf-token', csrfToken)
-      .send({})
-    expect(res.status).toBe(200)
-    expect(res.body.data.value).toBe('nouveau-mdp-test')
+  it('POST /config/:key/reveal exige le mot de passe, renvoie la valeur en clair et audite', async () => {
+    // Mot de passe connu le temps du test (hachage d'origine restauré ensuite)
+    const original = (await prisma.user.findUniqueOrThrow({ where: { id: devUser.id }, select: { passwordHash: true } })).passwordHash
+    await prisma.user.update({ where: { id: devUser.id }, data: { passwordHash: await hashPassword('Revelation-Test-2026') } })
+    try {
+      const reveal = (body: Record<string, unknown>) => request(app)
+        .post('/api/developer/config/SMTP_PASS/reveal')
+        .set('Cookie', `${devCookie}; ${csrfCookie}`)
+        .set('x-csrf-token', csrfToken)
+        .send(body)
+      expect((await reveal({})).status).toBe(400)
+      expect((await reveal({ password: 'mauvais-mot-de-passe' })).status).toBe(403)
+      const res = await reveal({ password: 'Revelation-Test-2026' })
+      expect(res.status).toBe(200)
+      expect(res.body.data.value).toBe('nouveau-mdp-test')
+    } finally {
+      await prisma.user.update({ where: { id: devUser.id }, data: { passwordHash: original } })
+    }
     const audit = await prisma.auditLog.findFirst({
       where: { entityType: 'SystemConfig', entityId: 'SMTP_PASS' },
       orderBy: { createdAt: 'desc' },
     })
     expect(audit?.action).toBe('DEVELOPER_PANEL_CONFIG_CHANGED')
+    // Jamais en clair en base, ni dans l'historique
+    const row = await prisma.systemConfig.findUniqueOrThrow({ where: { key: 'SMTP_PASS' } })
+    expect(row.value.startsWith('enc:v1:')).toBe(true)
+    const history = await prisma.systemConfigHistory.findFirstOrThrow({ where: { configKey: 'SMTP_PASS' }, orderBy: { createdAt: 'desc' } })
+    expect(history.newValue).not.toContain('nouveau-mdp-test')
   })
 })

@@ -129,7 +129,10 @@ Aucun mot de passe n'est écrit dans le code (phase 0, 17/10/2026).
 
 ## Variables de sécurité vérifiées au démarrage (NODE_ENV=production)
 L'API **refuse de démarrer** si l'une manque ou fait moins de 32 caractères :
-`JWT_SECRET`, `REFRESH_TOKEN_SECRET`, `CSRF_SECRET` (générer : `openssl rand -base64 48`).
+`JWT_SECRET`, `REFRESH_TOKEN_SECRET`, `CSRF_SECRET`, `CONFIG_ENCRYPTION_KEY` (générer : `openssl rand -base64 48`).
+`CONFIG_ENCRYPTION_KEY` chiffre les secrets d'intégration stockés en base (Yelii, CinetPay, SMTP…) :
+**la conserver hors du serveur** ; perdue, ces clés sont à ressaisir dans le panneau développeur.
+Rotation : mettre l'ancienne dans `CONFIG_ENCRYPTION_KEY_PREVIOUS`, redémarrer (rechiffrement automatique), puis la retirer.
 `TRUST_PROXY` : `0` quand l'API est exposée directement (ce compose), `1` derrière Caddy.
 
 ## Mise en production (prochaine étape décidée : à faire)

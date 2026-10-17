@@ -14,6 +14,8 @@
 // ──────────────────────────────────────────────────────────────────────
 
 import { getPrisma } from '../lib/prisma'
+import { decryptSecret, encryptSecret, isEncrypted } from '../lib/secret-box'
+import { logger } from '../lib/logger'
 
 const prisma = getPrisma()
 
@@ -41,11 +43,41 @@ export async function loadConfigCache(): Promise<void> {
   try {
     const configs = await prisma.systemConfig.findMany()
     configCache.clear()
-    configs.forEach(c => configCache.set(c.key, c.value))
+    let reencrypted = 0
+    for (const c of configs) {
+      if (!c.isSecret) { configCache.set(c.key, c.value); continue }
+      // Secrets chiffrés en base (lot 3.6) ; une valeur encore en clair ou chiffrée
+      // avec l'ancienne clé est rechiffrée sur place (sans toucher updatedAt)
+      try {
+        const { value, needsReencrypt } = decryptSecret(c.value, c.key)
+        configCache.set(c.key, value)
+        if (needsReencrypt) {
+          await prisma.$executeRaw`UPDATE "system_configs" SET "value" = ${encryptSecret(value, c.key)} WHERE "key" = ${c.key}`
+          reencrypted++
+        }
+      } catch (err) {
+        logger.error({ key: c.key, err: (err as Error).message }, '[Config] Secret indéchiffrable : valeur .env utilisée à la place')
+      }
+    }
+    await protectSecretHistory(configs.filter(c => c.isSecret).map(c => c.key))
     cacheLoaded = true
-    console.log(`[Config] ${configs.length} paramètres chargés en cache`)
+    console.log(`[Config] ${configs.length} paramètres chargés en cache${reencrypted ? ` (${reencrypted} secret(s) chiffré(s))` : ''}`)
   } catch (err) {
     console.error('[Config] Échec du chargement du cache — fallback .env', err)
+  }
+}
+
+/** L'historique des clés secrètes ne garde jamais de valeur en clair. */
+async function protectSecretHistory(secretKeys: string[]): Promise<void> {
+  if (secretKeys.length === 0) return
+  const rows = await prisma.systemConfigHistory.findMany({ where: { configKey: { in: secretKeys } } })
+  for (const h of rows) {
+    const aad = `history:${h.configKey}`
+    const oldValue = h.oldValue && !isEncrypted(h.oldValue) ? encryptSecret(h.oldValue, aad) : h.oldValue
+    const newValue = !isEncrypted(h.newValue) ? encryptSecret(h.newValue, aad) : h.newValue
+    if (oldValue !== h.oldValue || newValue !== h.newValue) {
+      await prisma.$executeRaw`UPDATE "system_config_history" SET "oldValue" = ${oldValue}, "newValue" = ${newValue} WHERE "id" = ${h.id}`
+    }
   }
 }
 
@@ -118,13 +150,19 @@ export async function updateConfig(
     throw new Error(`La clé ${key} n'est pas éditable manuellement`)
   }
 
+  // Secret : valeur et historique chiffrés (jamais en clair en base)
+  const secret = existing?.isSecret ?? meta?.isSecret ?? false
+  const stored = secret ? encryptSecret(newValue, key) : newValue
+  const previousPlain = existing ? (secret ? configCache.get(key) ?? null : existing.value) : null
+  const forHistory = (v: string) => (secret ? encryptSecret(v, `history:${key}`) : v)
+
   await prisma.$transaction([
     prisma.systemConfig.upsert({
       where: { key },
-      update: { value: newValue, updatedBy: changedBy.id },
+      update: { value: stored, updatedBy: changedBy.id },
       create: {
         key,
-        value: newValue,
+        value: stored,
         category: meta?.category ?? 'INFRASTRUCTURE',
         label: meta?.label ?? key,
         description: meta?.description,
@@ -135,8 +173,8 @@ export async function updateConfig(
     prisma.systemConfigHistory.create({
       data: {
         configKey: key,
-        oldValue: existing?.value,
-        newValue,
+        oldValue: previousPlain === null ? existing?.value : forHistory(previousPlain),
+        newValue: forHistory(newValue),
         changedBy: changedBy.id,
         changedByName: changedBy.fullName,
         reason,

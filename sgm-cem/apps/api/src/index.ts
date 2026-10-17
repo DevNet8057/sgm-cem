@@ -42,6 +42,7 @@ import { initErrorTracking } from './lib/error-tracking'
 import { getPrisma } from './lib/prisma'
 import { getConfig } from './services/config.service'
 import { getCsrfSecret, getTrustProxy } from './lib/security'
+import { assertEncryptionKeyForProduction } from './lib/secret-box'
 
 const app = express()
 const PORT = process.env.PORT ?? 3001
@@ -184,6 +185,7 @@ app.get('/api/health/ready', async (_req, res) => {
 app.use(errorHandler)
 
 async function bootstrap(): Promise<void> {
+  assertEncryptionKeyForProduction()
   await loadConfigCache()
   applyLogLevel(getConfig('LOG_LEVEL'))
   startActivityRetentionJob()

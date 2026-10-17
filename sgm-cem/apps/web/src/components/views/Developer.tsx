@@ -74,10 +74,16 @@ function ConfigRow({ config, onHistory }: { config: ConfigItem; onHistory: (key:
     onError: () => addToast({ title: 'Erreur', message: `Impossible de mettre à jour ${config.key}.`, variant: 'error' }),
   })
 
+  // Afficher un secret exige de ressaisir son mot de passe (accès audité)
+  const [askPassword, setAskPassword] = useState(false)
+  const [password, setPassword] = useState('')
   const reveal = useMutation({
-    mutationFn: () => api.post(`/developer/config/${config.key}/reveal`, {}),
-    onSuccess: (res) => setRevealed(res.data.data.value as string),
-    onError: () => addToast({ title: 'Erreur', message: 'Révélation impossible.', variant: 'error' }),
+    mutationFn: () => api.post(`/developer/config/${config.key}/reveal`, { password }),
+    onSuccess: (res) => { setRevealed(res.data.data.value as string); setAskPassword(false); setPassword('') },
+    onError: (err: unknown) => {
+      const message = (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
+      addToast({ title: 'Révélation refusée', message: message ?? 'Révélation impossible.', variant: 'error' })
+    },
   })
 
   const testYelii = useMutation({
@@ -148,8 +154,8 @@ function ConfigRow({ config, onHistory }: { config: ConfigItem; onHistory: (key:
               </button>
             ) : (
               <button
-                onClick={() => { if (window.confirm(`Afficher la valeur de ${config.label} en clair ?\n(Cet accès est enregistré dans l'audit.)`)) reveal.mutate() }}
-                className="text-gray-400 hover:text-gray-600 transition-colors" title="Afficher (audité)"
+                onClick={() => setAskPassword(v => !v)} aria-expanded={askPassword}
+                className="text-gray-400 hover:text-gray-600 transition-colors" title="Afficher (mot de passe requis, audité)" aria-label={`Afficher ${config.label}`}
               >
                 <Eye size={15} />
               </button>
@@ -196,6 +202,16 @@ function ConfigRow({ config, onHistory }: { config: ConfigItem; onHistory: (key:
           </button>
         )}
       </div>
+      {askPassword && revealed === null && (
+        <form onSubmit={e => { e.preventDefault(); reveal.mutate() }} className="mt-3 flex flex-wrap items-center gap-2 rounded-[10px] bg-amber-50 p-3">
+          <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs font-semibold text-amber-900">
+            Votre mot de passe (l&apos;accès est enregistré dans le journal)
+            <input type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} autoFocus
+              className="min-h-11 rounded-[8px] border border-amber-200 bg-white px-3 text-sm font-normal" />
+          </label>
+          <Button size="sm" type="submit" loading={reveal.isPending} disabled={!password}>Afficher</Button>
+        </form>
+      )}
     </div>
   )
 }
