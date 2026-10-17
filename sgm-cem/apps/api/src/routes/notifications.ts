@@ -66,7 +66,7 @@ const broadcastSchema = z.object({
   type: z.string().min(2).max(40).default('INFO'),
   userIds: z.array(z.string()).optional(),
   role: z.enum(['ADMIN', 'TRESORIER', 'RESPONSABLE', 'ADJOINT_RESPONSABLE', 'COLLECTEUR', 'MEMBRE']).optional(),
-  data: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
+  data: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
 })
 
 router.get('/', authenticate, async (req, res) => {

@@ -234,7 +234,7 @@ const initiatePublicSchema = z.object({
   modePaiement: z.enum(['YELII', 'CARTE_VISA']),
   channel: z.enum(['orange_money', 'mtn_money']).optional(),
   // Accord explicite du donateur au traitement de ses données (loi n° 2024/017)
-  consentement: z.literal(true, { errorMap: () => ({ message: 'Votre accord sur le traitement de vos données est nécessaire pour enregistrer le don' }) }),
+  consentement: z.literal(true, { error: 'Votre accord sur le traitement de vos données est nécessaire pour enregistrer le don' }),
 }).superRefine((data, ctx) => {
   if (data.modePaiement === 'YELII' && !data.channel) {
     ctx.addIssue({

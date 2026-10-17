@@ -52,8 +52,8 @@ export function errorHandler(
   }
 
   if (err instanceof ZodError) {
-    const field = err.errors[0]?.path.join(".");
-    const message = err.errors[0]?.message ?? "Validation failed";
+    const field = err.issues[0]?.path.join(".");
+    const message = err.issues[0]?.message ?? "Validation failed";
     res.status(400).json({
       success: false,
       error: {

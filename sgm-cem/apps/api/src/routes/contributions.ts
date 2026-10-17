@@ -37,7 +37,7 @@ const createSchema = z.object({
   collecteurId: z.string().optional(),
   montant: z.number().int().positive(),
   modePaiement: z.enum(STAFF_ENTRY_MODES, {
-    errorMap: () => ({ message: 'Mode non saisissable : les paiements Mobile Money et carte passent par le paiement en ligne' }),
+    error: 'Mode non saisissable : les paiements Mobile Money et carte passent par le paiement en ligne',
   }),
   periodeLabel: z.string().optional(),
   mobileMoneyPhone: z.string().optional(),

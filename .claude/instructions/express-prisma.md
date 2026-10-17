@@ -16,7 +16,7 @@
 3. **Erreurs : `AppError(code, message_fr, statusHttp)`** attrapées par le errorHandler. Réponses : `{ success: true, data }` / `{ success: false, error: { code, message } }`.
 4. **RBAC** : hiérarchie `DEVELOPER > ADMIN > TRESORIER > RESPONSABLE > ADJOINT_RESPONSABLE > COLLECTEUR > MEMBRE`. Piège récurrent : oublier DEVELOPER dans une condition qui teste ADMIN.
 5. **`audit()` sur toute action sensible** (argent, comptes, validations, suppressions, connexions) — c'est le journal « qui a fait quoi », consultable par rôle via `/api/audit`.
-6. **Validation d'entrée : Zod** en tête de handler. Montants en **FCFA entiers**. Téléphones camerounais (préfixe `+237` toléré et normalisé).
+6. **Validation d'entrée : Zod 4** en tête de handler (message personnalisé : `{ error: '…' }`, plus `errorMap` ; `z.record(clé, valeur)` ; `err.issues`). Messages par défaut en français (`lib/zod-locale.ts`, chargé en premier par `index.ts`). Montants en **FCFA entiers**. Téléphones camerounais (préfixe `+237` toléré et normalisé).
 7. **CSRF** (csrf-csrf, double-submit) sur tout `/api` sauf `/webhooks/*`, `/csrf-token`, `/auth/google`. Ne jamais élargir les exemptions sans revue sécurité.
 8. Rate-limit global sur `/api` ; mode maintenance évalué à chaque requête (`MAINTENANCE_MODE` en base).
 

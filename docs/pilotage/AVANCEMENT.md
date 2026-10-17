@@ -75,6 +75,7 @@ Non fait (avec raison) : budget Lighthouse en CI (mesure ponctuelle ci-dessous, 
 | Lot | Livré | Vérification |
 |---|---|---|
 | 3.5 Express 5 | Express 5.3 ; `express-async-errors` retiré (erreurs asynchrones natives) ; `req.body` toujours objet, analyse de query étendue conservée ; routeurs montés via une table (`ROUTE_MOUNTS`) relue par la matrice RBAC ; middleware de validation mort supprimé | 310 tests ; parcours navigateur (connexion, listes, recherche, rejeu hors ligne) sur l'API réelle : 0 erreur 5xx ; `pnpm audit --prod` propre |
+| 3.5 Zod 4 | Zod 4.6 (API et web), `@hookform/resolvers` 5 ; messages de validation **par défaut en français** (ils étaient en anglais et remontaient à l'utilisateur) | 310 tests ; formulaire de connexion et erreurs API vérifiés en réel |
 
 ## ⚠️ Avant de déployer cette version
 1. **Sauvegarder** la base (`scripts/backup-db.ps1`) — l'API le fait aussi automatiquement au démarrage.

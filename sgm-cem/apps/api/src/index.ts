@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import './lib/zod-locale'
 import http from 'http'
 import path from 'path'
 import express, { type Request, type Response, type NextFunction, type Router } from 'express'
