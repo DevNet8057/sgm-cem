@@ -2,9 +2,9 @@
 // ──────────────────────────────────────────────────────────────────────
 // WEB PUSH — abonnement du navigateur aux notifications système
 //
-// Règle produit : tant que l'utilisateur n'a pas cliqué « Activer »
-// (permission 'granted'), l'invite est reproposée À CHAQUE CONNEXION.
-// Une fois accordée, l'abonnement est resynchronisé silencieusement à
+// Règle produit (UX-06) : l'invite est proposée sur l'accueil uniquement ;
+// « Plus tard » est retenu 30 jours, l'activation reste possible depuis
+// « Mon profil ». Une fois accordée, l'abonnement est resynchronisé silencieusement à
 // chaque chargement (changement de compte, expiration, etc.).
 // ──────────────────────────────────────────────────────────────────────
 import { useCallback, useEffect, useState } from 'react'

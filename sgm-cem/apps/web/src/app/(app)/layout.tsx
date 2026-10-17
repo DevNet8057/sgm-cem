@@ -49,19 +49,27 @@ function ImpersonationBanner() {
   )
 }
 
-// Invite d'activation des notifications push — reproposée À CHAQUE CONNEXION
-// tant que l'utilisateur n'a pas cliqué « Activer » (permission 'granted').
-// « Plus tard » ne masque la bannière que pour la session en cours
-// (sessionStorage) : elle réapparaît à la prochaine connexion.
-const PUSH_DISMISS_KEY = 'sgm-push-dismissed'
+// Invite d'activation des notifications push (UX-06) : proposée sur l'accueil
+// seulement, jamais au milieu d'une tâche. « Plus tard » est retenu 30 jours
+// sur cet appareil ; l'activation reste possible à tout moment depuis le profil.
+const PUSH_DISMISS_KEY = 'sgm-push-dismissed-until'
+const PUSH_DISMISS_DAYS = 30
+
+function readPushDismissed(): boolean {
+  try {
+    const until = Number(localStorage.getItem(PUSH_DISMISS_KEY) ?? 0)
+    return until > Date.now()
+  } catch { return false }
+}
 
 function PushPermissionBanner() {
   const { permission, enable } = usePushNotifications()
-  const [dismissed, setDismissed] = useState(() =>
-    typeof window !== 'undefined' && sessionStorage.getItem(PUSH_DISMISS_KEY) === '1'
-  )
+  const activeView = useAppStore(state => state.activeView)
+  const [dismissed, setDismissed] = useState(true)
   const [busy, setBusy] = useState(false)
+  useEffect(() => { setDismissed(readPushDismissed()) }, [])
 
+  if (activeView !== 'dashboard') return null
   if (permission === 'unsupported' || permission === 'granted' || dismissed) return null
 
   const denied = permission === 'denied'
@@ -72,30 +80,30 @@ function PushPermissionBanner() {
   }
 
   function later() {
-    sessionStorage.setItem(PUSH_DISMISS_KEY, '1')
+    try { localStorage.setItem(PUSH_DISMISS_KEY, String(Date.now() + PUSH_DISMISS_DAYS * 86_400_000)) } catch { /* navigation privée */ }
     setDismissed(true)
   }
 
   return (
-    <div className="px-4 py-2 text-xs font-semibold bg-[#F5C400] text-[#0F4A0F] flex items-center justify-center gap-3 flex-wrap">
-      <span className="flex items-center gap-1.5">
-        <Bell size={13} />
+    <div role="region" aria-label="Notifications" className="flex items-center gap-2 bg-[#FFF8D6] px-3 py-1.5 text-xs text-[#0F4A0F] sm:justify-center">
+      <Bell size={14} className="shrink-0" aria-hidden />
+      <span className="min-w-0 flex-1 sm:flex-none">
         {denied
-          ? 'Les notifications sont bloquées par votre navigateur — cliquez sur le cadenas 🔒 à côté de l\'adresse, puis autorisez les notifications.'
-          : 'Activez les notifications pour être alerté des paiements, validations et litiges — même quand l\'application est fermée.'}
+          ? 'Notifications bloquées : autorisez-les dans les réglages du navigateur (cadenas 🔒 à côté de l\'adresse).'
+          : 'Soyez alerté des paiements, validations et litiges, même application fermée.'}
       </span>
       {!denied && (
         <button
           onClick={activate}
           disabled={busy}
-          className="px-3 py-1 rounded-full bg-[#0F4A0F] text-[#F5C400] font-bold hover:bg-[#1A6B1A] transition-colors disabled:opacity-50"
+          className="min-h-[36px] shrink-0 rounded-full bg-[#0F4A0F] px-3 font-bold text-[#F5C400] transition-colors hover:bg-[#1A6B1A] disabled:opacity-50"
         >
-          {busy ? 'Activation…' : 'Activer les notifications'}
+          {busy ? 'Activation…' : 'Activer'}
         </button>
       )}
-      <button onClick={later} title="Plus tard (reproposé à la prochaine connexion)"
-        className="text-[#0F4A0F]/60 hover:text-[#0F4A0F] transition-colors">
-        <XIcon size={14} />
+      <button onClick={later} aria-label="Plus tard" title="Plus tard"
+        className="-my-1.5 flex h-11 w-11 shrink-0 items-center justify-center text-[#0F4A0F]/60 transition-colors hover:text-[#0F4A0F]">
+        <XIcon size={16} />
       </button>
     </div>
   )

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import Script from 'next/script'
+import { JetBrains_Mono, Montserrat } from 'next/font/google'
 import './globals.css'
 import { Providers } from './providers'
 
@@ -18,16 +19,21 @@ export const metadata: Metadata = {
   },
 }
 
+// Polices auto-hébergées au build : aucun appel à Google côté visiteur,
+// pas de saut de mise en page (fallback ajusté).
+const montserrat = Montserrat({ subsets: ['latin'], weight: ['300', '400', '500', '600', '700', '800'], variable: '--font-montserrat', display: 'swap' })
+const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], weight: ['400', '500'], variable: '--font-jetbrains-mono', display: 'swap' })
+
+// Zoom laissé libre (accessibilité : malvoyants, montants à vérifier).
 export const viewport: Viewport = {
   themeColor: '#0F4A0F',
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="fr" suppressHydrationWarning>
+    <html lang="fr" className={`${montserrat.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <body suppressHydrationWarning>
         {/*
           Pour que Google OAuth fonctionne, l'origine http://localhost:3000 doit être ajoutée

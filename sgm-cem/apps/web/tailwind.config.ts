@@ -43,9 +43,9 @@ export default {
         'icon-systeme':  '#475569',   // gris foncé
       },
       fontFamily: {
-        display: ['"Montserrat"', 'system-ui', 'sans-serif'],
-        body:    ['"Montserrat"', 'system-ui', 'sans-serif'],
-        mono:    ['"JetBrains Mono"', 'monospace'],
+        display: ['var(--font-montserrat)', 'system-ui', 'sans-serif'],
+        body:    ['var(--font-montserrat)', 'system-ui', 'sans-serif'],
+        mono:    ['var(--font-jetbrains-mono)', 'monospace'],
       },
       borderRadius: {
         'xs': '4px', 'sm': '6px', 'md': '10px',

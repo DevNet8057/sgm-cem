@@ -24,7 +24,7 @@ describe('PaymentMethodSelector', () => {
     expect(html).toContain('Espèces')
   })
 
-  it('conserve un mode désactivé visible et accessible', () => {
+  it('masque un mode désactivé au lieu d\'afficher un choix impossible', () => {
     const html = renderToStaticMarkup(
       <PaymentMethodSelector
         value="MOBILE_MONEY"
@@ -32,12 +32,10 @@ describe('PaymentMethodSelector', () => {
         onChange={() => {}}
       />
     )
-    const cardButton = buttonContaining(html, 'Carte bancaire')
 
-    expect(cardButton).toContain('Carte bancaire')
-    expect(cardButton).toContain('disabled=""')
-    expect(cardButton).toContain('aria-disabled="true"')
-    expect(cardButton).toContain('Temporairement indisponible')
+    expect(html.match(/<button/g)).toHaveLength(2)
+    expect(html).not.toContain('Carte bancaire')
+    expect(html).toContain('Mobile Money')
   })
 })
 

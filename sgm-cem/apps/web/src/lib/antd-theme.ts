@@ -5,7 +5,7 @@ import { theme } from 'antd'
 const CEM_GREEN   = '#1A6B1A'
 const CEM_DARK    = '#0F4A0F'
 const CEM_YELLOW  = '#F5C400'
-const FONT_FAMILY = "'Montserrat', system-ui, sans-serif"
+const FONT_FAMILY = 'var(--font-montserrat), system-ui, sans-serif'
 
 export const lightTheme: ThemeConfig = {
   algorithm: theme.defaultAlgorithm,

@@ -1,8 +1,8 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Camera, Check, KeyRound, Loader2,
+  Bell, Camera, Check, KeyRound, Loader2,
   Phone, Save, ShieldCheck, Trash2, User,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
@@ -11,6 +11,7 @@ import api from '@/lib/api'
 import { cn, ROLE_LABELS } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
 import { Button } from '@/components/ui/Button'
+import { usePushNotifications } from '@/hooks/usePushNotifications'
 
 interface ProfileData {
   id: string; memberId?: string; firstName: string; lastName: string
@@ -346,18 +347,49 @@ export function MonProfil() {
             </div>
           )}
         </section>
+
+        <PushSection />
       </div>
     </div>
+  )
+}
+
+// Activation des notifications à la demande (la bannière d'accueil peut avoir été écartée)
+function PushSection() {
+  const { permission, enable } = usePushNotifications()
+  const [busy, setBusy] = useState(false)
+  if (permission === 'unsupported') return null
+  return (
+    <section className="bg-white rounded-[18px] border border-gray-100 p-5 shadow-[0_2px_12px_rgba(15,74,15,0.04)]">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-9 h-9 rounded-[10px] bg-[#E8F5E8] text-[#1A6B1A] flex items-center justify-center">
+          <Bell size={16} />
+        </div>
+        <h3 className="font-display font-semibold text-[#0F4A0F] text-lg">Notifications sur cet appareil</h3>
+      </div>
+      {permission === 'granted' && <p className="text-sm text-[#1A6B1A]">Activées : vous êtes alerté des paiements, validations et litiges.</p>}
+      {permission === 'denied' && <p className="text-sm text-gray-600">Bloquées par le navigateur. Autorisez-les dans les réglages du site (cadenas 🔒 à côté de l&apos;adresse), puis rechargez la page.</p>}
+      {permission === 'default' && (
+        <>
+          <p className="text-sm text-gray-600 mb-3">Recevez une alerte pour les paiements, validations et litiges, même application fermée.</p>
+          <Button onClick={async () => { setBusy(true); try { await enable() } finally { setBusy(false) } }} loading={busy} className="w-full">
+            <Bell size={14} /> Activer les notifications
+          </Button>
+        </>
+      )}
+    </section>
   )
 }
 
 function Field({ label, value, onChange, disabled, type = 'text' }: {
   label: string; value: string; onChange?: (v: string) => void; disabled?: boolean; type?: string
 }) {
+  const id = useId()
   return (
     <div>
-      <label className="text-xs font-semibold text-gray-600 block mb-1.5">{label}</label>
+      <label htmlFor={id} className="text-xs font-semibold text-gray-600 block mb-1.5">{label}</label>
       <input
+        id={id}
         type={type}
         value={value}
         onChange={onChange ? e => onChange(e.target.value) : undefined}

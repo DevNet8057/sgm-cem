@@ -3,30 +3,45 @@ import { usePathname } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
 import { viewFromPath } from '@/lib/view-routing'
 import { canAccessView } from '@/lib/navigation'
+import dynamic from 'next/dynamic'
 
-import { Dashboard }            from '@/components/views/Dashboard'
-import { DashboardCollecteur }  from '@/components/views/DashboardCollecteur'
-import { Rubriques }            from '@/components/views/Rubriques'
-import { Contributions }        from '@/components/views/Contributions'
-import { Collecteurs }          from '@/components/views/Collecteurs'
-import { Membres }              from '@/components/views/Membres'
-import { Validations }          from '@/components/views/Validations'
-import { TransferValidations }  from '@/components/views/TransferValidations'
-import { CollectesPubliques }   from '@/components/views/CollectesPubliques'
-import { Litiges }              from '@/components/views/Litiges'
-import { Statistiques }         from '@/components/views/Statistiques'
-import { Rapports }             from '@/components/views/Rapports'
-import { Notifications }        from '@/components/views/Notifications'
-import { Parametres }           from '@/components/views/Parametres'
-import { Prestations }          from '@/components/views/Prestations'
-import { Ged }                  from '@/components/views/Ged'
-import { GestionUtilisateurs }  from '@/components/views/GestionUtilisateurs'
-import { MesContributions }     from '@/components/views/MesContributions'
-import { RubriquesMembre }      from '@/components/views/RubriquesMembre'
-import { MonProfil }            from '@/components/views/MonProfil'
-import { Developer }            from '@/components/views/Developer'
-import { Journal }              from '@/components/views/Journal'
-import { Observabilite }        from '@/components/views/Observabilite'
+// Chaque écran est chargé à la demande : un membre ne télécharge pas le code
+// des écrans de trésorerie ou du panneau développeur.
+function ViewLoading() {
+  return (
+    <div className="space-y-3 p-4 lg:p-6" aria-busy="true" aria-label="Chargement">
+      <div className="h-7 w-48 animate-pulse rounded-lg bg-gray-100" />
+      <div className="h-24 animate-pulse rounded-[18px] bg-gray-100" />
+      <div className="h-40 animate-pulse rounded-[18px] bg-gray-100" />
+    </div>
+  )
+}
+const loading = ViewLoading
+
+const Dashboard            = dynamic(() => import('@/components/views/Dashboard').then(m => m.Dashboard), { loading })
+const DashboardCollecteur  = dynamic(() => import('@/components/views/DashboardCollecteur').then(m => m.DashboardCollecteur), { loading })
+const Rubriques            = dynamic(() => import('@/components/views/Rubriques').then(m => m.Rubriques), { loading })
+const Contributions        = dynamic(() => import('@/components/views/Contributions').then(m => m.Contributions), { loading })
+const Collecteurs          = dynamic(() => import('@/components/views/Collecteurs').then(m => m.Collecteurs), { loading })
+const Membres              = dynamic(() => import('@/components/views/Membres').then(m => m.Membres), { loading })
+const Validations          = dynamic(() => import('@/components/views/Validations').then(m => m.Validations), { loading })
+const TransferValidations  = dynamic(() => import('@/components/views/TransferValidations').then(m => m.TransferValidations), { loading })
+const CollectesPubliques   = dynamic(() => import('@/components/views/CollectesPubliques').then(m => m.CollectesPubliques), { loading })
+const Litiges              = dynamic(() => import('@/components/views/Litiges').then(m => m.Litiges), { loading })
+const Statistiques         = dynamic(() => import('@/components/views/Statistiques').then(m => m.Statistiques), { loading })
+const Rapports             = dynamic(() => import('@/components/views/Rapports').then(m => m.Rapports), { loading })
+const Notifications        = dynamic(() => import('@/components/views/Notifications').then(m => m.Notifications), { loading })
+const Parametres           = dynamic(() => import('@/components/views/Parametres').then(m => m.Parametres), { loading })
+const Prestations          = dynamic(() => import('@/components/views/Prestations').then(m => m.Prestations), { loading })
+const Ged                  = dynamic(() => import('@/components/views/Ged').then(m => m.Ged), { loading })
+const GestionUtilisateurs  = dynamic(() => import('@/components/views/GestionUtilisateurs').then(m => m.GestionUtilisateurs), { loading })
+const MesContributions     = dynamic(() => import('@/components/views/MesContributions').then(m => m.MesContributions), { loading })
+const RubriquesMembre      = dynamic(() => import('@/components/views/RubriquesMembre').then(m => m.RubriquesMembre), { loading })
+const MonProfil            = dynamic(() => import('@/components/views/MonProfil').then(m => m.MonProfil), { loading })
+const Developer            = dynamic(() => import('@/components/views/Developer').then(m => m.Developer), { loading })
+const Journal              = dynamic(() => import('@/components/views/Journal').then(m => m.Journal), { loading })
+const Observabilite        = dynamic(() => import('@/components/views/Observabilite').then(m => m.Observabilite), { loading })
+
 
 function AccessDenied() {
   return (
@@ -61,7 +76,7 @@ export default function AppPage() {
   return View ? <View /> : <AccessDenied />
 }
 
-const VIEWS: Record<string, () => React.JSX.Element | null> = {
+const VIEWS: Record<string, React.ComponentType> = {
   rubriques: Rubriques,
   contributions: Contributions,
   membres: Membres,

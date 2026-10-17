@@ -1,9 +1,12 @@
-/* SGM-CEM Service Worker v2 */
-const CACHE_NAME = 'sgm-cem-v3'
-
-const PRECACHE_URLS = [
-  '/',
-]
+/* SGM-CEM Service Worker v4
+ * - Pages : réseau d'abord, copie de secours pour l'ouverture hors ligne
+ *   (réponses 200 uniquement, jamais une page d'erreur).
+ * - /_next/static (fichiers versionnés, immuables) et icônes : cache d'abord.
+ * - API et autres origines : jamais interceptées (pas de donnée périmée).
+ * Changer CACHE_NAME purge l'ancien cache à l'activation. */
+const CACHE_NAME = 'sgm-cem-v4'
+const PRECACHE_URLS = ['/', '/manifest.json', '/icon-192.png']
+const MAX_PAGES = 30
 
 self.addEventListener('install', event => {
   event.waitUntil(
@@ -19,22 +22,29 @@ self.addEventListener('activate', event => {
   )
 })
 
+async function trimPages(cache) {
+  const keys = (await cache.keys()).filter(r => !new URL(r.url).pathname.startsWith('/_next/'))
+  for (const r of keys.slice(0, Math.max(0, keys.length - MAX_PAGES))) await cache.delete(r)
+}
+
+function isImmutableAsset(url) {
+  return url.pathname.startsWith('/_next/static/') || /^\/(icon-|apple-touch-icon|favicon)/.test(url.pathname)
+}
+
 self.addEventListener('fetch', event => {
   const { request } = event
+  if (request.method !== 'GET') return
   const url = new URL(request.url)
+  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return
 
-  // Never intercept API calls or cross-origin
-  if (url.pathname.startsWith('/api/') || url.origin !== self.location.origin) {
-    return
-  }
-
-  // Navigation requests: network-first, fallback to cache
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
         .then(res => {
-          const clone = res.clone()
-          caches.open(CACHE_NAME).then(c => c.put(request, clone))
+          if (res.ok && res.type === 'basic') {
+            const clone = res.clone()
+            caches.open(CACHE_NAME).then(c => c.put(request, clone).then(() => trimPages(c)))
+          }
           return res
         })
         .catch(() => caches.match(request).then(cached => cached ?? caches.match('/')))
@@ -42,19 +52,15 @@ self.addEventListener('fetch', event => {
     return
   }
 
-  // Static assets: cache-first
-  if (request.destination === 'script' || request.destination === 'style' || request.destination === 'image' || request.destination === 'font') {
+  if (isImmutableAsset(url)) {
     event.respondWith(
-      caches.match(request).then(cached => {
-        if (cached) return cached
-        return fetch(request).then(res => {
-          if (res.ok && res.type !== 'opaque') {
-            const clone = res.clone()
-            caches.open(CACHE_NAME).then(c => c.put(request, clone))
-          }
-          return res
-        })
-      })
+      caches.match(request).then(cached => cached ?? fetch(request).then(res => {
+        if (res.ok) {
+          const clone = res.clone()
+          caches.open(CACHE_NAME).then(c => c.put(request, clone))
+        }
+        return res
+      }))
     )
   }
 })

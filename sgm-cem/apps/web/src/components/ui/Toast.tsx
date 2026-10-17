@@ -36,7 +36,7 @@ export function ToastContainer() {
   const { toasts, removeToast } = useAppStore()
 
   return (
-    <div className="fixed bottom-4 right-4 z-[500] flex flex-col gap-2 pointer-events-none">
+    <div role="status" aria-live="polite" className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] lg:bottom-4 left-4 right-4 z-[500] flex flex-col items-end gap-2 pointer-events-none sm:left-auto">
       {toasts.map(toast => (
         <ToastItem key={toast.id} {...toast} onClose={() => removeToast(toast.id)} />
       ))}
@@ -61,7 +61,7 @@ function ToastItem({
 
   return (
     <div className={cn(
-      'pointer-events-auto w-80 rounded-[14px] border shadow-[0_8px_32px_rgba(0,0,0,0.12)] overflow-hidden',
+      'pointer-events-auto w-full max-w-80 rounded-[14px] border shadow-[0_8px_32px_rgba(0,0,0,0.12)] overflow-hidden',
       'animate-toast-in',
       STYLES[variant]
     )}>
@@ -71,8 +71,8 @@ function ToastItem({
           <p className="text-sm font-semibold text-gray-900">{title}</p>
           {message && <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{message}</p>}
         </div>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0">
-          <X size={14} />
+        <button onClick={onClose} aria-label="Fermer la notification" className="-m-3 flex h-11 w-11 flex-shrink-0 items-center justify-center text-gray-400 hover:text-gray-600 transition-colors">
+          <X size={16} />
         </button>
       </div>
       <div className="h-0.5 bg-gray-100">
