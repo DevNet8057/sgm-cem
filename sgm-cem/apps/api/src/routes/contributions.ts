@@ -145,7 +145,7 @@ router.get('/me', authenticate, requireLevel(1), async (req, res) => {
   const membre = await prisma.membre.findFirst({ where: { userId: req.user!.userId }, select: { id: true } })
   if (!membre) throw new AppError('NOT_FOUND', 'Profil membre introuvable pour ce compte', 404)
 
-  const { page = '1', limit = '20', montantMin, montantMax } = req.query as Record<string, string>
+  const { page = '1', limit = '20', montantMin, montantMax, search } = req.query as Record<string, string>
   const currentPage = Math.max(1, parseInt(page, 10) || 1)
   const pageSize = Math.min(100, Math.max(1, parseInt(limit, 10) || 20))
   const skip = (currentPage - 1) * pageSize
@@ -154,9 +154,15 @@ router.get('/me', authenticate, requireLevel(1), async (req, res) => {
   if (montantMin) montantFilter.gte = parseInt(montantMin, 10)
   if (montantMax) montantFilter.lte = parseInt(montantMax, 10)
 
+  const term = search?.trim().slice(0, 80)
   const where = {
     membreId: membre.id,
     ...(Object.keys(montantFilter).length > 0 && { montant: montantFilter }),
+    // Recherche sur TOUTES les contributions, pas seulement la page affichée
+    ...(term && { rubrique: { OR: [
+      { code: { contains: term, mode: 'insensitive' as const } },
+      { title: { contains: term, mode: 'insensitive' as const } },
+    ] } }),
   }
 
   const [contributions, total] = await Promise.all([
@@ -189,17 +195,11 @@ router.get('/me', authenticate, requireLevel(1), async (req, res) => {
  * en "contributions virtuelles" pour réutiliser calculateRemainingBalance
  * (@sgm-cem/shared, seule source de vérité du calcul).
  */
-router.get('/me/balance', authenticate, requireLevel(1), async (req, res) => {
-  const membre = await prisma.membre.findFirst({
-    where: { userId: req.user!.userId },
-    select: { id: true, profilFinancier: true },
-  })
-  if (!membre) throw new AppError('NOT_FOUND', 'Profil membre introuvable pour ce compte', 404)
-
+async function memberBalances(membre: { id: string; profilFinancier: Parameters<typeof calculateRemainingBalance>[0] }) {
   const rubriques = await prisma.rubrique.findMany({
     where: { status: 'OUVERTE' },
     select: {
-      id: true, code: true, title: true, priority: true,
+      id: true, code: true, title: true, priority: true, closeDate: true,
       amountTravailleur: true, amountEtudiant: true, amountCouple: true,
     },
   })
@@ -214,7 +214,7 @@ router.get('/me/balance', authenticate, requireLevel(1), async (req, res) => {
     _sum: { montant: true },
   })
 
-  const data = rubriques.map(rubrique => {
+  return rubriques.map(rubrique => {
     const confirmedAmount = aggregates.find(a => a.rubriqueId === rubrique.id && a.statut === 'CONFIRME')?._sum.montant ?? 0
     const pendingAmount = aggregates.find(a => a.rubriqueId === rubrique.id && a.statut === 'EN_ATTENTE_CONFIRMATION')?._sum.montant ?? 0
     const virtualContributions: { montant: number; statut: 'CONFIRME' | 'EN_ATTENTE_CONFIRMATION' }[] = []
@@ -224,13 +224,58 @@ router.get('/me/balance', authenticate, requireLevel(1), async (req, res) => {
     const balance = calculateRemainingBalance(membre.profilFinancier, rubrique, virtualContributions)
 
     return {
-      rubrique: { id: rubrique.id, code: rubrique.code, title: rubrique.title, priority: rubrique.priority },
+      rubrique: { id: rubrique.id, code: rubrique.code, title: rubrique.title, priority: rubrique.priority, closeDate: rubrique.closeDate },
       ...balance,
     }
   })
+}
 
-  res.json({ success: true, data })
+async function currentMembre(userId: string) {
+  const membre = await prisma.membre.findFirst({ where: { userId }, select: { id: true, profilFinancier: true } })
+  if (!membre) throw new AppError('NOT_FOUND', 'Profil membre introuvable pour ce compte', 404)
+  return membre
+}
+
+router.get('/me/balance', authenticate, requireLevel(1), async (req, res) => {
+  const membre = await currentMembre(req.user!.userId)
+  res.json({ success: true, data: await memberBalances(membre) })
 })
+
+/**
+ * GET /api/contributions/me/summary
+ * Totaux du membre calculés sur TOUTES ses contributions (l'écran ne voit
+ * qu'une page de 20 lignes) et reste à payer global sur les rubriques ouvertes.
+ */
+router.get('/me/summary', authenticate, requireLevel(1), async (req, res) => {
+  const membre = await currentMembre(req.user!.userId)
+  const [byStatut, balances] = await Promise.all([
+    prisma.contribution.groupBy({ by: ['statut'], where: { membreId: membre.id }, _sum: { montant: true }, _count: true }),
+    memberBalances(membre),
+  ])
+  const pick = (statut: string) => byStatut.find(g => g.statut === statut)
+  const due = balances.filter(b => b.remainingAmount != null && b.remainingAmount > 0)
+  res.json({
+    success: true,
+    data: {
+      totalCount: byStatut.reduce((n, g) => n + g._count, 0),
+      confirmedAmount: pick('CONFIRME')?._sum.montant ?? 0,
+      confirmedCount: pick('CONFIRME')?._count ?? 0,
+      pendingAmount: pick('EN_ATTENTE_CONFIRMATION')?._sum.montant ?? 0,
+      pendingCount: pick('EN_ATTENTE_CONFIRMATION')?._count ?? 0,
+      disputeCount: pick('LITIGE')?._count ?? 0,
+      remainingTotal: due.reduce((sum, b) => sum + (b.remainingAmount ?? 0), 0),
+      // Les trois rubriques à régler en premier : priorité, puis échéance la plus proche
+      nextDue: due
+        .sort((a, b) => priorityRank(a.rubrique.priority) - priorityRank(b.rubrique.priority)
+          || (a.rubrique.closeDate?.getTime() ?? Infinity) - (b.rubrique.closeDate?.getTime() ?? Infinity))
+        .slice(0, 3),
+    },
+  })
+})
+
+function priorityRank(priority: string): number {
+  return priority === 'URGENT' ? 0 : priority === 'PRIORITAIRE' ? 1 : 2
+}
 
 router.post('/', authenticate, requireLevel(2), async (req, res) => {
   const data = createSchema.parse(req.body)
@@ -657,11 +702,16 @@ router.get('/:id/timeline', authenticate, requireLevel(2), async (req, res) => {
  * génère à la volée (auto-guérison pour les contributions confirmées avant
  * la mise en place de la génération automatique).
  */
-router.get('/:id/receipt', authenticate, requireLevel(2), async (req, res) => {
+router.get('/:id/receipt', authenticate, requireLevel(1), async (req, res) => {
   const id = String(req.params.id)
   const contribution = await prisma.contribution.findUnique({ where: { id } })
   if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
   assertContributionReadable(actorOf(req), contribution)
+  // Un membre télécharge les reçus de SES contributions (justificatif perdu, UX-03)
+  if (req.user!.role === 'MEMBRE') {
+    const membre = await currentMembre(req.user!.userId)
+    if (contribution.membreId !== membre.id) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
+  }
   if (contribution.statut !== 'CONFIRME') {
     throw new AppError('BUSINESS_RULE', 'Le reçu est disponible uniquement pour les contributions confirmées', 400)
   }

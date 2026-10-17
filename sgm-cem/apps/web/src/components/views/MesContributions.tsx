@@ -2,8 +2,8 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { motion, useReducedMotion } from 'framer-motion'
-import { AlertTriangle, ArrowRight, CreditCard, Search, Wallet, X } from 'lucide-react'
-import api from '@/lib/api'
+import { AlertTriangle, ArrowRight, CreditCard, FileText, Search, Wallet, X } from 'lucide-react'
+import api, { getBaseURL } from '@/lib/api'
 import { cn, formatAmount, formatDate, MODE_PAIEMENT_LABELS } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
 import { Button } from '@/components/ui/Button'
@@ -66,27 +66,28 @@ export function MesContributions() {
     return { urgent, calm, total: items.length }
   }, [openRubriques, balances])
 
+  // Recherche faite par l'API sur tout l'historique (plus seulement la page affichée)
   const { data, isLoading } = useQuery({
-    queryKey: ['mes-contributions', page, montantMin, montantMax],
+    queryKey: ['mes-contributions', page, montantMin, montantMax, search.trim()],
     queryFn: async () => (await api.get('/contributions/me', {
       params: {
         page, limit: 20,
         ...(montantMin && { montantMin }),
         ...(montantMax && { montantMax }),
+        ...(search.trim() && { search: search.trim() }),
       },
     })).data,
   })
 
+  // Totaux calculés par l'API sur toutes les contributions (UX-03)
+  const { data: summary } = useQuery<MemberSummary>({
+    queryKey: ['mes-contributions-resume'],
+    queryFn: async () => (await api.get('/contributions/me/summary')).data.data,
+  })
+
   const contributions: Contribution[] = data?.data ?? []
   const pagination = data?.pagination
-
-  const filtered = contributions.filter(c =>
-    !search ||
-    c.rubrique?.code.toLowerCase().includes(search.toLowerCase()) ||
-    c.rubrique?.title.toLowerCase().includes(search.toLowerCase())
-  )
-
-  const totalConfirmed = contributions.filter(c => c.statut === 'CONFIRME').reduce((s, c) => s + c.montant, 0)
+  const filtered = contributions
   const hasAmountFilter = montantMin !== '' || montantMax !== ''
   // filtered (pas contributions) : c'est la liste réellement rendue dans le DOM
   // (data-focus-id posé sur ces éléments) — comparer à la liste brute ferait
@@ -130,11 +131,11 @@ export function MesContributions() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-5">
-        <SummaryCard label="Total enregistrées" value={String(pagination?.total ?? 0)} color="#1A6B1A" bg="#E8F5E8" />
-        <SummaryCard label="Montant confirmé" value={formatAmount(totalConfirmed)} color="#2563EB" bg="#EFF6FF" />
+        <SummaryCard label="Reste à payer" value={formatAmount(summary?.remainingTotal ?? 0)} color="#7F1D1D" bg="#FEF2F2" />
+        <SummaryCard label="Montant confirmé" value={formatAmount(summary?.confirmedAmount ?? 0)} color="#1A6B1A" bg="#E8F5E8" />
         <SummaryCard
           label="En attente"
-          value={String(contributions.filter(c => c.statut === 'EN_ATTENTE_CONFIRMATION').length)}
+          value={`${summary?.pendingCount ?? 0} · ${formatAmount(summary?.pendingAmount ?? 0)}`}
           color="#F59E0B" bg="#FEFCE8"
         />
       </div>
@@ -145,7 +146,7 @@ export function MesContributions() {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => { setSearch(e.target.value); setPage(1) }}
             placeholder="Rechercher par rubrique…"
             className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30 focus:border-[#1A6B1A]"
           />
@@ -182,16 +183,16 @@ export function MesContributions() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
-                {['Rubrique', 'Montant', 'Mode', 'Statut', 'Période', 'Date'].map(col => (
+                {['Rubrique', 'Montant', 'Mode', 'Statut', 'Période', 'Date', 'Reçu'].map(col => (
                   <th key={col} className="px-4 py-3 text-left text-xs font-semibold text-gray-500">{col}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                Array.from({ length: 8 }).map((_, i) => <SkeletonTableRow key={i} cols={6} />)
+                Array.from({ length: 8 }).map((_, i) => <SkeletonTableRow key={i} cols={7} />)
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={6}>
+                <tr><td colSpan={7}>
                   <EmptyState
                     icon={CreditCard}
                     title="Aucune contribution"
@@ -213,6 +214,7 @@ export function MesContributions() {
                     <td className="px-4 py-3"><StatusBadge status={c.statut} /></td>
                     <td className="px-4 py-3 text-xs text-gray-400">{c.periodeLabel ?? '—'}</td>
                     <td className="px-4 py-3 text-xs text-gray-400">{formatDate(c.createdAt)}</td>
+                    <td className="px-4 py-3"><ReceiptLink contribution={c} /></td>
                   </tr>
                 ))
               )}
@@ -246,6 +248,7 @@ export function MesContributions() {
                     <>
                       <strong className="block font-mono text-sm text-[#1A6B1A]">{formatAmount(c.montant)}</strong>
                       <StatusBadge status={c.statut} />
+                      <ReceiptLink contribution={c} />
                     </>
                   }
                 />
@@ -286,6 +289,32 @@ export function MesContributions() {
 }
 
 type ReminderItem = { rubrique: Rubrique; balance?: RemainingBalance }
+
+type MemberSummary = {
+  totalCount: number
+  confirmedAmount: number
+  confirmedCount: number
+  pendingAmount: number
+  pendingCount: number
+  disputeCount: number
+  remainingTotal: number
+}
+
+/** Justificatif téléchargeable à tout moment pour une contribution confirmée. */
+function ReceiptLink({ contribution }: { contribution: Contribution }) {
+  if (contribution.statut !== 'CONFIRME') return null
+  return (
+    <a
+      href={`${getBaseURL()}/contributions/${contribution.id}/receipt`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mt-1 inline-flex min-h-[32px] items-center gap-1 rounded-[8px] px-2 text-xs font-semibold text-[#1A6B1A] hover:bg-[#E8F5E8]"
+      aria-label={`Reçu de la contribution ${contribution.rubrique?.title ?? ''}`}
+    >
+      <FileText size={13} /> Reçu
+    </a>
+  )
+}
 
 /**
  * Bannière proactive — visible dès la connexion (haut de "Mes contributions",

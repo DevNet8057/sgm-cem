@@ -67,6 +67,10 @@ export default function AppPage() {
       case 'contributions': return <Contributions />
       case 'collecteurs':   return <Collecteurs />
       case 'validations':   return <Validations />
+      // Menus déjà proposés au collecteur mais sans écran (UX-02) : un collecteur
+      // destinataire d'un transfert doit pouvoir le confirmer ou le refuser
+      case 'rubriques':            return <Rubriques />
+      case 'transfer-validations': return <TransferValidations />
       case 'notifications': return <Notifications />
       case 'journal':       return <Journal />
       case 'mon-profil':    return <MonProfil />

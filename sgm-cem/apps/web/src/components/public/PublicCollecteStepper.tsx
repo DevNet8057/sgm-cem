@@ -47,6 +47,10 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
   // Navigation
   const [step, setStep] = useState(0)
   const [error, setError] = useState('')
+  // Champ en erreur : mis en évidence (aria-invalid) et focalisé (UX-04)
+  const [errorField, setErrorField] = useState<'nom' | 'phone' | 'montant' | null>(null)
+  const nomRef = useRef<HTMLInputElement>(null)
+  const phoneRef = useRef<HTMLInputElement>(null)
 
   // Étape 1 — Informations
   const [nom, setNom] = useState('')
@@ -337,17 +341,25 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
     return ''
   }
 
+  function fieldError(field: 'nom' | 'phone' | 'montant', message: string) {
+    setError(message)
+    setErrorField(field)
+    if (field === 'nom') nomRef.current?.focus()
+    if (field === 'phone') phoneRef.current?.focus()
+  }
+
   function goNext() {
     setError('')
+    setErrorField(null)
     if (step === 0) {
-      if (!nom.trim()) { setError('Le nom complet est obligatoire'); return }
-      if (phone.replace(/\D/g, '').length < 9) { setError('Entrez un numéro de téléphone valide'); return }
+      if (!nom.trim()) { fieldError('nom', 'Le nom complet est obligatoire'); return }
+      if (phone.replace(/\D/g, '').length < 9) { fieldError('phone', 'Entrez un numéro de téléphone valide (9 chiffres)'); return }
       const champErr = validateChamps()
       if (champErr) { setError(champErr); return }
     }
     if (step === 1) {
       const amount = Number(montant)
-      if (!montant || amount <= 0) { setError('Entrez un montant valide'); return }
+      if (!montant || amount <= 0) { fieldError('montant', 'Entrez un montant valide'); return }
       if (collecte.montantMin != null && amount < collecte.montantMin) {
         setError(`Le montant minimum est de ${formatAmount(collecte.montantMin)}`)
         return
@@ -386,6 +398,16 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
   return (
     <div className="w-full overflow-hidden">
 
+        {/* ── En-tête : titre de la collecte et urgence (UX-04) ── */}
+        <div className="px-6 pt-5 pb-1">
+          {collecte.isUrgent && (
+            <span className="mb-2 inline-flex items-center gap-1 rounded-full bg-[#FEF2F2] px-2.5 py-1 text-xs font-bold text-[#7F1D1D]">
+              <AlertCircle size={12} /> Urgent
+            </span>
+          )}
+          <h1 className="font-display text-xl font-semibold leading-snug text-[#0F4A0F] break-words">{collecte.titre}</h1>
+        </div>
+
         {/* ── Bannière de reprise de brouillon ── */}
         {resumeBanner && (
           <div className="mx-4 mt-4 rounded-[12px] bg-amber-50 border border-amber-200 p-3 space-y-2">
@@ -421,6 +443,11 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
           ))}
         </div>
 
+        {/* Sur mobile, libellé complet de l'étape en cours (les pastilles seules ne disent rien) */}
+        <p className="sm:hidden px-6 pt-2 text-xs font-semibold text-[#0F4A0F]" aria-live="polite">
+          Étape {step + 1} sur {STEPS.length} — {STEPS[step]}
+        </p>
+
         {/* ── Contenu des étapes ── */}
         <div className="px-6 py-5 max-h-[65vh] overflow-y-auto scrollbar-thin">
 
@@ -436,10 +463,13 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
                   Nom complet <span className="text-red-500">*</span>
                 </label>
                 <input
+                  ref={nomRef}
                   value={nom}
-                  onChange={e => { setNom(e.target.value); markTouched() }}
+                  onChange={e => { setNom(e.target.value); markTouched(); if (errorField === 'nom') setErrorField(null) }}
                   placeholder="Ex : Jean Mballa"
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30"
+                  autoComplete="name"
+                  aria-invalid={errorField === 'nom'}
+                  className={cn('w-full px-3 py-2.5 border rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30', errorField === 'nom' ? 'border-red-400' : 'border-gray-200')}
                 />
               </div>
 
@@ -450,10 +480,16 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
                 <div className="flex gap-2">
                   <span className="flex items-center px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-[10px] text-sm text-gray-600 shrink-0 font-mono">🇨🇲 +237</span>
                   <input
+                    ref={phoneRef}
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel-national"
                     value={phone}
-                    onChange={e => { setPhone(e.target.value.replace(/\D/g, '').slice(0, 9)); markTouched() }}
+                    onChange={e => { setPhone(e.target.value.replace(/\D/g, '').slice(0, 9)); markTouched(); if (errorField === 'phone') setErrorField(null) }}
                     placeholder="6XXXXXXXX"
-                    className="flex-1 px-3 py-2.5 border border-gray-200 rounded-[10px] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30"
+                    aria-invalid={errorField === 'phone'}
+                    // min-w-0 : sans lui le champ déborde de la carte sur petit écran (UX-04)
+                    className={cn('flex-1 min-w-0 px-3 py-2.5 border rounded-[10px] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30', errorField === 'phone' ? 'border-red-400' : 'border-gray-200')}
                   />
                 </div>
               </div>
@@ -765,7 +801,7 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
           )}
 
           {error && step < 3 && (
-            <div className="mt-3 flex items-center gap-2 rounded-[10px] bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+            <div role="alert" className="mt-3 flex items-center gap-2 rounded-[10px] bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
               <AlertCircle size={13} className="shrink-0" />
               {error}
             </div>
