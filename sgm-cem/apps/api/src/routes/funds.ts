@@ -1,14 +1,17 @@
 import { getConfig } from '../services/config.service'
-import { Router } from 'express'
+import { Router, type NextFunction, type Request, type Response } from 'express'
+import multer from 'multer'
+import { randomUUID } from 'crypto'
 import { z } from 'zod'
-import { FundsTransferStatus } from '@prisma/client'
+import { FundsTransferStatus, type LocalisationFonds, type Prisma } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { formatAmount } from '../lib/utils'
 import { generateBorderauPdf, generateAndStoreBorderau } from '../services/borderau'
-import { getFileStream, getManagedStorageKey } from '../services/storage'
+import { getFileStream, getManagedStorageKey, storeFile } from '../services/storage'
 import { getPrisma } from '../lib/prisma'
+import { DEPOSITABLE_LOCATIONS, TRANSFERABLE_LOCATIONS, checkLedger, positionAt, receptionLocation, recordMovements } from '../services/fund-ledger.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -78,13 +81,12 @@ router.get('/contributions', authenticate, requireLevel(2), async (req, res) => 
   const myRole = req.user!.role
   const myUserId = req.user!.userId
 
-  const where: Record<string, unknown> = {
+  // Fonds détenus par des personnes ; chacun ne voit que ce qu'il détient,
+  // les rôles de supervision voient tout
+  const where: Prisma.ContributionWhereInput = {
     statut: 'CONFIRME',
-    localisationFonds: { in: ['CHEZ_COLLECTEUR', 'EN_TRANSIT'] },
-  }
-
-  if (myRole === 'COLLECTEUR') {
-    ;(where as { collecteurId?: string }).collecteurId = myUserId
+    localisationFonds: { in: [...TRANSFERABLE_LOCATIONS, 'EN_TRANSIT'] },
+    ...(['TRESORIER', 'ADMIN', 'DEVELOPER'].includes(myRole) ? {} : { detenteurId: myUserId }),
   }
 
   const contributions = await prisma.contribution.findMany({
@@ -141,18 +143,17 @@ router.post('/transfer', authenticate, requireLevel(2), async (req, res) => {
     throw new AppError('INVALID_TARGET', 'Destinataire invalide', 400)
   }
 
-  // Vérifier les contributions appartiennent à l'expéditeur et sont en CHEZ_COLLECTEUR
+  // RB-27 / RG-21 : seuls les fonds détenus par une personne (collecteur ou
+  // responsable) peuvent être remis. Chacun ne remet que l'argent qu'il détient ;
+  // l'administrateur peut initier pour un détenteur (le destinataire confirme toujours).
   const contributions = await prisma.contribution.findMany({
     where: {
       id: { in: data.contributionIds },
       statut: 'CONFIRME',
-      // RB-27: Seules les contributions en CHEZ_COLLECTEUR peuvent être transférées
-      localisationFonds: 'CHEZ_COLLECTEUR',
-      // Chacun ne remet que l'argent qu'il détient ; l'administrateur peut
-      // initier pour un détenteur (le destinataire confirme toujours la réception)
-      ...(['ADMIN', 'DEVELOPER'].includes(myRole) ? {} : { collecteurId: myUserId }),
+      localisationFonds: { in: [...TRANSFERABLE_LOCATIONS] },
+      ...(['ADMIN', 'DEVELOPER'].includes(myRole) ? {} : { detenteurId: myUserId }),
     },
-    select: { id: true, montant: true, collecteurId: true },
+    select: { id: true, montant: true, localisationFonds: true, detenteurId: true },
   })
 
   if (contributions.length !== data.contributionIds.length) {
@@ -184,9 +185,10 @@ router.post('/transfer', authenticate, requireLevel(2), async (req, res) => {
     })
 
     // Mettre les contributions en EN_TRANSIT — conditionnel : une même
-    // contribution ne peut pas partir dans deux transferts simultanés
+    // contribution ne peut pas partir dans deux transferts simultanés. Le détenteur
+    // reste responsable de l'argent jusqu'à la réception.
     const moved = await tx.contribution.updateMany({
-      where: { id: { in: data.contributionIds }, localisationFonds: 'CHEZ_COLLECTEUR', statut: 'CONFIRME' },
+      where: { id: { in: data.contributionIds }, localisationFonds: { in: [...TRANSFERABLE_LOCATIONS] }, statut: 'CONFIRME' },
       data: {
         localisationFonds: 'EN_TRANSIT',
         transferId: transfer.id,
@@ -195,6 +197,11 @@ router.post('/transfer', authenticate, requireLevel(2), async (req, res) => {
     if (moved.count !== data.contributionIds.length) {
       throw new AppError('BUSINESS_RULE', 'Une ou plusieurs contributions viennent d\'être transférées, rechargez la page', 409)
     }
+    await recordMovements(tx, contributions.map(c => ({
+      contributionId: c.id, montant: c.montant, from: c.localisationFonds, to: 'EN_TRANSIT' as const,
+      holderFromId: c.detenteurId, holderToId: c.detenteurId, reason: 'TRANSFERT_ENVOI' as const,
+      transferId: transfer.id, actorId: myUserId,
+    })))
 
     // Audit log
     await tx.auditLog.create({
@@ -318,11 +325,8 @@ router.patch('/transfers/:id/confirm', authenticate, requireLevel(2), async (req
     throw new AppError('ALREADY_PROCESSED', 'Ce transfert a déjà été traité', 400)
   }
 
-  // Déterminer la nouvelle localisation selon le rôle du récepteur
-  const newLocation: string =
-    ['ADMIN', 'DEVELOPER', 'TRESORIER'].includes(userRole) ? 'REMIS_TRESORIER' :
-    ['RESPONSABLE', 'ADJOINT_RESPONSABLE'].includes(userRole) ? 'CHEZ_RESPONSABLE' :
-    'CHEZ_COLLECTEUR'
+  // Nouvelle localisation selon le rôle du récepteur (RG-22), qui devient détenteur
+  const newLocation = receptionLocation(userRole)
 
   await prisma.$transaction(async (tx) => {
     // Transition conditionnelle : une seule réponse (confirmation OU refus OU annulation)
@@ -335,14 +339,20 @@ router.patch('/transfers/:id/confirm', authenticate, requireLevel(2), async (req
     })
     if (claimed.count !== 1) throw new AppError('ALREADY_PROCESSED', 'Ce transfert a déjà été traité', 400)
 
-    // Mettre à jour les contributions
-    await tx.contribution.updateMany({
+    // Les fonds changent de détenteur ; l'auteur de l'encaissement (collecteurId) ne change pas
+    const inTransit = await tx.contribution.findMany({
       where: { transferId: id, localisationFonds: 'EN_TRANSIT' },
-      data: {
-        localisationFonds: newLocation as 'CHEZ_COLLECTEUR' | 'CHEZ_RESPONSABLE' | 'REMIS_TRESORIER' | 'EN_TRANSIT',
-        collecteurId: userRole === 'COLLECTEUR' ? userId : undefined,
-      },
+      select: { id: true, montant: true, detenteurId: true },
     })
+    await tx.contribution.updateMany({
+      where: { id: { in: inTransit.map(c => c.id) }, localisationFonds: 'EN_TRANSIT' },
+      data: { localisationFonds: newLocation, detenteurId: userId },
+    })
+    await recordMovements(tx, inTransit.map(c => ({
+      contributionId: c.id, montant: c.montant, from: 'EN_TRANSIT' as const, to: newLocation,
+      holderFromId: c.detenteurId, holderToId: userId, reason: 'TRANSFERT_RECEPTION' as const,
+      transferId: id, actorId: userId,
+    })))
 
     // Audit log
     await tx.auditLog.create({
@@ -416,14 +426,8 @@ router.patch('/transfers/:id/refuse', authenticate, requireLevel(2), async (req,
     })
     if (claimed.count !== 1) throw new AppError('ALREADY_PROCESSED', 'Ce transfert a déjà été traité', 400)
 
-    // Les fonds reviennent à leur détenteur (collecteurId inchangé à l'envoi —
-    // un transfert initié par l'administrateur ne lui attribue pas l'argent)
-    await tx.contribution.updateMany({
-      where: { transferId: id, localisationFonds: 'EN_TRANSIT' },
-      data: {
-        localisationFonds: 'CHEZ_COLLECTEUR',
-      },
-    })
+    // Les fonds reviennent chez leur détenteur, à leur emplacement d'origine
+    await returnTransferFunds(tx, id, 'TRANSFERT_REFUS', userId)
 
     // Audit log
     await tx.auditLog.create({
@@ -490,13 +494,8 @@ router.patch('/transfers/:id/cancel', authenticate, requireLevel(2), async (req,
     })
     if (claimed.count !== 1) throw new AppError('BUSINESS_RULE', 'Ce transfert ne peut plus être annulé', 400)
 
-    // Retourner les contributions
-    await tx.contribution.updateMany({
-      where: { transferId: id, localisationFonds: 'EN_TRANSIT' },
-      data: {
-        localisationFonds: 'CHEZ_COLLECTEUR',
-      },
-    })
+    // Retourner les contributions à leur emplacement d'origine
+    await returnTransferFunds(tx, id, 'TRANSFERT_ANNULATION', myUserId)
 
     // Audit log
     await tx.auditLog.create({
@@ -518,6 +517,36 @@ function amountFor(
   localisationFonds: string
 ) {
   return groups.find(item => item.localisationFonds === localisationFonds)?._sum.montant ?? 0
+}
+
+/**
+ * Refus ou annulation d'un transfert : chaque contribution retourne à
+ * l'emplacement qu'elle avait à l'envoi (lu dans le grand livre ; « chez le
+ * collecteur » pour les transferts antérieurs au grand livre). Le détenteur n'a pas changé.
+ */
+async function returnTransferFunds(tx: Prisma.TransactionClient, transferId: string, reason: 'TRANSFERT_REFUS' | 'TRANSFERT_ANNULATION', actorId: string) {
+  const inTransit = await tx.contribution.findMany({
+    where: { transferId, localisationFonds: 'EN_TRANSIT' },
+    select: { id: true, montant: true, detenteurId: true },
+  })
+  if (inTransit.length === 0) return
+  const sent = await tx.fundMovement.findMany({
+    where: { transferId, reason: 'TRANSFERT_ENVOI', contributionId: { in: inTransit.map(c => c.id) } },
+    select: { contributionId: true, fromLocation: true },
+  })
+  const origin = new Map(sent.map(m => [m.contributionId, m.fromLocation ?? 'CHEZ_COLLECTEUR']))
+  const byLocation = new Map<LocalisationFonds, string[]>()
+  for (const c of inTransit) {
+    const back = origin.get(c.id) ?? 'CHEZ_COLLECTEUR'
+    byLocation.set(back, [...(byLocation.get(back) ?? []), c.id])
+  }
+  for (const [location, ids] of byLocation) {
+    await tx.contribution.updateMany({ where: { id: { in: ids }, localisationFonds: 'EN_TRANSIT' }, data: { localisationFonds: location } })
+  }
+  await recordMovements(tx, inTransit.map(c => ({
+    contributionId: c.id, montant: c.montant, from: 'EN_TRANSIT' as const, to: origin.get(c.id) ?? 'CHEZ_COLLECTEUR',
+    holderFromId: c.detenteurId, holderToId: c.detenteurId, reason, transferId, actorId,
+  })))
 }
 
 // Services de notification (simples pour l'instant)
@@ -595,30 +624,53 @@ async function notifyTransferRefused(p: {
 }
 
 // ── B6 : Trésorier marque des fonds comme déposés en banque ──────────
-router.patch('/bank-deposit', authenticate, async (req, res) => {
+// Décision du Bureau (17/10/2026) : « En banque » seulement avec le reçu de dépôt
+// (PDF ou photo), stocké et archivé — jamais public, consultable par la trésorerie.
+const PROOF_TYPES: Array<{ mime: string; ext: string; magic: (b: Buffer) => boolean }> = [
+  { mime: 'application/pdf', ext: 'pdf', magic: b => b.subarray(0, 5).toString('latin1') === '%PDF-' },
+  { mime: 'image/jpeg', ext: 'jpg', magic: b => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+  { mime: 'image/png', ext: 'png', magic: b => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
+  { mime: 'image/webp', ext: 'webp', magic: b => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP' },
+]
+
+const proofUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } })
+
+function receiveProof(req: Request, res: Response, next: NextFunction) {
+  proofUpload.single('proof')(req, res, err => {
+    if (err) return next(new AppError('VALIDATION_ERROR', err.code === 'LIMIT_FILE_SIZE' ? 'Reçu trop volumineux (10 Mo maximum)' : 'Fichier de reçu illisible', 400))
+    next()
+  })
+}
+
+router.patch('/bank-deposit', authenticate, receiveProof, async (req, res) => {
   if (!['TRESORIER', 'ADMIN', 'DEVELOPER'].includes(req.user!.role)) {
     throw new AppError('ACCESS_DENIED', 'Seul le trésorier peut effectuer un dépôt en banque', 403)
   }
 
   const schema = z.object({
-    contributionIds:   z.array(z.string()).min(1).max(500),
-    referenceBordereau: z.string().min(1, 'La référence de bordereau est requise'),
+    // multipart : la liste arrive en JSON
+    contributionIds:   z.preprocess(v => (typeof v === 'string' ? JSON.parse(v) : v), z.array(z.string()).min(1).max(500)),
+    referenceBordereau: z.string().trim().min(1, 'La référence de bordereau est requise').max(120),
     dateBordereau:     z.string().optional(),
     note:              z.string().max(500).optional(),
   })
   const { contributionIds, referenceBordereau, dateBordereau, note } = schema.parse(req.body)
 
-  // Déposables : fonds remis au trésorier, en caisse, ou sur le portefeuille
-  // électronique (versement du compte marchand Yelii/CinetPay vers la banque)
-  const DEPOSITABLE = ['REMIS_TRESORIER', 'EN_CAISSE', 'PORTEFEUILLE_ELECTRONIQUE'] as const
+  const file = req.file
+  if (!file) throw new AppError('VALIDATION_ERROR', 'Le reçu de dépôt (PDF ou photo) est obligatoire', 400)
+  // Type vérifié sur le contenu du fichier, pas sur ce que déclare le navigateur
+  const proofType = PROOF_TYPES.find(t => t.magic(file.buffer))
+  if (!proofType) throw new AppError('VALIDATION_ERROR', 'Reçu non reconnu : PDF, JPEG, PNG ou WebP uniquement', 400)
+
+  // Déposables : fonds chez le trésorier, en caisse ou sur le portefeuille électronique
   const contributions = await prisma.contribution.findMany({
     where: {
       id:                { in: contributionIds },
       statut:            'CONFIRME',
-      localisationFonds: { in: [...DEPOSITABLE] },
+      localisationFonds: { in: [...DEPOSITABLE_LOCATIONS] },
       bankDepositId:     null,
     },
-    select: { id: true, montant: true, localisationFonds: true },
+    select: { id: true, montant: true, localisationFonds: true, detenteurId: true },
   })
 
   if (contributions.length !== contributionIds.length) {
@@ -632,11 +684,13 @@ router.patch('/bank-deposit', authenticate, async (req, res) => {
     select: { id: true, fullName: true },
   })
 
-  // Le dépôt est un ENREGISTREMENT consultable (preuve pour l'ADMIN),
-  // plus seulement une ligne d'audit : référence de bordereau/relevé + date +
-  // déposant + contributions liées.
-  // Enregistrement du dépôt et déplacement des fonds : tout ou rien, et une
-  // contribution ne peut pas entrer dans deux dépôts simultanés
+  // Le reçu est stocké avant l'écriture en base (clé unique, jamais écrasée)
+  const now = new Date()
+  const key = `banque/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/depot-${randomUUID()}.${proofType.ext}`
+  const stored = await storeFile(key, file.buffer, proofType.mime)
+
+  // Enregistrement du dépôt, déplacement des fonds et grand livre : tout ou rien,
+  // et une contribution ne peut pas entrer dans deux dépôts simultanés
   const deposit = await prisma.$transaction(async tx => {
     const created = await tx.bankDeposit.create({
       data: {
@@ -646,15 +700,25 @@ router.patch('/bank-deposit', authenticate, async (req, res) => {
         totalAmount,
         depositedById: req.user!.userId,
         depositedByName: depositor?.fullName ?? req.user!.email,
+        proofKey: stored.s3Key,
+        proofBucket: stored.s3Bucket,
+        proofMime: proofType.mime,
+        proofName: file.originalname.slice(0, 200),
+        proofSize: file.size,
       },
     })
     const moved = await tx.contribution.updateMany({
-      where: { id: { in: contributionIds }, statut: 'CONFIRME', localisationFonds: { in: [...DEPOSITABLE] }, bankDepositId: null },
-      data:  { localisationFonds: 'EN_BANQUE', bankDepositId: created.id },
+      where: { id: { in: contributionIds }, statut: 'CONFIRME', localisationFonds: { in: [...DEPOSITABLE_LOCATIONS] }, bankDepositId: null },
+      data:  { localisationFonds: 'EN_BANQUE', bankDepositId: created.id, detenteurId: null },
     })
     if (moved.count !== contributionIds.length) {
       throw new AppError('BUSINESS_RULE', 'Certaines contributions viennent d\'être déposées, rechargez la page', 409)
     }
+    await recordMovements(tx, contributions.map(c => ({
+      contributionId: c.id, montant: c.montant, from: c.localisationFonds, to: 'EN_BANQUE' as const,
+      holderFromId: c.detenteurId, holderToId: null, reason: 'DEPOT_BANCAIRE' as const,
+      bankDepositId: created.id, actorId: req.user!.userId,
+    })))
     return created
   })
 
@@ -671,6 +735,7 @@ router.patch('/bank-deposit', authenticate, async (req, res) => {
         dateBordereau,
         totalAmount,
         note,
+        proof: { name: deposit.proofName, mime: deposit.proofMime, size: deposit.proofSize },
       },
     },
   })
@@ -679,6 +744,35 @@ router.patch('/bank-deposit', authenticate, async (req, res) => {
     success: true,
     data: { id: deposit.id, count: contributions.length, totalAmount, referenceBordereau },
   })
+})
+
+// ── Grand livre (jalon J3) ────────────────────────────────────────────
+// Contrôle d'invariant : emplacement et détenteur actuels = dernier mouvement
+router.get('/ledger/check', authenticate, requireLevel(4), async (_req, res) => {
+  res.json({ success: true, data: await checkLedger(prisma) })
+})
+
+// Position des fonds à une date (fin de journée, heure de Yaoundé)
+router.get('/position', authenticate, requireLevel(4), async (req, res) => {
+  const { date } = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date attendue au format AAAA-MM-JJ').optional() }).parse(req.query)
+  const at = date ? new Date(`${date}T23:59:59.999+01:00`) : new Date()
+  res.json({ success: true, data: await positionAt(prisma, at) })
+})
+
+// Reçu de dépôt archivé : servi par l'API (jamais d'URL publique)
+router.get('/bank-deposits/:id/proof', authenticate, requireLevel(4), async (req, res) => {
+  const deposit = await prisma.bankDeposit.findUnique({
+    where: { id: String(req.params.id) },
+    select: { proofKey: true, proofBucket: true, proofMime: true, proofName: true },
+  })
+  if (!deposit?.proofKey) throw new AppError('NOT_FOUND', 'Aucun reçu pour ce dépôt', 404)
+  const file = await getFileStream(deposit.proofKey, deposit.proofBucket === 'local' ? undefined : deposit.proofBucket ?? undefined)
+  if (!file) throw new AppError('NOT_FOUND', 'Reçu introuvable dans le stockage', 404)
+  res.setHeader('Content-Type', deposit.proofMime ?? 'application/octet-stream')
+  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(deposit.proofName ?? 'recu-depot')}"`)
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Cache-Control', 'private, no-store')
+  file.stream.pipe(res)
 })
 
 // ── B6 : Historique des dépôts bancaires — PREUVES consultables ───────
@@ -698,7 +792,8 @@ router.get('/bank-deposits', authenticate, requireLevel(4), async (_req, res) =>
     },
     orderBy: { createdAt: 'desc' },
   })
-  res.json({ success: true, data: deposits })
+  // L'emplacement du reçu reste interne ; le web l'obtient via /bank-deposits/:id/proof
+  res.json({ success: true, data: deposits.map(({ proofKey, proofBucket, ...d }) => ({ ...d, hasProof: Boolean(proofKey && proofBucket !== undefined) })) })
 })
 
 /**

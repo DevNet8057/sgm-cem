@@ -16,5 +16,12 @@ docker compose -f docker-compose.prod.yml exec -T postgres pg_restore --list < "
 sha256sum "$OUT" > "$OUT.sha256"
 restic backup "$OUT" "$OUT.sha256" --tag db --host sgm-cem-prod
 restic forget --tag db --keep-daily 7 --keep-weekly 5 --keep-monthly 12 --keep-yearly 10 --prune
+
+# Fichiers (volume « uploads ») : reçus de dépôt bancaire archivés, documents GED,
+# reçus PDF, photos. Sauvegardés à part (inutile si un stockage S3 est configuré,
+# mais sans risque : restic ne renvoie que les fichiers nouveaux ou modifiés).
+docker compose -f docker-compose.prod.yml exec -T api tar -C /app/apps/api -cf - uploads \
+  | restic backup --stdin --stdin-filename uploads.tar --tag files --host sgm-cem-prod
+restic forget --tag files --keep-daily 7 --keep-weekly 5 --keep-monthly 12 --keep-yearly 10 --prune
 find backups -name 'sgm_cem_*.dump*' -mtime +3 -delete      # 3 jours en local seulement
 curl -fsS -m 10 "$BACKUP_HEARTBEAT_URL" > /dev/null    # signal « sauvegarde OK » (sonde de type dead man's switch)

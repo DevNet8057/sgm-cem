@@ -9,7 +9,7 @@ procédures d'installation, de mise à jour et de retour arrière).
 | `docker-compose.prod.yml` | Caddy (HTTPS), web, API, PostgreSQL 17, Redis ; réseaux `edge`/`internal` ; images épinglées |
 | `Caddyfile` | Reverse proxy, en-têtes de sécurité, `X-Request-Id` ; domaine via `APP_DOMAIN` |
 | `.env.example` | Modèle du `.env` de production |
-| `scripts/backup.sh` | Sauvegarde quotidienne vérifiée (pg_dump → restic, rétention 7/5/12/10) |
+| `scripts/backup.sh` | Sauvegarde quotidienne vérifiée : base (pg_dump) **et fichiers** (volume `uploads` : reçus de dépôt archivés, GED, reçus PDF) → restic, rétention 7/5/12/10 |
 | `scripts/restore-test.sh` | Test de restauration mensuel obligatoire sur base jetable |
 
 Validation avant chaque déploiement : `docker compose -f docker-compose.prod.yml config`.

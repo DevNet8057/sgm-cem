@@ -9,6 +9,7 @@ import { initiateCinetpayPayment, isCinetpayConfigured } from '../services/cinet
 import { generateReceiptPDF } from '../services/receipt'
 import { calculateAmountWithCommission, resolveDueAmount, YELII_COMMISSION_RATE } from '@sgm-cem/shared'
 import { getPrisma } from '../lib/prisma'
+import { confirmIntoLedger } from '../services/fund-ledger.service'
 import { getConfigBool, getConfigNumber } from '../services/config.service'
 import { audit } from '../services/audit.service'
 import { syncYeliiContributionStatus, CONTRIBUTION_SYNC_SELECT } from '../services/payment-status.service'
@@ -368,15 +369,9 @@ router.post('/initiate', authenticate, requireLevel(1), async (req, res) => {
 
   // ── MODE ESPÈCES — confirmation directe par le collecteur ─────────────────
   if (data.modePaiement === 'ESPECES') {
-    // RB-02 exception : espèces confirmées sans webhook car l'argent est physiquement présent
-    await prisma.contribution.update({
-      where: { id: contribution.id },
-      data: {
-        statut: 'CONFIRME',
-        confirmedAt: new Date(), // RB-01 : horodatage serveur
-        paymentStatus: 'SUCCESS',
-      },
-    })
+    // RB-02 exception : espèces confirmées sans webhook car l'argent est physiquement
+    // présent ; il entre dans le grand livre chez celui qui l'a reçu
+    await prisma.$transaction(tx => confirmIntoLedger(tx, contribution, { confirmedById: req.user!.userId }))
     const receiptUrl = await generateReceiptPDF(contribution.id)
     return res.json({
       success: true,

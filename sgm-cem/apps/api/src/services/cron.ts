@@ -1,6 +1,8 @@
 import cron from 'node-cron'
-import { sendMonthlyStatement } from './notification'
+import { alertTresoriers, sendMonthlyStatement } from './notification'
 import { getPrisma } from '../lib/prisma'
+import { checkLedger } from './fund-ledger.service'
+import { logger } from '../lib/logger'
 
 const prisma = getPrisma()
 
@@ -22,6 +24,31 @@ export function scheduleMonthlyCron(): void {
   }, { timezone: 'Africa/Douala' })
 
   console.log('[Cron] Monthly statement job scheduled (1st of each month at 08:00 WAT)')
+
+  // Contrôle quotidien du grand livre des fonds (jalon J3), 06:10 heure de Yaoundé
+  cron.schedule('10 6 * * *', () => { void runLedgerCheck() }, { timezone: 'Africa/Douala' })
+}
+
+/** Contrôle d'invariant du grand livre : alerte la trésorerie au premier écart. */
+export async function runLedgerCheck(): Promise<number> {
+  try {
+    const result = await checkLedger(prisma)
+    if (result.mismatches.length === 0) {
+      logger.info({ confirmed: result.confirmedCount }, 'Grand livre des fonds : contrôle quotidien sans écart')
+      return 0
+    }
+    logger.error({ mismatches: result.mismatches.slice(0, 20), count: result.mismatches.length }, 'Grand livre des fonds : écarts détectés')
+    await alertTresoriers(
+      'Écart dans le suivi des fonds',
+      `${result.mismatches.length} contribution(s) dont l'emplacement ne correspond pas au grand livre. Contrôle : /api/funds/ledger/check`,
+      { contributionIds: result.mismatches.slice(0, 50).map(m => m.contributionId) },
+      { view: 'collecteurs' },
+    )
+    return result.mismatches.length
+  } catch (e) {
+    logger.error({ err: e }, 'Grand livre des fonds : contrôle quotidien impossible')
+    return -1
+  }
 }
 
 export async function runMonthlyStatements(): Promise<{ sent: number; errors: number }> {

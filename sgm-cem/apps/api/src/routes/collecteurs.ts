@@ -17,13 +17,16 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
 
   const [contributions, flowGroups, modeGroups, users] = await Promise.all([
     prisma.contribution.findMany({
+      // Fonds détenus par des personnes (collecteurs, responsables) ou en route ;
+      // chacun voit ce qu'il détient, la trésorerie et l'administration voient tout
       where: {
         statut: 'CONFIRME',
-        localisationFonds: { in: ['CHEZ_COLLECTEUR', 'EN_TRANSIT'] },
-        ...(myRole === 'COLLECTEUR' ? { collecteurId: myUserId } : {}),
+        localisationFonds: { in: ['CHEZ_COLLECTEUR', 'CHEZ_RESPONSABLE', 'EN_TRANSIT'] },
+        ...(['TRESORIER', 'ADMIN', 'DEVELOPER'].includes(myRole ?? '') ? {} : { detenteurId: myUserId }),
       },
       include: {
         collecteur: { select: { id: true, fullName: true, email: true, role: true } },
+        detenteur: { select: { id: true, fullName: true, email: true, role: true } },
         membre: { include: { user: { select: { fullName: true } } } },
         contributeurExterne: { select: { nom: true } },
         rubrique: { select: { code: true, title: true } },
@@ -62,11 +65,13 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
     : []
   const confirmerNameById = new Map(confirmers.map(u => [u.id, u.fullName]))
 
+  // Regroupement par DÉTENTEUR (qui a l'argent), et non par auteur de l'encaissement
   const byCollector = new Map<string, {
-    collecteurId: string
-    collecteurName: string
-    collecteurEmail?: string
-    totalChezCollecteur: number
+    detenteurId: string
+    detenteurName: string
+    detenteurEmail?: string
+    detenteurRole?: string
+    totalDetenu: number
     totalEnTransit: number
     totalARemettre: number
     nbContributions: number
@@ -77,12 +82,13 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
   }>()
 
   for (const contribution of contributions) {
-    const key = contribution.collecteurId ?? 'sans-collecteur'
+    const key = contribution.detenteurId ?? 'sans-detenteur'
     const row = byCollector.get(key) ?? {
-      collecteurId: key,
-      collecteurName: contribution.collecteur?.fullName ?? 'Sans collecteur',
-      collecteurEmail: contribution.collecteur?.email,
-      totalChezCollecteur: 0,
+      detenteurId: key,
+      detenteurName: contribution.detenteur?.fullName ?? 'Détenteur non renseigné',
+      detenteurEmail: contribution.detenteur?.email,
+      detenteurRole: contribution.detenteur?.role,
+      totalDetenu: 0,
       totalEnTransit: 0,
       totalARemettre: 0,
       nbContributions: 0,
@@ -92,7 +98,7 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
       lastValidatedAt: undefined,
     }
 
-    if (contribution.localisationFonds === 'CHEZ_COLLECTEUR') row.totalChezCollecteur += contribution.montant
+    if (contribution.localisationFonds !== 'EN_TRANSIT') row.totalDetenu += contribution.montant
     if (contribution.localisationFonds === 'EN_TRANSIT') row.totalEnTransit += contribution.montant
     row.totalARemettre += contribution.montant
     row.nbContributions += 1

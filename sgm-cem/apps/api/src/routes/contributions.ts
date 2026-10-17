@@ -11,6 +11,7 @@ import { getConfig } from '../services/config.service'
 import { notifyCollecteurNewContribution } from '../services/notification'
 import { calculateRemainingBalance } from '@sgm-cem/shared'
 import { getPrisma } from '../lib/prisma'
+import { confirmIntoLedger, recordDirectEntry } from '../services/fund-ledger.service'
 import {
   assertContributionAction,
   assertContributionReadable,
@@ -403,17 +404,21 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
 
   let contribution
   try {
-    contribution = await prisma.contribution.create({
-      data: {
-        ...contributionData,
-        collecteurId,
-        montantAttendu: montantAttendu ?? data.montant,
-        statut: isDirectCash ? 'CONFIRME' : 'EN_ATTENTE_CONFIRMATION',
-        localisationFonds: data.modePaiement === 'ESPECES' ? 'CHEZ_COLLECTEUR' : 'EN_TRANSIT',
-        confirmedAt: isDirectCash ? new Date() : undefined,
-        confirmedById: isDirectCash ? req.user!.userId : undefined,
-      },
-      include: CONTRIBUTION_CREATED_INCLUDE,
+    contribution = await prisma.$transaction(async tx => {
+      const created = await tx.contribution.create({
+        data: {
+          ...contributionData,
+          collecteurId,
+          montantAttendu: montantAttendu ?? data.montant,
+          statut: isDirectCash ? 'CONFIRME' : 'EN_ATTENTE_CONFIRMATION',
+          localisationFonds: data.modePaiement === 'ESPECES' ? 'CHEZ_COLLECTEUR' : 'EN_TRANSIT',
+          confirmedAt: isDirectCash ? new Date() : undefined,
+          confirmedById: isDirectCash ? req.user!.userId : undefined,
+        },
+        include: CONTRIBUTION_CREATED_INCLUDE,
+      })
+      if (isDirectCash) await recordDirectEntry(tx, created, req.user!.userId)
+      return created
     })
   } catch (err) {
     // Deux envois simultanés de la même clé : un seul crée, l'autre est un rejeu
@@ -561,17 +566,11 @@ router.patch('/:id/confirm', authenticate, requireLevel(2), async (req, res) => 
   // Espèces et virements seulement, par le collecteur désigné ou un administrateur
   assertContributionAction(actorOf(req), contribution, 'canConfirm')
 
-  // Transition conditionnelle : deux confirmations simultanées n'en font qu'une
-  const result = await prisma.contribution.updateMany({
-    where: { id, statut: 'EN_ATTENTE_CONFIRMATION' },
-    data: {
-      statut: 'CONFIRME',
-      paymentStatus: 'SUCCESS',
-      confirmedAt: new Date(),
-      confirmedById: req.user!.userId,
-    },
-  })
-  if (result.count !== 1) throw new AppError('BUSINESS_RULE', 'Cette contribution a déjà été traitée')
+  // Transition conditionnelle (deux confirmations simultanées n'en font qu'une) et
+  // entrée de l'argent dans le grand livre : espèces chez le collecteur, virement
+  // chez le trésorier
+  const confirmed = await prisma.$transaction(tx => confirmIntoLedger(tx, contribution, { confirmedById: req.user!.userId }))
+  if (!confirmed) throw new AppError('BUSINESS_RULE', 'Cette contribution a déjà été traitée')
   const updated = await prisma.contribution.findUniqueOrThrow({ where: { id } })
 
   const override = contribution.collecteurId !== req.user!.userId
@@ -661,14 +660,21 @@ router.patch('/:id/resolve-litige', authenticate, requireLevel(3), async (req, r
   if (contribution.statut !== 'LITIGE') throw new AppError('BUSINESS_RULE', 'Cette contribution n\'est pas en litige')
   assertResolutionAllowed(actorOf(req), contribution, resolution)
 
-  const result = await prisma.contribution.updateMany({
-    where: { id, statut: 'LITIGE' },
-    data: {
-      statut: resolution,
-      confirmedAt: resolution === 'CONFIRME' ? new Date() : contribution.confirmedAt,
-      confirmedById: resolution === 'CONFIRME' ? req.user!.userId : contribution.confirmedById,
-      litigeMotif: note ? `${contribution.litigeMotif ?? ''}\nRésolution : ${note}` : contribution.litigeMotif,
+  const result = await prisma.$transaction(async tx => {
+    const updatedRows = await tx.contribution.updateMany({
+      where: { id, statut: 'LITIGE' },
+      data: {
+        statut: resolution,
+        confirmedAt: resolution === 'CONFIRME' ? new Date() : contribution.confirmedAt,
+        confirmedById: resolution === 'CONFIRME' ? req.user!.userId : contribution.confirmedById,
+        litigeMotif: note ? `${contribution.litigeMotif ?? ''}\nRésolution : ${note}` : contribution.litigeMotif,
+      }
+    })
+    // Litige ouvert avant toute confirmation : l'argent entre seulement maintenant dans le grand livre
+    if (updatedRows.count === 1 && resolution === 'CONFIRME' && !(await tx.fundMovement.findFirst({ where: { contributionId: id }, select: { id: true } }))) {
+      await recordDirectEntry(tx, contribution, req.user!.userId)
     }
+    return updatedRows
   })
   if (result.count !== 1) throw new AppError('BUSINESS_RULE', 'Ce litige a déjà été traité')
   const updated = await prisma.contribution.findUniqueOrThrow({ where: { id } })
@@ -686,6 +692,22 @@ router.patch('/:id/resolve-litige', authenticate, requireLevel(3), async (req, r
 
   res.json({ success: true, data: updated })
 })
+
+const FUND_MOVEMENT_LABELS: Record<string, string> = {
+  CONFIRMATION: 'Argent entré dans le circuit',
+  TRANSFERT_ENVOI: 'Fonds remis en transfert',
+  TRANSFERT_RECEPTION: 'Fonds reçus par le destinataire',
+  TRANSFERT_REFUS: 'Transfert refusé, fonds revenus',
+  TRANSFERT_ANNULATION: 'Transfert annulé, fonds revenus',
+  DEPOT_BANCAIRE: 'Déposé en banque (reçu archivé)',
+  REPRISE_INITIALE: 'Position de départ',
+}
+
+const LOCATION_LABELS: Record<string, string> = {
+  CHEZ_COLLECTEUR: 'Chez le collecteur', EN_TRANSIT: 'En transit', CHEZ_RESPONSABLE: 'Chez le responsable',
+  REMIS_TRESORIER: 'Chez le trésorier', EN_CAISSE: 'En caisse', EN_BANQUE: 'En banque',
+  PORTEFEUILLE_ELECTRONIQUE: 'Portefeuille électronique',
+}
 
 const TIMELINE_ACTION_LABELS: Record<string, string> = {
   CREATE: 'Contribution créée',
@@ -740,9 +762,25 @@ router.get('/:id/timeline', authenticate, requireLevel(2), async (req, res) => {
     })
   }
 
-  // Trajet réel de l'argent (espèces uniquement) — la collecte publique/Mobile
-  // Money/Carte n'a pas de FundsTransfer, aucune ligne supplémentaire alors.
-  if (contribution.fundsTransfer) {
+  // Trajet réel de l'argent : grand livre des fonds (tout l'historique). Les
+  // événements antérieurs à sa mise en service viennent de l'ancien suivi.
+  const movements = await prisma.fundMovement.findMany({ where: { contributionId: id }, orderBy: [{ at: 'asc' }, { id: 'asc' }] })
+  const ledgerStart = movements.find(m => m.reason === 'REPRISE_INITIALE')?.at ?? (movements.length ? null : undefined)
+  const beforeLedger = (at: Date) => ledgerStart === undefined || (ledgerStart !== null && at < ledgerStart)
+  const personIds = Array.from(new Set(movements.flatMap(m => [m.actorId, m.holderToId]).filter((v): v is string => Boolean(v))))
+  const people = new Map((await prisma.user.findMany({ where: { id: { in: personIds } }, select: { id: true, fullName: true } })).map(u => [u.id, u.fullName]))
+  for (const m of movements) {
+    if (m.reason === 'REPRISE_INITIALE') continue
+    timeline.push({
+      step: `FONDS_${m.reason}`,
+      label: FUND_MOVEMENT_LABELS[m.reason],
+      actor: (m.actorId && people.get(m.actorId)) ?? 'Système',
+      at: m.at,
+      localisation: `${LOCATION_LABELS[m.toLocation]}${m.holderToId && people.get(m.holderToId) ? ` (${people.get(m.holderToId)})` : ''}`,
+    })
+  }
+
+  if (contribution.fundsTransfer && beforeLedger(contribution.fundsTransfer.createdAt)) {
     const ft = contribution.fundsTransfer
     timeline.push({
       step: 'TRANSFER',
@@ -761,7 +799,7 @@ router.get('/:id/timeline', authenticate, requireLevel(2), async (req, res) => {
       timeline.push({ step: 'TRANSFER_CANCELLED', label: 'Transfert annulé', actor: ft.senderName, at: ft.cancelledAt })
     }
   }
-  if (contribution.bankDeposit) {
+  if (contribution.bankDeposit && beforeLedger(contribution.bankDeposit.createdAt)) {
     timeline.push({
       step: 'BANK_DEPOSIT',
       label: 'Déposé en banque',

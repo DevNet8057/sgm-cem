@@ -163,19 +163,19 @@ export function Dashboard() {
       {canSeeFundsHolders && (
         <Panel title="Fonds détenus par collecteur" extra={<Button type="link" onClick={() => setActiveView('collecteurs')}>Voir tout</Button>}>
           {collecteursQuery.isLoading ? <Skeleton active paragraph={{ rows: 4 }} /> : (collecteursQuery.data?.summary?.length ?? 0) === 0 ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Aucun fonds détenu par un collecteur actuellement" />
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Aucun fonds détenu par un collecteur ou un responsable actuellement" />
           ) : (
             <div className="space-y-2">
               {(collecteursQuery.data?.summary ?? []).slice(0, 6).map(item => (
                 <button
-                  key={item.collecteurId}
+                  key={item.detenteurId}
                   type="button"
-                  onClick={() => navigateToNotification({ targetView: 'journal', targetId: item.collecteurId })}
+                  onClick={() => navigateToNotification({ targetView: 'journal', targetId: item.detenteurId })}
                   className="flex w-full items-center gap-3 rounded-xl border border-slate-100 p-3 text-left transition hover:border-green-300 hover:bg-green-50"
                 >
-                  <Avatar name={item.collecteurName} size="sm" />
+                  <Avatar name={item.detenteurName} size="sm" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-slate-800">{item.collecteurName}</span>
+                    <span className="block truncate text-sm font-semibold text-slate-800">{item.detenteurName}</span>
                     <span className="block truncate text-xs text-slate-400">
                       {item.nbContributions} contribution(s){item.lastValidatedByName ? ` · validé par ${item.lastValidatedByName}` : ''}
                     </span>

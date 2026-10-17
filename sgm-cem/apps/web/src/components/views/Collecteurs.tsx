@@ -33,6 +33,7 @@ export function Collecteurs() {
   // B6 — dépôt bancaire trésorier
   const [bankSelected, setBankSelected] = useState<string[]>([])
   const [referenceBordereau, setReferenceBordereau] = useState('')
+  const [depositProof, setDepositProof] = useState<File | null>(null)
   const [bankError, setBankError] = useState('')
   const [bankOpen, setBankOpen] = useState<string[]>([])
 
@@ -93,14 +94,19 @@ export function Collecteurs() {
     },
   })
 
+  // Décision du Bureau : pas de passage « En banque » sans reçu de dépôt (archivé)
   const bankDepositMutation = useMutation({
-    mutationFn: () => api.patch('/funds/bank-deposit', {
-      contributionIds: bankSelected,
-      referenceBordereau,
-    }),
+    mutationFn: () => {
+      const form = new FormData()
+      form.append('contributionIds', JSON.stringify(bankSelected))
+      form.append('referenceBordereau', referenceBordereau)
+      if (depositProof) form.append('proof', depositProof)
+      return api.patch('/funds/bank-deposit', form)
+    },
     onSuccess: async () => {
       setBankSelected([])
       setReferenceBordereau('')
+      setDepositProof(null)
       setBankError('')
       await queryClient.invalidateQueries({ queryKey: ['contributions-en-caisse'] })
       await queryClient.invalidateQueries({ queryKey: ['collecteurs'] })
@@ -113,8 +119,9 @@ export function Collecteurs() {
   })
 
   const contributions = useMemo(() => data?.contributions ?? [], [data?.contributions])
+  // Remettables : fonds détenus par une personne (collecteur ou responsable), par soi-même
   const isTransferable = (c: Contribution) =>
-    c.localisationFonds === 'CHEZ_COLLECTEUR' && (canTransferAny || c.collecteurId === data?.myUserId)
+    (c.localisationFonds === 'CHEZ_COLLECTEUR' || c.localisationFonds === 'CHEZ_RESPONSABLE') && (canTransferAny || c.detenteurId === data?.myUserId)
   const selectedTotal = useMemo(
     () => contributions.filter(c => selected.includes(c.id)).reduce((sum, c) => sum + c.montant, 0),
     [contributions, selected]
@@ -124,7 +131,7 @@ export function Collecteurs() {
   const [expanded, setExpanded] = useState<string[]>([])
   const groups = useMemo(() => (data?.summary ?? []).map(summary => ({
     summary,
-    items: contributions.filter(c => (c.collecteurId ?? 'sans-collecteur') === summary.collecteurId),
+    items: contributions.filter(c => (c.detenteurId ?? 'sans-detenteur') === summary.detenteurId),
   })), [data?.summary, contributions])
 
   function toggle(id: string) {
@@ -182,11 +189,11 @@ export function Collecteurs() {
         ) : (
           groups.map(group => (
             <CollectorGroup
-              key={group.summary.collecteurId}
+              key={group.summary.detenteurId}
               summary={group.summary}
               items={group.items}
-              open={groups.length === 1 || expanded.includes(group.summary.collecteurId)}
-              onToggleOpen={() => setExpanded(cur => cur.includes(group.summary.collecteurId) ? cur.filter(k => k !== group.summary.collecteurId) : [...cur, group.summary.collecteurId])}
+              open={groups.length === 1 || expanded.includes(group.summary.detenteurId)}
+              onToggleOpen={() => setExpanded(cur => cur.includes(group.summary.detenteurId) ? cur.filter(k => k !== group.summary.detenteurId) : [...cur, group.summary.detenteurId])}
               selected={selected}
               isSelectable={isTransferable}
               onToggle={toggle}
@@ -287,7 +294,15 @@ export function Collecteurs() {
               )}
             </>
           )}
-          <div className="grid grid-cols-1 gap-2 border-t border-gray-100 p-3 sm:grid-cols-[1fr_auto]">
+          <div className="grid grid-cols-1 gap-2 border-t border-gray-100 p-3 sm:grid-cols-[1fr_1fr_auto]">
+            <label className={cn('flex min-h-11 cursor-pointer items-center gap-2 rounded-[10px] border border-dashed px-3 text-sm',
+              depositProof ? 'border-[#1A6B1A] bg-[#E8F5E8] text-[#0F4A0F]' : 'border-gray-300 text-slate-600')}>
+              <FolderOpen size={15} aria-hidden />
+              <span className="min-w-0 flex-1 truncate">{depositProof ? depositProof.name : 'Reçu de dépôt (PDF ou photo) — obligatoire'}</span>
+              <input type="file" className="sr-only" accept="application/pdf,image/jpeg,image/png,image/webp" capture="environment"
+                aria-label="Reçu de dépôt bancaire"
+                onChange={e => setDepositProof(e.target.files?.[0] ?? null)} />
+            </label>
             <input
               value={referenceBordereau}
               onChange={e => setReferenceBordereau(e.target.value)}
@@ -297,7 +312,7 @@ export function Collecteurs() {
             />
             <Button
               variant="primary"
-              disabled={bankSelected.length === 0 || !referenceBordereau.trim()}
+              disabled={bankSelected.length === 0 || !referenceBordereau.trim() || !depositProof}
               loading={bankDepositMutation.isPending}
               onClick={() => { setBankError(''); bankDepositMutation.mutate() }}
             >
@@ -310,6 +325,7 @@ export function Collecteurs() {
 
       {/* B6 : Historique des dépôts — les références de bordereau sont les PREUVES
           consultables par l'ADMIN (et le trésorier) */}
+      {canSeeDeposits && <FundsPositionCard />}
       {canSeeDeposits && <BankDepositHistory />}
 
       <TraceSection />
@@ -326,6 +342,7 @@ interface BankDepositEntry {
   totalAmount: number
   depositedByName: string
   createdAt: string
+  hasProof?: boolean
   contributions: Array<{
     id: string
     montant: number
@@ -333,6 +350,83 @@ interface BankDepositEntry {
     membre?: { user: { fullName: string } }
     rubrique?: { code: string; title: string }
   }>
+}
+
+/** Reçu de dépôt archivé : servi par l'API (session requise), ouvert dans un onglet. */
+async function openProof(depositId: string) {
+  const tab = window.open('', '_blank')
+  try {
+    const res = await api.get(`/funds/bank-deposits/${depositId}/proof`, { responseType: 'blob' })
+    const url = URL.createObjectURL(res.data as Blob)
+    if (tab) tab.location.href = url
+    else window.location.href = url
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  } catch {
+    tab?.close()
+  }
+}
+
+// ── Position des fonds à une date (grand livre, jalon J3) ──────────────
+interface FundsPositionData {
+  at: string
+  ledgerStartedAt: string | null
+  beforeLedgerStart: boolean
+  byLocation: Array<{ location: string; amount: number; count: number }>
+  total: number
+}
+
+function FundsPositionCard() {
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const position = useQuery<FundsPositionData>({
+    queryKey: ['funds-position', date],
+    queryFn: async () => (await api.get('/funds/position', { params: { date } })).data.data,
+  })
+  const check = useQuery<{ confirmedCount: number; mismatches: unknown[] }>({
+    queryKey: ['funds-ledger-check'],
+    queryFn: async () => (await api.get('/funds/ledger/check')).data.data,
+    refetchInterval: 300_000,
+  })
+  const p = position.data
+  return (
+    <section aria-labelledby="position-fonds" className="mt-5 rounded-[18px] border border-gray-100 bg-white p-4">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h3 id="position-fonds" className="font-display font-semibold text-[#0F4A0F]">Position des fonds à une date</h3>
+          <p className="text-xs text-slate-500">Reconstituée à partir du grand livre (chaque mouvement d&apos;argent est enregistré).</p>
+        </div>
+        <label className="flex flex-col gap-1 text-xs font-semibold text-slate-600">
+          Date
+          <input type="date" value={date} max={new Date().toISOString().slice(0, 10)} onChange={e => setDate(e.target.value)}
+            className="min-h-11 rounded-[10px] border border-gray-200 px-3 text-sm" />
+        </label>
+      </div>
+      {check.data && (
+        <p className={cn('mb-3 rounded-[10px] px-3 py-2 text-xs font-semibold', check.data.mismatches.length === 0 ? 'bg-[#E8F5E8] text-[#0F4A0F]' : 'bg-red-50 text-red-700')}>
+          {check.data.mismatches.length === 0
+            ? `Contrôle du grand livre : aucun écart (${check.data.confirmedCount} contributions confirmées)`
+            : `Contrôle du grand livre : ${check.data.mismatches.length} écart(s) — la trésorerie a été alertée`}
+        </p>
+      )}
+      {p?.beforeLedgerStart ? (
+        <p className="text-sm text-slate-600">
+          Date antérieure à la mise en service du grand livre{p.ledgerStartedAt ? ` (${formatDate(p.ledgerStartedAt)})` : ''} : position non reconstituable.
+        </p>
+      ) : (
+        <ul className="divide-y divide-gray-50">
+          {(p?.byLocation ?? []).map(l => (
+            <li key={l.location} className="flex items-center justify-between py-2 text-sm">
+              <span className="text-slate-600">{LOCATION_LABELS[l.location] ?? l.location} <span className="text-xs text-slate-500">· {l.count}</span></span>
+              <span className="font-mono font-semibold text-[#0F4A0F]">{formatAmount(l.amount)}</span>
+            </li>
+          ))}
+          <li className="flex items-center justify-between py-2 text-sm font-bold">
+            <span>Total</span>
+            <span className="font-mono text-[#0F4A0F]">{formatAmount(p?.total ?? 0)}</span>
+          </li>
+        </ul>
+      )}
+    </section>
+  )
 }
 
 function BankDepositHistory() {
@@ -383,7 +477,10 @@ function BankDepositHistory() {
                   <td className="px-4 py-3 text-xs text-gray-600" data-label="Déposé par">{d.depositedByName}</td>
                   <td className="px-4 py-3 text-xs text-gray-500" data-label="Contributions">{d.contributions.length} contribution(s)</td>
                   <td className="px-4 py-3 text-right" data-label="Action">
-                    <Button size="sm" variant="ghost" onClick={() => setDetail(d)}>Détail</Button>
+                    <div className="flex justify-end gap-1">
+                      {d.hasProof && <Button size="sm" variant="ghost" onClick={() => openProof(d.id)}>Voir le reçu</Button>}
+                      <Button size="sm" variant="ghost" onClick={() => setDetail(d)}>Détail</Button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -584,9 +681,12 @@ function CollectorGroup({ summary, items, open, onToggleOpen, selected, isSelect
     <div className="border-b border-gray-100 last:border-b-0">
       <button type="button" onClick={onToggleOpen} aria-expanded={open}
         className="flex min-h-[60px] w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1A6B1A]">
-        <Avatar name={summary.collecteurName} size="sm" />
+        <Avatar name={summary.detenteurName} size="sm" />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-gray-800">{summary.collecteurName}</span>
+          <span className="block truncate text-sm font-semibold text-gray-800">
+            {summary.detenteurName}
+            {summary.detenteurRole && <span className="ml-1.5 text-xs font-normal text-slate-500">{ROLE_LABELS[summary.detenteurRole as UserRole] ?? summary.detenteurRole}</span>}
+          </span>
           <span className="block truncate text-xs text-slate-500">
             {summary.nbContributions} contribution(s)
             {summary.totalEnTransit > 0 && ` · ${formatAmount(summary.totalEnTransit)} en transit`}
@@ -604,7 +704,7 @@ function CollectorGroup({ summary, items, open, onToggleOpen, selected, isSelect
           {selectableIds.length > 0 && (
             <label className="flex min-h-11 items-center gap-3 px-4 text-xs font-semibold text-slate-600">
               <input type="checkbox" className="h-5 w-5 accent-[#1A6B1A]" checked={allSelected} onChange={() => onToggleGroup(selectableIds)} />
-              Tout sélectionner chez {summary.collecteurName}
+              Tout sélectionner chez {summary.detenteurName}
             </label>
           )}
           <ul>

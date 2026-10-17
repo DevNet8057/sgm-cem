@@ -15,4 +15,10 @@ docker exec sgm-restore-test createdb -U postgres restore
 docker exec -i sgm-restore-test pg_restore -U postgres -d restore --no-owner < "$DUMP"
 docker exec sgm-restore-test psql -U postgres -d restore -At -c \
  "select 'users', count(*)::text from users union all select 'contributions', count(*)::text from contributions union all select 'max_contribution', coalesce(max(\"createdAt\")::text,'-') from contributions;"
+# Reçus de dépôt archivés : chaque dépôt avec reçu en base doit avoir son fichier sauvegardé
+restic dump latest --tag files uploads.tar | tar -tf - > "$TMP/fichiers.txt"
+EXPECTED=$(docker exec sgm-restore-test psql -U postgres -d restore -At -c "select count(*) from bank_deposits where \"proofKey\" is not null")
+FOUND=$(grep -c '^uploads/banque/.\+' "$TMP/fichiers.txt" || true)
+echo "reçus de dépôt : ${FOUND} fichier(s) sauvegardé(s) pour ${EXPECTED} dépôt(s) avec reçu"
+[ "$FOUND" -ge "$EXPECTED" ] || { echo "❌ reçus de dépôt manquants dans la sauvegarde"; docker stop sgm-restore-test; exit 1; }
 docker stop sgm-restore-test; rm -rf "$TMP"

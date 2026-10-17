@@ -105,6 +105,8 @@ export interface Contribution {
   contributeurExterne?: { nom: string } | null
   rubrique?: { title: string; code: string }
   collecteur?: { fullName: string } | null
+  // Détenteur courant de l'argent (grand livre des fonds)
+  detenteurId?: string | null
   fundsTransfer?: FundsTransfer
   // Capacités calculées par l'API pour l'utilisateur courant (seule source de vérité)
   actions?: {
@@ -147,11 +149,13 @@ export interface FundsTransfer {
   receiver?: { role: UserRole }
 }
 
+// Fonds regroupés par DÉTENTEUR (personne qui a l'argent), pas par auteur de l'encaissement
 export interface CollecteurSummary {
-  collecteurId: string
-  collecteurName: string
-  collecteurEmail?: string
-  totalChezCollecteur: number
+  detenteurId: string
+  detenteurName: string
+  detenteurEmail?: string
+  detenteurRole?: string
+  totalDetenu: number
   totalEnTransit: number
   totalARemettre: number
   nbContributions: number

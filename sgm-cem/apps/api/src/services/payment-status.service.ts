@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { getPrisma } from '../lib/prisma'
+import { recordMovements } from './fund-ledger.service'
 import { getYeliiTransaction } from './yelii.service'
 import { verifyCinetpayTransaction } from './cinetpay.service'
 import { generateReceiptPDF } from './receipt'
@@ -249,8 +250,17 @@ export async function applyProviderOutcome(txId: string, outcome: ProviderOutcom
           netAmount,
           // Compte marchand Yelii/CinetPay : aucune personne ne détient cet argent
           localisationFonds: 'PORTEFEUILLE_ELECTRONIQUE',
+          detenteurId: null,
         },
       })
+      if (result.count === 0) return result
+      // Confirmation partielle (course avec un autre appelant) : tout annuler, la
+      // réconciliation reprendra la transaction entière
+      if (result.count !== pending.length) throw new Error(`Confirmation partielle de ${txId} : ${result.count}/${pending.length}`)
+      await recordMovements(tx, pending.map(line => ({
+        contributionId: line.id, montant: line.montant, from: null, to: 'PORTEFEUILLE_ELECTRONIQUE' as const,
+        reason: 'CONFIRMATION' as const, transferId: null,
+      })))
       // Référence de paiement par défaut = identifiant fournisseur
       await tx.contribution.updateMany({
         where: { externalTransactionId: txId, referencePaiement: null },

@@ -123,6 +123,17 @@ enum LocalisationFonds {
   PORTEFEUILLE_ELECTRONIQUE
 }
 
+// Motif d'un mouvement du grand livre des fonds (fund_movements)
+enum FundMovementReason {
+  CONFIRMATION // l'argent entre dans le circuit (encaissement ou paiement confirmé)
+  TRANSFERT_ENVOI
+  TRANSFERT_RECEPTION
+  TRANSFERT_REFUS
+  TRANSFERT_ANNULATION
+  DEPOT_BANCAIRE
+  REPRISE_INITIALE // position constatée à la mise en service du grand livre
+}
+
 enum DocumentStatut {
   BROUILLON
   EN_ATTENTE
@@ -203,6 +214,7 @@ model User {
 
   membre           Membre?
   collecteurOf     Contribution[] @relation("CollecteurContributions")
+  fondsDetenus     Contribution[] @relation("ContributionDetenteur")
   createdRubriques Rubrique[]
   auditLogs        AuditLog[]
   notifications    Notification[]
@@ -220,16 +232,16 @@ model User {
 }
 
 model UserSession {
-  id           String   @id @default(cuid())
-  userId       String
-  refreshToken String   @unique
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
+  id                   String    @id @default(cuid())
+  userId               String
+  refreshToken         String    @unique
+  expiresAt            DateTime
+  createdAt            DateTime  @default(now())
   // Rotation du refresh token : l'ancien reste accepté quelques secondes
   // (onglets concurrents) ; présenté plus tard, il révèle un vol → session révoquée.
   previousRefreshToken String?
   rotatedAt            DateTime?
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([previousRefreshToken])
@@ -258,11 +270,11 @@ model Membre {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  user          User           @relation(fields: [userId], references: [id])
-  contributions Contribution[]
+  user           User           @relation(fields: [userId], references: [id])
+  contributions  Contribution[]
   paymentBatches PaymentBatch[]
-  couple        Membre?        @relation("CoupleLink", fields: [coupleId], references: [id])
-  coupleOf      Membre[]       @relation("CoupleLink")
+  couple         Membre?        @relation("CoupleLink", fields: [coupleId], references: [id])
+  coupleOf       Membre[]       @relation("CoupleLink")
 
   @@index([groupe])
   @@index([statut])
@@ -329,14 +341,14 @@ model CollectePublique {
 }
 
 model ContributeurExterne {
-  id        String   @id @default(cuid())
-  nom       String
-  phone     String // E.164 normalisé (+237…)
-  email     String?
+  id             String    @id @default(cuid())
+  nom            String
+  phone          String // E.164 normalisé (+237…)
+  email          String?
   // Consentement explicite au traitement (loi n° 2024/017) : date et version du texte accepté
   consentAt      DateTime?
   consentVersion String?
-  createdAt DateTime @default(now())
+  createdAt      DateTime  @default(now())
 
   contributions Contribution[]
 
@@ -411,17 +423,17 @@ model Contribution {
   amountChargedToPayer  Int?
   commissionPaidByPayer Int?
 
-  litigeMotif     String?
-  confirmedAt     DateTime?
-  confirmedById   String?
+  litigeMotif               String?
+  confirmedAt               DateTime?
+  confirmedById             String?
   // Autorisation administrative de confirmation par un trésorier
   confirmationAuthorization Json?
-  receiptUrl      String?
-  receiptSentAt   DateTime?
-  proofUrl        String?
-  proofUploadedAt DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  receiptUrl                String?
+  receiptSentAt             DateTime?
+  proofUrl                  String?
+  proofUploadedAt           DateTime?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 
   // Transfer reference
   transferId    String?
@@ -430,6 +442,12 @@ model Contribution {
   // Dépôt bancaire (B6) — la référence de bordereau est la preuve consultable
   bankDepositId String?
   bankDeposit   BankDeposit? @relation("ContributionBankDeposit", fields: [bankDepositId], references: [id])
+
+  // Détenteur courant de l'argent (personne) ; distinct de collecteurId, l'auteur
+  // de l'encaissement, qui ne change plus. Null : banque, portefeuille, trésorerie.
+  detenteurId   String?
+  detenteur     User?          @relation("ContributionDetenteur", fields: [detenteurId], references: [id])
+  fundMovements FundMovement[]
 
   membre              Membre?              @relation(fields: [membreId], references: [id])
   rubrique            Rubrique             @relation(fields: [rubriqueId], references: [id])
@@ -445,6 +463,7 @@ model Contribution {
   @@index([paymentStatus])
   @@index([paymentBatchId])
   @@index([createdAt])
+  @@index([detenteurId])
   @@map("contributions")
 }
 
@@ -452,18 +471,18 @@ model Contribution {
 // Un lot représente une seule transaction fournisseur répartie sur plusieurs
 // contributions; les allocations conservent les lignes { rubriqueId, montant }.
 model PaymentBatch {
-  id                    String            @id @default(cuid())
+  id                    String             @id @default(cuid())
   membreId              String?
   budget                Int
   allocations           Json
   totalAllocated        Int
   status                PaymentBatchStatus @default(PENDING)
-  idempotencyKey        String            @unique
-  requestFingerprint    String            @unique
+  idempotencyKey        String             @unique
+  requestFingerprint    String             @unique
   externalTransactionId String?
   paymentUrl            String?
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
 
   membre        Membre?        @relation(fields: [membreId], references: [id])
   contributions Contribution[]
@@ -481,9 +500,9 @@ model PaymentBatch {
 enum PaymentAttemptStatus {
   INITIATING // demande en cours d'envoi
   PROCESSING // identifiant fournisseur reçu
-  UNCERTAIN  // réponse perdue (délai, réponse illisible) : le payeur a peut-être été débité
-  FAILED     // refus certain du prestataire
-  LINKED     // webhook orphelin rattaché après coup
+  UNCERTAIN // réponse perdue (délai, réponse illisible) : le payeur a peut-être été débité
+  FAILED // refus certain du prestataire
+  LINKED // webhook orphelin rattaché après coup
 }
 
 model PaymentAttempt {
@@ -536,6 +555,12 @@ model BankDeposit {
   depositedById      String
   depositedBy        User      @relation("BankDepositDepositor", fields: [depositedById], references: [id])
   depositedByName    String // snapshot du nom au moment du dépôt
+  // Reçu de dépôt (fichier) : obligatoire pour tout nouveau dépôt, archivé, jamais public
+  proofKey           String?
+  proofBucket        String?
+  proofMime          String?
+  proofName          String?
+  proofSize          Int?
   createdAt          DateTime  @default(now())
 
   contributions Contribution[] @relation("ContributionBankDeposit")
@@ -785,11 +810,11 @@ model AuditLog {
 }
 
 model Notification {
-  id        String             @id @default(cuid())
-  userId    String
-  title     String
-  body      String
-  type      String
+  id         String             @id @default(cuid())
+  userId     String
+  title      String
+  body       String
+  type       String
   // Redirection contextuelle au clic (notifications cliquables) : targetView
   // réutilise exactement les valeurs de activeView (Sidebar/dashboard router,
   // ex. 'validations', 'transfer-validations', 'mes-contributions') pour que
@@ -799,11 +824,11 @@ model Notification {
   // non structurel (ex: broadcast admin, montants d'une alerte).
   targetView String?
   targetId   String?
-  data      Json?
-  isRead    Boolean            @default(false)
-  statut    NotificationStatut @default(PENDING)
-  sentAt    DateTime?
-  createdAt DateTime           @default(now())
+  data       Json?
+  isRead     Boolean            @default(false)
+  statut     NotificationStatut @default(PENDING)
+  sentAt     DateTime?
+  createdAt  DateTime           @default(now())
 
   user User @relation(fields: [userId], references: [id])
 
@@ -815,16 +840,16 @@ model Notification {
 // ─── OBSERVABILITÉ ADMINISTRATEUR ───────────────────────────────────────
 
 model ActivitySession {
-  id              String   @id @default(cuid())
-  authSessionId   String   @unique
+  id              String    @id @default(cuid())
+  authSessionId   String    @unique
   userId          String
   authExpiresAt   DateTime
-  startedAt       DateTime @default(now())
-  lastSeenAt      DateTime @default(now())
+  startedAt       DateTime  @default(now())
+  lastSeenAt      DateTime  @default(now())
   lastActiveAt    DateTime?
-  lastAccountedAt DateTime @default(now())
+  lastAccountedAt DateTime  @default(now())
   endedAt         DateTime?
-  activeSeconds   Int      @default(0)
+  activeSeconds   Int       @default(0)
 
   tabs           ActivityTab[]
   pageAggregates ActivityPageAggregate[]
@@ -866,4 +891,28 @@ model ActivityPageAggregate {
   @@unique([sessionId, pageKey, day])
   @@index([day, pageKey])
   @@map("activity_page_aggregates")
+}
+
+// Grand livre des fonds : AJOUT SEUL. Chaque changement d'emplacement de l'argent
+// y est écrit dans la même transaction que la mise à jour de la contribution ;
+// la position à une date se reconstitue à partir de ces lignes.
+model FundMovement {
+  id             String             @id @default(cuid())
+  contributionId String
+  montant        Int
+  fromLocation   LocalisationFonds?
+  toLocation     LocalisationFonds
+  holderFromId   String?
+  holderToId     String?
+  reason         FundMovementReason
+  transferId     String?
+  bankDepositId  String?
+  actorId        String?
+  at             DateTime           @default(now())
+
+  contribution Contribution @relation(fields: [contributionId], references: [id])
+
+  @@index([contributionId, at])
+  @@index([at])
+  @@map("fund_movements")
 }
