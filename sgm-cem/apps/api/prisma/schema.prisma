@@ -658,28 +658,32 @@ model TypeDocument {
 }
 
 model Document {
-  id           String         @id @default(cuid())
-  commissionId String
-  typeCode     String
-  titre        String
-  description  String?
-  fileName     String
-  fileSize     Int
-  mimeType     String
-  s3Key        String         @unique
-  s3Bucket     String
-  statut       DocumentStatut @default(BROUILLON)
-  version      Int            @default(1)
-  uploadedById String
-  approvedById String?
-  approvedAt   DateTime?
-  rejectedById String?
-  rejectedAt   DateTime?
-  rejetMotif   String?
-  expiresAt    DateTime?
-  tags         String[]
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  id               String         @id @default(cuid())
+  commissionId     String
+  typeCode         String
+  titre            String
+  description      String?
+  fileName         String
+  fileSize         Int
+  mimeType         String
+  s3Key            String         @unique
+  s3Bucket         String
+  statut           DocumentStatut @default(BROUILLON)
+  version          Int            @default(1)
+  uploadedById     String
+  approvedById     String?
+  approvedAt       DateTime?
+  rejectedById     String?
+  rejectedAt       DateTime?
+  rejetMotif       String?
+  expiresAt        DateTime?
+  // Versions (EF-M11-05) : document d'origine de la famille ; null pour la version 1
+  parentId         String?
+  // Conservation (EF-M11-04) : avertissement envoyé avant l'échéance
+  expiryNotifiedAt DateTime?
+  tags             String[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
   commission   Commission   @relation(fields: [commissionId], references: [id])
   typeDocument TypeDocument @relation(fields: [typeCode], references: [code])
@@ -687,6 +691,8 @@ model Document {
 
   @@index([commissionId])
   @@index([statut])
+  @@index([parentId])
+  @@index([expiresAt])
   @@map("documents")
 }
 

@@ -330,11 +330,11 @@ Voir la matrice détaillée au §8.
 
 | ID | Exigence | Prio. | Statut |
 |---|---|---|---|
-| EF-M11-01 | Dépôt d'un document (PDF, image, Word, Excel ; 20 Mo maximum) rattaché à une commission et à un type ; le type définit la durée de conservation. | S | ✅ (type réel du fichier non vérifié) |
+| EF-M11-01 | Dépôt d'un document (PDF, image, Word, Excel ; 20 Mo maximum) rattaché à une commission et à un type ; le type définit la durée de conservation. | S | ✅ (type réel vérifié, lot 4.7) |
 | EF-M11-02 | Circuit : brouillon → soumis → approuvé ou rejeté (motif) → archivé. Suppression réservée au niveau 3 et plus, avec audit. | S | ✅ |
-| EF-M11-03 | Consultation réservée aux niveaux ≥ 3 (ou aux membres de la commission 🆕) ; les membres ne voient que les documents **approuvés** et publiés. | M | ⚠️ (tout est lisible au niveau 1) |
-| EF-M11-04 | Purge ou archivage à l'échéance de conservation (`expiresAt`), avec notification préalable. | C | ❌ |
-| EF-M11-05 | Versionnement d'un document (le champ `version` existe). | C | ❌ |
+| EF-M11-03 | Consultation réservée aux niveaux ≥ 3 (ou aux membres de la commission 🆕) ; les membres ne voient que les documents **approuvés** et publiés. | M | ✅ (lot 4.7) |
+| EF-M11-04 | Purge ou archivage à l'échéance de conservation (`expiresAt`), avec notification préalable. | C | ✅ (lot 4.7 : archivage, jamais de suppression automatique) |
+| EF-M11-05 | Versionnement d'un document (le champ `version` existe). | C | ✅ (lot 4.7) |
 
 ### M12 — Prestations (groupe Génie)
 

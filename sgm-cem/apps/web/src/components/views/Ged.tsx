@@ -1,7 +1,7 @@
 'use client'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, Check, Download, FileText, FolderKanban, Plus, Search, Send, Upload, X } from 'lucide-react'
+import { Archive, Check, Download, FileText, FolderKanban, Layers, Plus, Search, Send, Upload, X } from 'lucide-react'
 import api, { getBaseURL } from '@/lib/api'
 import { cn, formatDate } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
@@ -12,9 +12,9 @@ import type { ApiResponse, Commission, Document, DocumentStatut, TypeDocument } 
 const STATUS_LABELS: Record<DocumentStatut, string> = {
   BROUILLON: 'Brouillon',
   EN_ATTENTE: 'En attente',
-  APPROUVE: 'Approuve',
-  REJETE: 'Rejete',
-  ARCHIVE: 'Archive',
+  APPROUVE: 'Approuvé',
+  REJETE: 'Rejeté',
+  ARCHIVE: 'Archivé',
 }
 
 const emptyForm = {
@@ -127,6 +127,17 @@ export function Ged() {
     onError: showApiError,
   })
 
+  // Nouvelle version (EF-M11-05) : suit le circuit, remplace la version en vigueur à l'approbation
+  const newVersion = useMutation({
+    mutationFn: async ({ id, file }: { id: string; file: File }) => {
+      const form = new FormData()
+      form.append('file', file)
+      return api.post(`/commissions/documents/${id}/versions`, form)
+    },
+    onSuccess: refresh,
+    onError: showApiError,
+  })
+
   const archive = useMutation({
     mutationFn: async (id: string) => api.patch(`/commissions/documents/${id}/archive`),
     onSuccess: refresh,
@@ -165,7 +176,7 @@ export function Ged() {
         <Kpi label="Commissions" value={String(commissions.length)} />
         <Kpi label="Documents" value={String(documents.length)} />
         <Kpi label="En attente" value={String(documents.filter(d => d.statut === 'EN_ATTENTE').length)} tone="warning" />
-        <Kpi label="Approuves" value={String(documents.filter(d => d.statut === 'APPROUVE').length)} tone="success" />
+        <Kpi label="Approuvés" value={String(documents.filter(d => d.statut === 'APPROUVE').length)} tone="success" />
       </div>
 
       {showCreate && (
@@ -291,7 +302,8 @@ export function Ged() {
                     onReject={() => setRejectingId(document.id)}
                     onArchive={() => archive.mutate(document.id)}
                     onDownload={() => downloadDocument(document.id, document.fileName)}
-                    loading={submit.isPending || approve.isPending || archive.isPending}
+                    onNewVersion={file => newVersion.mutate({ id: document.id, file })}
+                    loading={submit.isPending || approve.isPending || archive.isPending || newVersion.isPending}
                   />
                 ))}
               </tbody>
@@ -318,8 +330,9 @@ export function Ged() {
   )
 }
 
-function DocumentRow({ document, onSubmit, onApprove, onReject, onArchive, onDownload, loading }: {
+function DocumentRow({ document, onSubmit, onApprove, onReject, onArchive, onDownload, onNewVersion, loading }: {
   document: Document
+  onNewVersion: (file: File) => void
   onSubmit: () => void
   onApprove: () => void
   onReject: () => void
@@ -333,7 +346,10 @@ function DocumentRow({ document, onSubmit, onApprove, onReject, onArchive, onDow
         <div className="flex gap-2">
           <FileText size={18} className="mt-0.5 text-[#1A6B1A]" />
           <div>
-            <p className="font-semibold text-gray-800">{document.titre}</p>
+            <p className="font-semibold text-gray-800">
+              {document.titre}
+              {(document.version ?? 1) > 1 && <span className="ml-1.5 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600">v{document.version}</span>}
+            </p>
             <p className="text-xs text-gray-400">{document.fileName}</p>
             {document.rejetMotif && <p className="text-xs text-red-500 mt-1">Motif: {document.rejetMotif}</p>}
           </div>
@@ -345,13 +361,21 @@ function DocumentRow({ document, onSubmit, onApprove, onReject, onArchive, onDow
       <td className="px-4 py-3 text-xs text-gray-400" data-label="Créé le">{formatDate(document.createdAt)}</td>
       <td className="px-4 py-3" data-label="Actions">
         <div className="flex flex-wrap gap-1.5">
-          <button onClick={onDownload} title="Télécharger"
+          <button onClick={onDownload} title="Télécharger" aria-label={`Télécharger ${document.fileName}`}
             className="flex items-center gap-1 px-2 py-1.5 rounded-[8px] text-xs font-semibold text-sky-600 border border-sky-200 hover:bg-sky-50 active:scale-95 transition-all">
             <Download size={12} />
           </button>
           {['BROUILLON', 'REJETE'].includes(document.statut) && <Button size="sm" variant="outline" loading={loading} onClick={onSubmit}><Send size={13} />Soumettre</Button>}
           {document.statut === 'EN_ATTENTE' && <Button size="sm" loading={loading} onClick={onApprove}><Check size={13} />Approuver</Button>}
           {document.statut === 'EN_ATTENTE' && <Button size="sm" variant="danger" onClick={onReject}><X size={13} />Rejeter</Button>}
+          {document.statut !== 'ARCHIVE' && (
+            <label className="flex min-h-9 cursor-pointer items-center gap-1 rounded-[8px] border border-gray-200 px-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50">
+              <Layers size={12} aria-hidden /> Nouvelle version
+              <input type="file" className="sr-only" aria-label={`Nouvelle version de ${document.titre}`}
+                accept=".pdf,.doc,.docx,.xls,.xlsx,image/jpeg,image/png,image/webp"
+                onChange={e => { const f = e.target.files?.[0]; if (f) onNewVersion(f); e.target.value = '' }} />
+            </label>
+          )}
           {document.statut !== 'ARCHIVE' && <Button size="sm" variant="ghost" loading={loading} onClick={onArchive}><Archive size={13} />Archiver</Button>}
         </div>
       </td>

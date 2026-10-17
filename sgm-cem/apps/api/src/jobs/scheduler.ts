@@ -14,6 +14,7 @@ import { runLedgerCheck, runMonthlyStatements } from '../services/cron'
 import { pruneExpiredActivity } from '../services/activity-write.service'
 import { runDailyReminders, runTransferReminders } from '../services/reminders.service'
 import { runInactiveMembersReport } from '../services/inactive-members.service'
+import { runGedRetention } from '../services/ged-retention.service'
 
 const QUEUE = 'sgm-maintenance'
 const TZ = 'Africa/Douala'
@@ -40,6 +41,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
   { name: 'relances-quotidiennes', label: 'Relances : paiements à confirmer, fonds à remettre', repeat: { pattern: '0 9 * * *', tz: TZ }, run: () => runDailyReminders() },
   { name: 'relances-transferts', label: 'Relances : transferts en attente', repeat: { pattern: '20 * * * *', tz: TZ }, run: () => runTransferReminders() },
   { name: 'membres-inactifs', label: 'Signalement mensuel des membres inactifs', repeat: { pattern: '30 8 1 * *', tz: TZ }, run: () => runInactiveMembersReport() },
+  { name: 'ged-conservation', label: 'GED : avertissement et archivage à échéance', repeat: { pattern: '0 7 * * *', tz: TZ }, run: () => runGedRetention() },
   { name: 'activite-retention', label: "Purge des données d'activité", repeat: { pattern: '30 3 * * *', tz: TZ }, run: () => pruneExpiredActivity() },
 ]
 

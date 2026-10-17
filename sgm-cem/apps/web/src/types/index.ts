@@ -232,6 +232,7 @@ export interface Document {
   rejectedAt?: string
   rejetMotif?: string
   expiresAt?: string
+  parentId?: string | null
   tags: string[]
   createdAt: string
   commission?: { nom: string }
