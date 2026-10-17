@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { PrismaClient } from '@prisma/client'
+import { Prisma, PrismaClient } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
@@ -45,6 +45,8 @@ const createSchema = z.object({
   referencePaiement: z.string().optional(),
   // B1 — collecteur encaisse en présentiel : confirmation immédiate, pas de double validation.
   directCollection: z.boolean().optional(),
+  // Clé d'idempotence (saisie hors ligne rejouée) — voir findReplayedContribution
+  clientRequestId: z.string().uuid().optional(),
 })
 
 const MAX_DECLARE_LINES = 50
@@ -308,9 +310,38 @@ function priorityRank(priority: string): number {
   return priority === 'URGENT' ? 0 : priority === 'PRIORITAIRE' ? 1 : 2
 }
 
+const CONTRIBUTION_CREATED_INCLUDE = {
+  membre: { include: { user: { select: { fullName: true } } } },
+  rubrique: { select: { title: true, code: true } },
+  collecteur: { select: { fullName: true } },
+} satisfies Prisma.ContributionInclude
+
+// Un envoi rejoué (réponse perdue, file hors ligne) renvoie la contribution
+// déjà créée par le même auteur au lieu d'en créer une seconde.
+async function findReplayedContribution(clientRequestId: string | undefined, userId: string) {
+  if (!clientRequestId) return null
+  const existing = await prisma.contribution.findUnique({
+    where: { clientRequestId },
+    include: CONTRIBUTION_CREATED_INCLUDE,
+  })
+  if (!existing) return null
+  const author = await prisma.auditLog.findFirst({
+    where: { entityType: 'Contribution', entityId: existing.id, action: 'CREATE' },
+    select: { userId: true },
+  })
+  if (author?.userId !== userId) throw new AppError('CONFLICT', 'Cette clé d\'envoi a déjà été utilisée', 409)
+  return existing
+}
+
 router.post('/', authenticate, requireLevel(2), async (req, res) => {
   const data = createSchema.parse(req.body)
   const { directCollection, paymentChannel, ...contributionData } = data
+
+  const replayed = await findReplayedContribution(data.clientRequestId, req.user!.userId)
+  if (replayed) {
+    res.status(200).json({ success: true, data: { ...replayed, replayed: true } })
+    return
+  }
 
   // Un collecteur n'enregistre que ce qu'il encaisse lui-même ; un superviseur
   // peut attribuer la remise à un autre membre du staff, actif.
@@ -344,22 +375,27 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
   // uniquement par la personne qui a l'argent en main.
   const isDirectCash = data.modePaiement === 'ESPECES' && directCollection === true && collecteurId === req.user!.userId
 
-  const contribution = await prisma.contribution.create({
-    data: {
-      ...contributionData,
-      collecteurId,
-      montantAttendu: montantAttendu ?? data.montant,
-      statut: isDirectCash ? 'CONFIRME' : 'EN_ATTENTE_CONFIRMATION',
-      localisationFonds: data.modePaiement === 'ESPECES' ? 'CHEZ_COLLECTEUR' : 'EN_TRANSIT',
-      confirmedAt: isDirectCash ? new Date() : undefined,
-      confirmedById: isDirectCash ? req.user!.userId : undefined,
-    },
-    include: {
-      membre: { include: { user: { select: { fullName: true } } } },
-      rubrique: { select: { title: true, code: true } },
-      collecteur: { select: { fullName: true } },
+  let contribution
+  try {
+    contribution = await prisma.contribution.create({
+      data: {
+        ...contributionData,
+        collecteurId,
+        montantAttendu: montantAttendu ?? data.montant,
+        statut: isDirectCash ? 'CONFIRME' : 'EN_ATTENTE_CONFIRMATION',
+        localisationFonds: data.modePaiement === 'ESPECES' ? 'CHEZ_COLLECTEUR' : 'EN_TRANSIT',
+        confirmedAt: isDirectCash ? new Date() : undefined,
+        confirmedById: isDirectCash ? req.user!.userId : undefined,
+      },
+      include: CONTRIBUTION_CREATED_INCLUDE,
+    })
+  } catch (err) {
+    // Deux envois simultanés de la même clé : un seul crée, l'autre est un rejeu
+    if (data.clientRequestId && err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      throw new AppError('CONFLICT', 'Envoi déjà en cours de traitement, réessayez dans un instant', 409)
     }
-  })
+    throw err
+  }
 
   let receiptUrl: string | null = null
   if (isDirectCash) {

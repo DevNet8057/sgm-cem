@@ -6,7 +6,10 @@
 Le schéma s'applique par **`prisma migrate deploy`** (dossier `prisma/migrations`,
 ligne de base `0_baseline`). L'entrypoint Docker sauvegarde la base, puis applique
 les migrations. Une base créée autrefois par `db push` est **adoptée une seule
-fois** automatiquement (`db push` sans perte + `migrate resolve --applied 0_baseline`).
+fois** automatiquement (`migrate diff` appliqué en transaction, refusé s'il contient
+une suppression, puis `migrate resolve --applied 0_baseline`). Conséquence : toute
+nouvelle migration DDL s'écrit **idempotente** (`ADD COLUMN IF NOT EXISTS`,
+`CREATE [UNIQUE] INDEX IF NOT EXISTS`) car une base adoptée a déjà le schéma courant.
 La CI échoue si `schema.prisma` et les migrations divergent.
 
 ## Workflow d'un changement de schéma

@@ -56,9 +56,12 @@ conteneur car leurs clés n'existaient que dans `apps/api/.env` (7 variables rap
 ### 2. Migrations Prisma versionnées (depuis le 17/10/2026)
 L'entrypoint sauvegarde la base puis lance `prisma migrate deploy`
 (`apps/api/prisma/migrations`). Une base créée autrefois par `db push` est adoptée
-**une fois** automatiquement (alignement sans perte, ligne de base marquée appliquée).
-Tout changement de schéma passe par `prisma migrate dev --name …` (voir
-`.claude/instructions/database.md`).
+**une fois** automatiquement : le SQL d'alignement (`migrate diff`) est appliqué en une
+transaction, et le démarrage s'arrête **sans rien modifier** s'il contient une
+suppression (`DROP TABLE/COLUMN/TYPE`, `TRUNCATE`, `DELETE`). Ligne de base ensuite
+marquée appliquée. Tout changement de schéma passe par `prisma migrate dev --name …`
+et doit être **idempotent** (`IF NOT EXISTS`) : une base adoptée possède déjà les
+colonnes récentes (voir `.claude/instructions/database.md`).
 
 ### 3. Seed automatique conditionnel
 L'entrypoint (`apps/api/docker-entrypoint.sh`) seed la base **uniquement si

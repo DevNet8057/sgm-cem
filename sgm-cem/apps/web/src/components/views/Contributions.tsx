@@ -14,7 +14,7 @@ import { ReceiptSuccessModal } from '@/components/contributions/ReceiptSuccessMo
 import { SearchableSelect } from '@/components/ui/SearchableSelect'
 import { Modal } from '@/components/ui/Modal'
 import { AllocationEditor, type PaymentAllocation } from '@/components/payments/AllocationEditor'
-import { queueContribution } from '@/lib/offlineQueue'
+import { newClientRequestId, queueContribution } from '@/lib/offlineQueue'
 import { Avatar } from '@/components/ui/Avatar'
 import { useFocusHighlight } from '@/hooks/useFocusHighlight'
 import type { Contribution, Membre, ModePaiement, Rubrique } from '@/types'
@@ -130,12 +130,14 @@ export function Contributions() {
   }
 
   const createContribution = useMutation({
-    mutationFn: async () => api.post('/contributions', {
+    // Une clé par envoi : si la réponse se perd, le rejeu (file hors ligne) est reconnu
+    mutationFn: async ({ clientRequestId }: { clientRequestId: string }) => api.post('/contributions', {
       ...form,
       montant: Number(form.montant),
       mobileMoneyPhone: form.mobileMoneyPhone || undefined,
       referencePaiement: form.referencePaiement || undefined,
       directCollection: form.directCollection,
+      clientRequestId,
     }),
     onSuccess: async (res) => {
       const data = res.data.data
@@ -157,12 +159,13 @@ export function Contributions() {
       await queryClient.invalidateQueries({ queryKey: ['monthly-stats'] })
       await queryClient.invalidateQueries({ queryKey: ['rubriques'] })
     },
-    onError: async (err: unknown) => {
+    onError: async (err: unknown, { clientRequestId }) => {
       const e = err as { response?: { data?: { error?: { message?: string } } } }
       // Hors ligne — mettre en file d'attente IndexedDB
       if (!navigator.onLine || (err as { code?: string }).code === 'ERR_NETWORK') {
         try {
           await queueContribution({
+            clientRequestId,
             membreId: form.membreId,
             rubriqueId: form.rubriqueId,
             montant: Number(form.montant),
@@ -430,7 +433,7 @@ export function Contributions() {
       )}
 
       {showForm && (
-        <form onSubmit={e => { e.preventDefault(); if (splitMode) return; createContribution.mutate() }}
+        <form onSubmit={e => { e.preventDefault(); if (splitMode) return; createContribution.mutate({ clientRequestId: newClientRequestId() }) }}
           className="mb-5 bg-white rounded-[18px] border border-gray-100 p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
           <SearchableSelect label="Membre" required placeholder="Rechercher un membre…"
             value={form.membreId}

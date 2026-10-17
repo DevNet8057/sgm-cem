@@ -380,6 +380,9 @@ model Contribution {
   referencePaiement String?
   mobileMoneyPhone  String?
   momoTransactionId String?
+  // Clé d'idempotence fournie par le client (saisie hors ligne rejouée) : un
+  // même envoi ne crée jamais deux contributions.
+  clientRequestId   String?            @unique
   note              String?            @db.Text // note libre — déclaration de remise groupée à un collecteur (pas de membreId, litigeMotif non pertinent)
 
   // ── Collecte publique — contributeur externe sans compte ────────────────────

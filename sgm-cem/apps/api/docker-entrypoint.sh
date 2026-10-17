@@ -74,13 +74,25 @@ fi
 
 # ── Schéma : migrations Prisma versionnées (prisma/migrations) ──────────
 # Base créée autrefois par `db push` (tables présentes, pas de table
-# _prisma_migrations) : adoption UNE fois — `db push` sans --accept-data-loss
-# (refuse toute perte de données) aligne le schéma, puis la ligne de base est
-# marquée appliquée. Ensuite, et pour toute base neuve : `migrate deploy`.
+# _prisma_migrations) : adoption UNE fois. Le SQL d'alignement sur le schéma
+# courant est calculé (migrate diff) puis appliqué en une transaction, SAUF
+# s'il contient une instruction destructive : démarrage interrompu, rien
+# n'est modifié. (`db push` n'est plus utilisé : il refuse aussi des ajouts
+# sans risque, comme un index unique sur une colonne neuve.) La ligne de base
+# est ensuite marquée appliquée ; les migrations suivantes, idempotentes,
+# passent avec `migrate deploy` comme pour toute base neuve.
 HAS_MIGRATIONS=$(psql "$PG_URL" -tAc "select to_regclass('public._prisma_migrations') is not null" 2>/dev/null || echo "f")
 if [ "$HAS_DATA" = "t" ] && [ "$HAS_MIGRATIONS" != "t" ]; then
   echo ">>> [API] Base existante sans historique de migrations — adoption de la ligne de base..."
-  pnpm exec prisma db push --skip-generate
+  ADOPT_SQL=$(mktemp)
+  pnpm exec prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script > "$ADOPT_SQL"
+  if grep -Eiq 'DROP (TABLE|COLUMN|TYPE|SCHEMA)|TRUNCATE|DELETE FROM' "$ADOPT_SQL"; then
+    echo ">>> [API] ❌ L'alignement du schéma supprimerait des données — démarrage interrompu, base inchangée."
+    grep -Ei 'DROP (TABLE|COLUMN|TYPE|SCHEMA)|TRUNCATE|DELETE FROM' "$ADOPT_SQL"
+    exit 1
+  fi
+  psql "$PG_URL" -v ON_ERROR_STOP=1 --single-transaction -q -f "$ADOPT_SQL"
+  rm -f "$ADOPT_SQL"
   pnpm exec prisma migrate resolve --applied 0_baseline
 fi
 echo ">>> [API] Application des migrations (migrate deploy)..."

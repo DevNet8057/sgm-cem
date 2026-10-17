@@ -25,6 +25,8 @@ export interface QueuedContribution {
   directCollection?: boolean
   mobileMoneyPhone?: string
   referencePaiement?: string
+  // Même clé qu'au premier envoi : un rejeu ne crée jamais de doublon côté API
+  clientRequestId?: string
 }
 
 export async function queueContribution(data: Omit<QueuedContribution, 'queuedAt'>): Promise<void> {
@@ -65,4 +67,15 @@ export async function clearQueue(): Promise<void> {
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
   })
+}
+
+// UUID v4 — crypto.randomUUID n'existe qu'en contexte sécurisé (HTTPS) ;
+// getRandomValues reste disponible en HTTP local (test sur téléphone via le LAN).
+export function newClientRequestId(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  const b = crypto.getRandomValues(new Uint8Array(16))
+  b[6] = (b[6] & 0x0f) | 0x40
+  b[8] = (b[8] & 0x3f) | 0x80
+  const h = Array.from(b, x => x.toString(16).padStart(2, '0')).join('')
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
 }

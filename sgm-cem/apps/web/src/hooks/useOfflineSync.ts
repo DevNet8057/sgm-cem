@@ -25,13 +25,32 @@ export function useOfflineSync() {
       if (items.length === 0) return
 
       let synced = 0
+      const rejected: string[] = []
       for (const item of items) {
+        const { queuedAt, ...data } = item
         try {
-          const { queuedAt, ...data } = item
+          // La clé clientRequestId rend le rejeu sûr : l'API renvoie la contribution déjà créée
           await api.post('/contributions', data)
           await dequeueContribution(queuedAt)
           synced++
-        } catch {}
+        } catch (err) {
+          // Refus métier (4xx) : réessayer ne changera rien — on retire et on prévient.
+          // Réseau ou 5xx : la contribution reste en file pour la prochaine reconnexion.
+          const res = (err as { response?: { status?: number; data?: { error?: { message?: string } } } }).response
+          if (res?.status && res.status >= 400 && res.status < 500 && ![401, 409, 429].includes(res.status)) {
+            await dequeueContribution(queuedAt)
+            rejected.push(res.data?.error?.message ?? `Refusée (${res.status})`)
+          }
+        }
+      }
+      if (rejected.length > 0) {
+        addToast({
+          title: `${rejected.length} contribution(s) hors ligne refusée(s)`,
+          message: rejected.join(' · '),
+          variant: 'error',
+          duration: 10000,
+        })
+        await refreshQueueCount()
       }
 
       if (synced > 0) {
