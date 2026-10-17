@@ -120,6 +120,10 @@ const initialConfigs: SeedConf[] = [
     key: 'PDF_CONCURRENCY', category: 'SYSTEM_BEHAVIOR', label: 'Rendus PDF simultanés',
     description: 'Nombre maximal de PDF (reçus, bordereaux, rapports) rendus en même temps par le Chromium local. Sans effet si Gotenberg est utilisé.', defaultValue: '2',
   },
+  {
+    key: 'ANONYMISATION_DELAI_MOIS', category: 'SYSTEM_BEHAVIOR', label: 'Délai avant anonymisation (mois)',
+    description: "Durée de conservation de l'identité d'un ancien compte après sa dernière activité ; l'anonymisation n'est possible qu'au-delà (0 : immédiate). Proposition : 36 mois, à confirmer par l'avis juridique (loi 2024/017).", defaultValue: '36',
+  },
   { key: 'MOBILE_MONEY_ENABLED', category: 'SYSTEM_BEHAVIOR', label: 'Mobile Money activé', defaultValue: 'true' },
   { key: 'CARD_ENABLED', category: 'SYSTEM_BEHAVIOR', label: 'Carte bancaire activée', defaultValue: 'true' },
   { key: 'CASH_ENABLED', category: 'SYSTEM_BEHAVIOR', label: 'Espèces activées', defaultValue: 'true' },

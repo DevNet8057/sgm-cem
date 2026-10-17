@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Check, Copy, Edit3, KeyRound, LogIn, Plus, RefreshCw, Shield,
-  Search, ToggleLeft, ToggleRight, UserCog, Users, X,
+  Search, ToggleLeft, ToggleRight, UserCog, UserX, Users, X,
 } from 'lucide-react'
 import api from '@/lib/api'
 import { cn, formatDate, ROLE_LABELS } from '@/lib/utils'
@@ -42,6 +42,23 @@ export function GestionUtilisateurs() {
   const [copiedPassword, setCopiedPassword] = useState('')
   const [resetTarget, setResetTarget] = useState<User | null>(null)
   const [resetPassword, setResetPassword] = useState('')
+  // Anonymisation (droit à l'effacement) : ancien compte désactivé seulement
+  const [anonTarget, setAnonTarget] = useState<User | null>(null)
+  const [anonForm, setAnonForm] = useState({ confirmation: '', password: '' })
+  const [anonError, setAnonError] = useState('')
+  const anonCheck = useQuery<{ possible: boolean; blockers: string[]; lastActivityAt: string; delayMonths: number }>({
+    queryKey: ['anonymization', anonTarget?.id],
+    queryFn: async () => (await api.get(`/privacy/users/${anonTarget!.id}/anonymization`)).data.data,
+    enabled: !!anonTarget,
+  })
+  const anonymize = useMutation({
+    mutationFn: () => api.post(`/privacy/users/${anonTarget!.id}/anonymize`, anonForm),
+    onSuccess: () => { setAnonTarget(null); queryClient.invalidateQueries({ queryKey: ['users'] }) },
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { error?: { message?: string } } } }
+      setAnonError(e.response?.data?.error?.message ?? 'Anonymisation impossible')
+    },
+  })
 
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
@@ -179,6 +196,13 @@ export function GestionUtilisateurs() {
           )}>
           {u.isActive ? <ToggleRight size={12} /> : <ToggleLeft size={12} />}
         </button>
+        {!u.isActive && u.id !== currentUser?.id && !u.email.endsWith('@anonymise.invalid') && (
+          <button title="Anonymiser (effacer l'identité)" aria-label="Anonymiser"
+            onClick={() => { setAnonTarget(u); setAnonForm({ confirmation: '', password: '' }); setAnonError('') }}
+            className="w-9 h-9 flex items-center justify-center rounded-[7px] border border-red-200 text-red-600 hover:bg-red-50 transition-colors">
+            <UserX size={12} />
+          </button>
+        )}
       </>
     )
   }
@@ -423,6 +447,39 @@ export function GestionUtilisateurs() {
               <KeyRound size={14} /> Réinitialiser
             </Button>
           </div>
+        </div>
+      </Modal>
+
+      <Modal open={anonTarget !== null} onClose={() => setAnonTarget(null)} size="sm"
+        title="Anonymiser ce compte"
+        description={`${anonTarget?.fullName ?? ''} : nom, coordonnées, photo et notes seront effacés définitivement. Les montants des contributions sont conservés pour la comptabilité.`}>
+        {anonCheck.isLoading ? (
+          <p className="text-sm text-gray-500">Vérification des conditions…</p>
+        ) : anonCheck.data && !anonCheck.data.possible ? (
+          <div role="alert" className="space-y-2 rounded-[10px] border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+            <p className="font-semibold">Anonymisation impossible pour l&apos;instant :</p>
+            <ul className="list-disc pl-5">{anonCheck.data.blockers.map(b => <li key={b}>{b}</li>)}</ul>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="rounded-[10px] border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">Action irréversible. Le journal d&apos;audit et les reçus déjà émis restent conservés (obligation comptable).</p>
+            <label className="block text-xs font-semibold text-gray-600">
+              Tapez ANONYMISER pour confirmer
+              <input value={anonForm.confirmation} onChange={e => setAnonForm({ ...anonForm, confirmation: e.target.value })} autoComplete="off"
+                className="mt-1 block min-h-11 w-full rounded-[10px] border border-gray-200 px-3 text-base" />
+            </label>
+            <PasswordInput label="Votre mot de passe" value={anonForm.password} onChange={e => setAnonForm({ ...anonForm, password: e.target.value })} autoComplete="current-password" />
+            {anonError && <p role="alert" className="text-sm text-red-600">{anonError}</p>}
+          </div>
+        )}
+        <div className="mt-4 flex justify-end gap-2 border-t border-gray-100 pt-3">
+          <Button variant="ghost" onClick={() => setAnonTarget(null)}>Annuler</Button>
+          {anonCheck.data?.possible && (
+            <Button variant="danger" loading={anonymize.isPending} disabled={anonForm.confirmation !== 'ANONYMISER' || !anonForm.password}
+              onClick={() => { setAnonError(''); anonymize.mutate() }}>
+              <UserX size={14} /> Anonymiser
+            </Button>
+          )}
         </div>
       </Modal>
     </div>

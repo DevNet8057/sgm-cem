@@ -14,6 +14,7 @@ import { membresRouter } from './routes/membres'
 import { rubriquesRouter } from './routes/rubriques'
 import { contributionsRouter } from './routes/contributions'
 import { exportsRouter } from './routes/exports'
+import { privacyRouter } from './routes/privacy'
 import { collecteursRouter } from './routes/collecteurs'
 import { collectesRouter } from './routes/collectes'
 import { commissionsRouter } from './routes/commissions'
@@ -96,6 +97,8 @@ app.use(cors({
     callback(new Error('Not allowed by CORS'))
   },
   credentials: true,
+  // Nom des fichiers téléchargés (exports, données personnelles)
+  exposedHeaders: ['Content-Disposition'],
 }))
 app.use(cookieParser())
 
@@ -154,6 +157,7 @@ mount('/api/membres', membresRouter)
 mount('/api/rubriques', rubriquesRouter)
 mount('/api/contributions', contributionsRouter)
 mount('/api/exports', exportsRouter)
+mount('/api/privacy', privacyRouter)
 mount('/api/payments', paymentsRouter)
 mount('/api/collecteurs', collecteursRouter)
 mount('/api/collectes', collectesRouter)

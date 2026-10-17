@@ -2,12 +2,12 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Bell, Camera, Check, KeyRound, Loader2,
+  Bell, Camera, Check, Download, KeyRound, Loader2,
   Phone, Save, ShieldCheck, Trash2, User,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { PasswordInput } from '@/components/ui/PasswordInput'
-import api from '@/lib/api'
+import api, { downloadFromApi } from '@/lib/api'
 import { cn, ROLE_LABELS } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
 import { Button } from '@/components/ui/Button'
@@ -350,8 +350,35 @@ export function MonProfil() {
         </section>
 
         <PushSection />
+        <DataSection />
       </div>
     </div>
+  )
+}
+
+// Droit d'accès et de portabilité (loi 2024/017) : toutes ses données en un fichier
+function DataSection() {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  return (
+    <section className="bg-white rounded-[18px] border border-gray-100 p-5 shadow-[0_2px_12px_rgba(15,74,15,0.04)]">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-9 h-9 rounded-[10px] bg-[#E8F5E8] text-[#1A6B1A] flex items-center justify-center">
+          <ShieldCheck size={16} />
+        </div>
+        <h3 className="font-display font-semibold text-[#0F4A0F] text-lg">Mes données personnelles</h3>
+      </div>
+      <p className="text-sm text-gray-600 mb-3">Téléchargez tout ce que SGM-CEM conserve à votre sujet : profil, fiche membre, contributions, notifications. Pour corriger une information, modifiez votre profil ou adressez-vous au secrétariat.</p>
+      {error && <p role="alert" className="mb-2 text-sm text-red-600">{error}</p>}
+      <Button variant="outline" className="w-full" loading={busy} onClick={async () => {
+        setBusy(true); setError('')
+        try { await downloadFromApi('/privacy/my-data', undefined, 'mes-donnees-sgm-cem.json') }
+        catch { setError('Téléchargement impossible pour le moment.') }
+        finally { setBusy(false) }
+      }}>
+        <Download size={14} /> Télécharger mes données
+      </Button>
+    </section>
   )
 }
 

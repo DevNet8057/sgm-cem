@@ -388,8 +388,8 @@ Contexte réglementaire : **loi camerounaise n° 2024/017 du 23 décembre 2024 r
 |---|---|---|---|
 | EF-M17-01 | Mentions d'information (page de confidentialité) : finalités, bases, destinataires (Yelii, CinetPay, Meta/360dialog, Twilio, hébergeur), durées, droits, contact. | M | 🟡 (page présente, contenu à vérifier) |
 | EF-M17-02 | Consentement explicite des contributeurs externes (case à cocher) avant l'enregistrement de leur téléphone. | M | ❌ |
-| EF-M17-03 | Droit d'accès et de portabilité : le membre télécharge ses données (profil + contributions) depuis « Mon profil ». | S | ❌ |
-| EF-M17-04 | Droit de rectification (profil) et d'effacement **compatible avec les obligations comptables** : anonymisation de l'identité après la durée légale, montants conservés. | S | ❌ |
+| EF-M17-03 | Droit d'accès et de portabilité : le membre télécharge ses données (profil + contributions) depuis « Mon profil ». | S | ✅ (lot 4.6) |
+| EF-M17-04 | Droit de rectification (profil) et d'effacement **compatible avec les obligations comptables** : anonymisation de l'identité après la durée légale, montants conservés. | S | ✅ (lot 4.6 ; durée à confirmer) |
 | EF-M17-05 | Registre des traitements et des sous-traitants tenu par l'ADMIN (document `04_POLITIQUE_SECURITE_CONFORMITE.md`). | M | ❌ |
 
 ---
