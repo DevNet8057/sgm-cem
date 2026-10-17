@@ -14,3 +14,4 @@ apps/api/backups/
 
 # Cache de compilation Node (NODE_COMPILE_CACHE)
 node-compile-cache/
+coverage/

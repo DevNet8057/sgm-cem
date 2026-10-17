@@ -15,6 +15,8 @@ export default defineConfig({
       reporter: ['text', 'lcov'],
       include: ['src/**/*.ts'],
       exclude: ['src/index.ts'],
+      // Plancher anti-régression (mesuré à ~50 % le 17/10/2026) : à relever, jamais à baisser
+      thresholds: { lines: 45, functions: 50, branches: 55, statements: 45 },
     },
   },
 })

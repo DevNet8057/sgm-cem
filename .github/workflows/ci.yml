@@ -63,6 +63,12 @@ jobs:
       - name: Type-check Web
         run: pnpm --filter web exec tsc --noEmit
 
+      - name: Lint Web
+        run: pnpm --filter web lint
+
+      - name: Tests Web
+        run: pnpm --filter web test
+
   # ── API Tests ───────────────────────────────────────────────────────
   test-api:
     name: API tests
@@ -127,9 +133,9 @@ jobs:
           ADMIN_PASSWORD: ci-admin-password-base-jetable
         run: pnpm exec ts-node prisma/seed.ts && pnpm exec ts-node prisma/seed-config.ts
 
-      - name: Run API tests
+      - name: Tests API + couverture (plancher dans vitest.config.ts)
         working-directory: sgm-cem/apps/api
-        run: pnpm test
+        run: pnpm test:coverage
 
   # ── Web Build ───────────────────────────────────────────────────────
   build-web:
