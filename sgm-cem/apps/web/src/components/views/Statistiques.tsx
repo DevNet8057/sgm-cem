@@ -97,11 +97,11 @@ export function Statistiques() {
 
       {/* KPIs */}
       {statsLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
           {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
           <Kpi icon={Users} label="Membres actifs" value={String(stats?.totalMembres ?? 0)} color="#2563EB" />
           <Kpi icon={Wallet} label={month === 'all' ? 'Collecte annuelle' : 'Collecte du mois'} value={formatAmount(stats?.totalCollectedPeriod ?? 0)} color="#1A6B1A" />
           <Kpi icon={CreditCard} label={`Confirmées · ${periodLabel}`} value={String(stats?.totalConfirmedContributions ?? 0)} color="#F5C400" textColor="#C4A000" />

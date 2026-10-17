@@ -25,6 +25,7 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
       include: {
         collecteur: { select: { id: true, fullName: true, email: true, role: true } },
         membre: { include: { user: { select: { fullName: true } } } },
+        contributeurExterne: { select: { nom: true } },
         rubrique: { select: { code: true, title: true } },
       },
       orderBy: { createdAt: 'asc' },

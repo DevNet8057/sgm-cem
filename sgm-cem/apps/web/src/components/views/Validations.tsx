@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle2, Clock, CreditCard, MessageSquare, Paperclip, XCircle } from 'lucide-react'
 import api from '@/lib/api'
-import { formatAmount, formatDateTime, MODE_PAIEMENT_LABELS } from '@/lib/utils'
+import { formatAmount, formatDateTime, MODE_PAIEMENT_LABELS, contributorName } from '@/lib/utils'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { SkeletonTableRow } from '@/components/ui/Skeleton'
@@ -46,7 +46,7 @@ export function Validations() {
       setReceiptTarget({
         contributionId: id,
         initialReceiptUrl: res.data.data.receiptUrl ?? null,
-        memberName: contribution?.membre?.user.fullName,
+        memberName: contribution && contributorName(contribution),
         amount: contribution?.montant,
         rubriqueLabel: contribution?.rubrique?.title,
       })
@@ -97,7 +97,7 @@ export function Validations() {
     confirmFinancial({
       title: 'Confirmer la réception de cet argent ?',
       amount: c?.montant ?? 0,
-      lines: [['Membre', c?.membre?.user.fullName], ['Rubrique', c?.rubrique?.title], ['Mode', c ? MODE_PAIEMENT_LABELS[c.modePaiement] : undefined]],
+      lines: [['Membre', c && contributorName(c)], ['Rubrique', c?.rubrique?.title], ['Mode', c ? MODE_PAIEMENT_LABELS[c.modePaiement] : undefined]],
       okText: 'Oui, je l’ai reçu',
       onOk: () => confirm.mutate(id),
     })
@@ -184,8 +184,8 @@ export function Validations() {
                   )}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
-                        <Avatar name={c.membre?.user.fullName ?? '—'} size="sm" />
-                        <p className="font-medium text-gray-800">{c.membre?.user.fullName ?? '-'}</p>
+                        <Avatar name={contributorName(c)} size="sm" />
+                        <p className="font-medium text-gray-800">{contributorName(c)}</p>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-600" data-label="Rubrique">

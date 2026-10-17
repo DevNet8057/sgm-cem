@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Check, Copy, Edit3, KeyRound, LogIn, Plus, RefreshCw, Shield,
-  ToggleLeft, ToggleRight, UserCog, Users, X,
+  Search, ToggleLeft, ToggleRight, UserCog, Users, X,
 } from 'lucide-react'
 import api from '@/lib/api'
 import { cn, formatDate, ROLE_LABELS } from '@/lib/utils'
@@ -14,7 +14,10 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { SkeletonTableRow } from '@/components/ui/Skeleton'
 import { Modal } from '@/components/ui/Modal'
 import { Avatar } from '@/components/ui/Avatar'
+import { CompactRow, DetailLine, DetailSheet } from '@/components/ui/CompactList'
 import type { User, UserRole } from '@/types'
+
+const PAGE = 30
 
 const ROLES: { value: UserRole; label: string; color: string }[] = [
   { value: 'ADMIN',               label: 'Administrateur',   color: 'bg-violet-100 text-violet-700' },
@@ -40,6 +43,10 @@ export function GestionUtilisateurs() {
   const [resetTarget, setResetTarget] = useState<User | null>(null)
   const [resetPassword, setResetPassword] = useState('')
 
+  const [query, setQuery] = useState('')
+  const [roleFilter, setRoleFilter] = useState('')
+  const [shown, setShown] = useState(PAGE)
+  const [detailUser, setDetailUser] = useState<User | null>(null)
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ['users'],
     queryFn: async () => (await api.get('/users')).data.data,
@@ -131,6 +138,50 @@ export function GestionUtilisateurs() {
     ...r,
     count: users.filter(u => u.role === r.value).length,
   }))
+  const needle = query.trim().toLowerCase()
+  const filtered = users.filter(u =>
+    (!roleFilter || u.role === roleFilter) &&
+    (!needle || [u.fullName, u.email, u.memberId].some(v => v?.toLowerCase().includes(needle))))
+  const visible = filtered.slice(0, shown)
+
+  // Actions sur un compte (tableau sur grand écran, feuille sur mobile)
+  function renderActions(u: User) {
+    return (
+      <>
+        {/* Connecter (impersonation) — DEVELOPER uniquement, cible active non-DEVELOPER */}
+        {isDeveloper && u.isActive && u.role !== 'DEVELOPER' && u.id !== currentUser?.id && (
+          <button
+            title={`Se connecter en tant que ${u.fullName}`}
+            onClick={() => askImpersonate(u)}
+            disabled={impersonate.isPending}
+            className="h-9 px-2.5 flex items-center gap-1 rounded-[7px] border border-[#0F172A]/20 bg-[#0F172A] text-[#F5C400] text-[10px] font-bold hover:bg-[#1E293B] transition-colors disabled:opacity-50"
+          >
+            <LogIn size={11} />
+            Connecter
+          </button>
+        )}
+        <button title="Modifier" aria-label="Modifier" onClick={() => startEdit(u)}
+          className="w-9 h-9 flex items-center justify-center rounded-[7px] border border-gray-200 text-gray-500 hover:bg-gray-100 transition-colors">
+          <Edit3 size={12} />
+        </button>
+        <button title="Réinitialiser mot de passe" aria-label="Réinitialiser mot de passe" onClick={() => { setResetTarget(u); setResetPassword('') }}
+          className="w-9 h-9 flex items-center justify-center rounded-[7px] border border-gray-200 text-gray-500 hover:bg-yellow-50 hover:border-yellow-300 hover:text-yellow-700 transition-colors">
+          <KeyRound size={12} />
+        </button>
+        <button
+          title={u.isActive ? 'Désactiver' : 'Activer'} aria-label={u.isActive ? 'Désactiver' : 'Activer'}
+          onClick={() => toggleActive.mutate(u.id)}
+          className={cn(
+            'w-9 h-9 flex items-center justify-center rounded-[7px] border transition-colors',
+            u.isActive
+              ? 'border-gray-200 text-gray-500 hover:bg-red-50 hover:border-red-200 hover:text-red-600'
+              : 'border-green-200 text-green-600 hover:bg-green-50'
+          )}>
+          {u.isActive ? <ToggleRight size={12} /> : <ToggleLeft size={12} />}
+        </button>
+      </>
+    )
+  }
 
   return (
     <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter">
@@ -152,13 +203,17 @@ export function GestionUtilisateurs() {
 
       {/* Rôles KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
+        {/* Un rôle = un filtre (re-cliquer pour tout afficher) */}
         {roleCount.map(r => (
-          <div key={r.value} className="bg-white rounded-[14px] border border-gray-100 p-3 text-center">
+          <button key={r.value} type="button" aria-pressed={roleFilter === r.value}
+            onClick={() => { setRoleFilter(f => f === r.value ? '' : r.value); setShown(PAGE) }}
+            className={cn('bg-white rounded-[14px] border p-3 text-center transition-colors',
+              roleFilter === r.value ? 'border-[#1A6B1A] ring-2 ring-[#1A6B1A]/30' : 'border-gray-100 hover:border-gray-200')}>
             <span className={cn('inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold mb-1', r.color)}>
               {r.label}
             </span>
             <p className="font-display font-bold text-2xl text-[#0F4A0F]">{r.count}</p>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -176,16 +231,38 @@ export function GestionUtilisateurs() {
         </div>
       )}
 
+      {/* Recherche (nom, e-mail, matricule) */}
+      <div className="relative mb-3">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden />
+        <input value={query} onChange={e => { setQuery(e.target.value); setShown(PAGE) }} aria-label="Rechercher un utilisateur"
+          placeholder="Rechercher par nom, e-mail ou matricule…"
+          className="w-full min-h-11 pl-9 pr-4 bg-white border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30" />
+      </div>
+
       {/* Table */}
       <div className="bg-white rounded-[18px] border border-gray-100 overflow-hidden shadow-[0_2px_12px_rgba(15,74,15,0.06)]">
         <div className="px-5 py-4 flex items-center justify-between"
           style={{ background: 'linear-gradient(135deg, #0F4A0F, #1A6B1A)' }}>
           <h3 className="font-display font-semibold text-white text-sm">Comptes utilisateurs</h3>
-          <span className="text-white/60 text-xs bg-white/10 px-2.5 py-1 rounded-full">{users.length} au total</span>
+          <span className="text-white/60 text-xs bg-white/10 px-2.5 py-1 rounded-full">{filtered.length === users.length ? `${users.length} au total` : `${filtered.length} sur ${users.length}`}</span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm table-mobile-cards">
+        {/* Mobile : liste compacte, actions dans la feuille (UX-09) */}
+        <ul className="md:hidden" aria-label="Comptes utilisateurs">
+          {isLoading ? Array.from({ length: 6 }).map((_, i) => <li key={i} className="mx-4 my-3 h-11 animate-pulse rounded-lg bg-gray-100" />)
+            : visible.map(u => (
+              <CompactRow key={u.id}
+                leading={<Avatar name={u.fullName} size="sm" />}
+                title={u.fullName}
+                badge={!u.isActive ? <span className="shrink-0 rounded-full bg-red-50 px-1.5 py-px text-[10px] font-semibold text-red-700">Désactivé</span> : undefined}
+                subtitle={u.email}
+                status={<StatusBadge status={u.role as Parameters<typeof StatusBadge>[0]['status']} dot={false} />}
+                onClick={() => setDetailUser(u)} />
+            ))}
+        </ul>
+
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 {['Utilisateur', 'Email', 'Rôle', 'Statut', 'Dernière connexion', 'Actions'].map(col => (
@@ -196,13 +273,13 @@ export function GestionUtilisateurs() {
             <tbody>
               {isLoading ? (
                 Array.from({ length: 6 }).map((_, i) => <SkeletonTableRow key={i} cols={6} />)
-              ) : users.length === 0 ? (
+              ) : filtered.length === 0 ? (
                 <tr><td colSpan={6} className="px-4 py-12 text-center text-gray-400 text-sm">
                   <Users size={32} className="mx-auto mb-2 opacity-30" />
-                  Aucun utilisateur enregistré
+                  {users.length === 0 ? 'Aucun utilisateur enregistré' : 'Aucun utilisateur ne correspond'}
                 </td></tr>
               ) : (
-                users.map(u => (
+                visible.map(u => (
                   <tr key={u.id} className={cn('border-b border-gray-50 transition-colors', u.isActive ? 'hover:bg-gray-50/60' : 'bg-red-50/20 hover:bg-red-50/40')}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
@@ -233,37 +310,7 @@ export function GestionUtilisateurs() {
                     </td>
                     <td className="px-4 py-3" data-label="Actions">
                       <div className="flex gap-1.5">
-                        {/* Connecter (impersonation) — DEVELOPER uniquement, cible active non-DEVELOPER */}
-                        {isDeveloper && u.isActive && u.role !== 'DEVELOPER' && u.id !== currentUser?.id && (
-                          <button
-                            title={`Se connecter en tant que ${u.fullName}`}
-                            onClick={() => askImpersonate(u)}
-                            disabled={impersonate.isPending}
-                            className="h-7 px-2 flex items-center gap-1 rounded-[7px] border border-[#0F172A]/20 bg-[#0F172A] text-[#F5C400] text-[10px] font-bold hover:bg-[#1E293B] transition-colors disabled:opacity-50"
-                          >
-                            <LogIn size={11} />
-                            Connecter
-                          </button>
-                        )}
-                        <button title="Modifier" onClick={() => startEdit(u)}
-                          className="w-7 h-7 flex items-center justify-center rounded-[7px] border border-gray-200 text-gray-500 hover:bg-gray-100 transition-colors">
-                          <Edit3 size={12} />
-                        </button>
-                        <button title="Réinitialiser mot de passe" onClick={() => { setResetTarget(u); setResetPassword('') }}
-                          className="w-7 h-7 flex items-center justify-center rounded-[7px] border border-gray-200 text-gray-500 hover:bg-yellow-50 hover:border-yellow-300 hover:text-yellow-700 transition-colors">
-                          <KeyRound size={12} />
-                        </button>
-                        <button
-                          title={u.isActive ? 'Désactiver' : 'Activer'}
-                          onClick={() => toggleActive.mutate(u.id)}
-                          className={cn(
-                            'w-7 h-7 flex items-center justify-center rounded-[7px] border transition-colors',
-                            u.isActive
-                              ? 'border-gray-200 text-gray-500 hover:bg-red-50 hover:border-red-200 hover:text-red-600'
-                              : 'border-green-200 text-green-600 hover:bg-green-50'
-                          )}>
-                          {u.isActive ? <ToggleRight size={12} /> : <ToggleLeft size={12} />}
-                        </button>
+                        {renderActions(u)}
                       </div>
                     </td>
                   </tr>
@@ -272,7 +319,30 @@ export function GestionUtilisateurs() {
             </tbody>
           </table>
         </div>
+        {!isLoading && filtered.length === 0 && (
+          <p className="md:hidden px-4 py-10 text-center text-sm text-gray-400">{users.length === 0 ? 'Aucun utilisateur enregistré' : 'Aucun utilisateur ne correspond'}</p>
+        )}
+        {filtered.length > visible.length && (
+          <div className="border-t border-gray-100 p-3 text-center">
+            <Button size="sm" variant="outline" onClick={() => setShown(n => n + PAGE)}>Afficher plus ({visible.length} sur {filtered.length})</Button>
+          </div>
+        )}
       </div>
+
+      <DetailSheet open={!!detailUser} onClose={() => setDetailUser(null)} title={detailUser?.fullName ?? ''}
+        footer={detailUser && <div className="flex flex-wrap gap-2" onClick={() => setDetailUser(null)}>{renderActions(detailUser)}</div>}>
+        {detailUser && (
+          <div>
+            <DetailLine label="E-mail">{detailUser.email}</DetailLine>
+            {detailUser.phone && <DetailLine label="Téléphone">{detailUser.phone}</DetailLine>}
+            <DetailLine label="Matricule">{detailUser.memberId}</DetailLine>
+            <DetailLine label="Rôle"><StatusBadge status={detailUser.role as Parameters<typeof StatusBadge>[0]['status']} dot={false} /></DetailLine>
+            <DetailLine label="Statut">{detailUser.isActive ? 'Actif' : 'Désactivé'}</DetailLine>
+            <DetailLine label="Dernière connexion">{detailUser.lastLoginAt ? formatDate(detailUser.lastLoginAt) : 'Jamais connecté'}</DetailLine>
+            {detailUser.mustChangePassword && <DetailLine label="Mot de passe">À changer à la prochaine connexion</DetailLine>}
+          </div>
+        )}
+      </DetailSheet>
 
       {/* Modal création */}
       <Modal open={showCreate} onClose={() => { setShowCreate(false); setError('') }}

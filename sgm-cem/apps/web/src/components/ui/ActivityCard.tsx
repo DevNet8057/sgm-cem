@@ -32,14 +32,13 @@ export function ActivityCard({
     <>
       <span className="shrink-0">{avatar}</span>
       <span className="min-w-0 flex-1">
-        <span className="flex items-baseline justify-between gap-2">
-          <span className="truncate text-sm font-semibold text-slate-800">{title}</span>
-          {timestamp !== undefined && (
-            <span className="shrink-0 text-[11px] text-slate-400">{timeAgo(timestamp)}</span>
-          )}
-        </span>
+        {/* Le nom garde toute la largeur ; la date passe en dessous (UX-10) */}
+        <span className="block truncate text-sm font-semibold text-slate-800">{title}</span>
         {subtitle !== undefined && (
-          <span className="mt-0.5 block truncate text-xs text-slate-400">{subtitle}</span>
+          <span className="mt-0.5 block truncate text-xs text-slate-500">{subtitle}</span>
+        )}
+        {timestamp !== undefined && (
+          <span className="block text-[11px] text-slate-500">{timeAgo(timestamp)}</span>
         )}
       </span>
       {trailing !== undefined && <span className="shrink-0 text-right">{trailing}</span>}

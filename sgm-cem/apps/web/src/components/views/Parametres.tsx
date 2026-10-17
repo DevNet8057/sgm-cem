@@ -187,7 +187,7 @@ export function Parametres() {
 
           <Panel icon={ShieldCheck} title="Suivi et controle">
             <Input label="Inactivite apres mois" type="number" value={form.inactivityMonthsThreshold} onChange={inactivityMonthsThreshold => setForm({ ...form, inactivityMonthsThreshold })} required />
-            <Input label="Delai rappel (jours)" type="number" value={form.reminderDelayDays} onChange={reminderDelayDays => setForm({ ...form, reminderDelayDays })} required />
+            <Input label="Délai de rappel (jours)" type="number" value={form.reminderDelayDays} onChange={reminderDelayDays => setForm({ ...form, reminderDelayDays })} required />
             <Input label="Retention max fonds (jours)" type="number" value={form.maxFundsRetentionDays} onChange={maxFundsRetentionDays => setForm({ ...form, maxFundsRetentionDays })} required />
           </Panel>
 

@@ -100,9 +100,11 @@ export interface Contribution {
   netAmount?: number
   paymentUrl?: string
   createdAt: string
-  membre?: { user: { fullName: string } }
+  membre?: { user: { fullName: string } } | null
+  // Donateur d'une collecte publique (sans compte membre)
+  contributeurExterne?: { nom: string } | null
   rubrique?: { title: string; code: string }
-  collecteur?: { fullName: string }
+  collecteur?: { fullName: string } | null
   fundsTransfer?: FundsTransfer
   // Capacités calculées par l'API pour l'utilisateur courant (seule source de vérité)
   actions?: {

@@ -16,7 +16,7 @@ import {
 import api from '@/lib/api'
 import { ActivityCard } from '@/components/ui/ActivityCard'
 import { Avatar } from '@/components/ui/Avatar'
-import { formatAmount, MODE_PAIEMENT_LABELS } from '@/lib/utils'
+import { formatAmount, MODE_PAIEMENT_LABELS, contributorName } from '@/lib/utils'
 import { useAppStore } from '@/store/appStore'
 import { useAuthStore } from '@/store/authStore'
 import type { CollecteursResponse, Contribution, DashboardStats, ModePaiement } from '@/types'
@@ -115,7 +115,7 @@ export function Dashboard() {
       )}
 
       {statsQuery.isLoading ? <DashboardSkeleton /> : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
           <MetricCard icon={<Wallet size={20} />} title={month === 'all' ? 'Collecte annuelle' : 'Collecte du mois'} value={stats?.totalCollectedPeriod ?? 0} formatter={formatAmount} color="#1A6B1A" onClick={() => setActiveView('contributions')} />
           <MetricCard icon={<TrendingUp size={20} />} title="Contributions confirmées" value={stats?.totalConfirmedContributions ?? 0} color="#D4A900" iconTextColor="#052005" onClick={() => setActiveView('statistiques')} />
           <MetricCard icon={<CheckCircle2 size={20} />} title="Taux de confirmation" value={stats?.globalConfirmationRate ?? 0} suffix="%" color="#2563EB" onClick={() => setActiveView('validations')} />
@@ -214,7 +214,7 @@ function MetricCard({ icon, title, value, suffix, formatter, color, iconTextColo
   return <Card hoverable className="relative" styles={{ body: { padding: 18 } }}><button type="button" aria-label={`Consulter ${title}`} onClick={onClick} className="absolute inset-0 z-10 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A6B1A]" /><div className="mb-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: color, color: iconTextColor ?? '#fff' }}>{icon}</span></div><Statistic title={title} value={value} suffix={suffix} formatter={() => formatter ? formatter(value) : value} valueStyle={{ color: '#0F172A', fontWeight: 700, fontSize: 24 }} /></Card>
 }
 
-function DashboardSkeleton() { return <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <Card key={index}><Skeleton active paragraph={{ rows: 2 }} /></Card>)}</div> }
+function DashboardSkeleton() { return <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <Card key={index}><Skeleton active paragraph={{ rows: 2 }} /></Card>)}</div> }
 
 function Panel({ title, extra, children }: { title: string; extra?: React.ReactNode; children: React.ReactNode }) {
   return <Card title={<span className="font-display text-lg font-semibold text-[#0F4A0F]">{title}</span>} extra={extra} className="h-full shadow-sm">{children}</Card>
@@ -228,8 +228,8 @@ function ActivityTimeline({ items }: { items: Contribution[] }) {
       {items.slice(0, 8).map(item => (
         <ActivityCard
           key={item.id}
-          avatar={<Avatar name={item.membre?.user.fullName ?? 'Membre inconnu'} size="md" />}
-          title={item.membre?.user.fullName ?? 'Membre inconnu'}
+          avatar={<Avatar name={contributorName(item)} size="md" />}
+          title={contributorName(item)}
           subtitle={`${item.rubrique?.code ?? ''} · ${MODE_PAIEMENT_LABELS[item.modePaiement]}`}
           timestamp={item.createdAt}
           onClick={() => navigateToNotification({

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle, Clock, XCircle, Loader2, ChevronDown } from 'lucide-react'
 import api, { getBaseURL } from '@/lib/api'
-import { cn, formatAmount, formatDateTime, TRANSFER_TYPE_EMOJI, TRANSFER_TYPE_LABELS } from '@/lib/utils'
+import { cn, formatAmount, formatDateTime, TRANSFER_TYPE_EMOJI, TRANSFER_TYPE_LABELS, contributorName } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useFocusHighlight } from '@/hooks/useFocusHighlight'
@@ -132,7 +132,7 @@ function TransferCard({ transfer, expanded, highlighted, onToggle, onConfirm, on
 
       {expanded && (
         <div className="border border-gray-100 rounded-[12px] divide-y mb-3 max-h-40 overflow-y-auto">{transfer.contributions.map(c => (
-          <div key={c.id} className="flex justify-between px-3 py-2 text-xs"><span>{c.membre?.user.fullName ?? '—'}</span><span className="font-mono">{formatAmount(c.montant)}</span></div>
+          <div key={c.id} className="flex justify-between px-3 py-2 text-xs"><span>{contributorName(c)}</span><span className="font-mono">{formatAmount(c.montant)}</span></div>
         ))}</div>
       )}
 

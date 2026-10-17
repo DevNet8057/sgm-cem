@@ -143,7 +143,7 @@ export function Prestations() {
         <form onSubmit={e => { e.preventDefault(); create.mutate() }} className="mb-5 rounded-[18px] border border-gray-100 bg-white p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
           <Input label="Titre" value={form.titre} onChange={titre => setForm({ ...form, titre })} required />
           <Input label="Commanditaire" value={form.commanditaire} onChange={commanditaire => setForm({ ...form, commanditaire })} required />
-          <Input label="Telephone" value={form.commanditairePhone} onChange={commanditairePhone => setForm({ ...form, commanditairePhone })} />
+          <Input label="Téléphone" value={form.commanditairePhone} onChange={commanditairePhone => setForm({ ...form, commanditairePhone })} />
           <Input label="Lieu" value={form.lieu} onChange={lieu => setForm({ ...form, lieu })} />
           <Input label="Tarif base" type="number" value={form.tarifBase} onChange={tarifBase => setForm({ ...form, tarifBase })} required />
           <Input label="Rabais" type="number" value={form.rabaisCommanditaire} onChange={rabaisCommanditaire => setForm({ ...form, rabaisCommanditaire })} />
@@ -151,7 +151,7 @@ export function Prestations() {
           <Input label="Date evenement" type="date" value={form.dateEvenement} onChange={dateEvenement => setForm({ ...form, dateEvenement })} />
           <Input label="Description" value={form.description} onChange={description => setForm({ ...form, description })} className="md:col-span-4" />
           <div className="md:col-span-4 flex justify-end">
-            <Button loading={create.isPending}>Creer</Button>
+            <Button loading={create.isPending}>Créer</Button>
           </div>
         </form>
       )}
@@ -171,7 +171,7 @@ export function Prestations() {
             {isLoading ? (
               <table className="w-full"><tbody>{Array.from({ length: 6 }).map((_, i) => <SkeletonTableRow key={i} cols={3} />)}</tbody></table>
             ) : filtered.length === 0 ? (
-              <EmptyState icon={Receipt} title="Aucune prestation" description="Creez une prestation pour suivre les entrees et les depenses." />
+              <EmptyState icon={Receipt} title="Aucune prestation" description="Créez une prestation pour suivre les entrées et les dépenses." />
             ) : filtered.map(item => (
               <button key={item.id} onClick={() => setSelectedId(item.id)}
                 className={cn('w-full text-left p-4 border-b border-gray-100 hover:bg-[#F2FFF4] transition-colors interactive hover:shadow-cem-sm', selectedIdSafe === item.id && 'bg-[#F2FFF4]')}>
@@ -207,7 +207,7 @@ export function Prestations() {
           />
         ) : (
           <div className="rounded-[18px] border border-gray-100 bg-white">
-            <EmptyState icon={Receipt} title="Selectionnez une prestation" description="Le detail apparaitra ici." />
+            <EmptyState icon={Receipt} title="Sélectionnez une prestation" description="Le détail apparaîtra ici." />
           </div>
         )}
       </div>
@@ -252,7 +252,7 @@ function PrestationDetail({ prestation: p, cours, setCours, entree, setEntree, a
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <LinePanel title="Cours / depenses" icon={Banknote}>
+        <LinePanel title="Cours / dépenses" icon={Banknote}>
           {canEditMoney && (
             <form onSubmit={e => { e.preventDefault(); addCours() }} className="grid grid-cols-1 sm:grid-cols-[1fr_130px_auto] gap-2 mb-4">
               <Input label="Libelle" value={cours.libelle} onChange={libelle => setCours({ ...cours, libelle })} required />

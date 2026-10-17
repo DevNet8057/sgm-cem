@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { Prisma, PrismaClient } from '@prisma/client'
+import { LocalisationFonds, ModePaiement, Prisma, PrismaClient } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
@@ -70,38 +70,60 @@ const declareSchema = z.object({
 )
 
 router.get('/', authenticate, requireLevel(2), async (req, res) => {
-  const { page = '1', limit = '20', statut, rubriqueId, membreId } = req.query as Record<string, string>
+  const { page = '1', limit = '20', statut, rubriqueId, membreId, localisation, search, modePaiement } = req.query as Record<string, string>
   const currentPage = Math.max(1, parseInt(page, 10) || 1)
   const pageSize = Math.min(100, Math.max(1, parseInt(limit, 10) || 20))
   const skip = (currentPage - 1) * pageSize
+  // Filtres côté serveur (jamais de filtrage d'une seule page dans le navigateur)
+  const localisations = localisation
+    ? z.array(z.nativeEnum(LocalisationFonds)).parse(localisation.split(',').filter(Boolean))
+    : undefined
+  const term = search?.trim().slice(0, 80)
 
   // Périmètre : un collecteur ne voit que les contributions qui lui sont attribuées
-  const where = {
-    ...getContributionScope(actorOf(req)),
-    ...(statut && { statut: statut as never }),
-    ...(rubriqueId && { rubriqueId }),
-    ...(membreId && { membreId }),
+  const where: Prisma.ContributionWhereInput = {
+    AND: [
+      getContributionScope(actorOf(req)),
+      {
+        ...(statut && { statut: statut as never }),
+        ...(rubriqueId && { rubriqueId }),
+        ...(membreId && { membreId }),
+        ...(localisations && { localisationFonds: { in: localisations } }),
+        ...(modePaiement && { modePaiement: z.nativeEnum(ModePaiement).parse(modePaiement) }),
+      },
+      ...(term ? [{
+        OR: [
+          { membre: { user: { fullName: { contains: term, mode: 'insensitive' as const } } } },
+          { contributeurExterne: { nom: { contains: term, mode: 'insensitive' as const } } },
+          { rubrique: { title: { contains: term, mode: 'insensitive' as const } } },
+          { rubrique: { code: { contains: term, mode: 'insensitive' as const } } },
+        ],
+      }] : []),
+    ],
   }
 
-  const [contributions, total] = await Promise.all([
+  const [contributions, total, sum] = await Promise.all([
     prisma.contribution.findMany({
       where,
       skip,
       take: pageSize,
       include: {
         membre: { include: { user: { select: { fullName: true } } } },
+        contributeurExterne: { select: { nom: true } },
         rubrique: { select: { title: true, code: true } },
         collecteur: { select: { fullName: true } },
       },
       orderBy: { createdAt: 'desc' }
     }),
-    prisma.contribution.count({ where })
+    prisma.contribution.count({ where }),
+    prisma.contribution.aggregate({ where, _sum: { montant: true } }),
   ])
+  const totalAmount = sum._sum.montant ?? 0
 
   res.json({
     success: true,
     data: withActions(actorOf(req), contributions),
-    pagination: { page: currentPage, limit: pageSize, total, totalPages: Math.ceil(total / pageSize) }
+    pagination: { page: currentPage, limit: pageSize, total, totalPages: Math.ceil(total / pageSize), totalAmount }
   })
 })
 
@@ -113,6 +135,7 @@ router.get('/validations', authenticate, requireLevel(2), async (req, res) => {
     },
     include: {
       membre: { include: { user: { select: { fullName: true } } } },
+      contributeurExterne: { select: { nom: true } },
       rubrique: { select: { title: true, code: true } },
       collecteur: { select: { fullName: true } },
     },
@@ -159,6 +182,7 @@ router.get('/litiges', authenticate, requireLevel(3), async (req, res) => {
     where: { statut: 'LITIGE' },
     include: {
       membre: { include: { user: { select: { fullName: true } } } },
+      contributeurExterne: { select: { nom: true } },
       rubrique: { select: { title: true, code: true } },
       collecteur: { select: { fullName: true } },
     },
@@ -312,6 +336,7 @@ function priorityRank(priority: string): number {
 
 const CONTRIBUTION_CREATED_INCLUDE = {
   membre: { include: { user: { select: { fullName: true } } } },
+  contributeurExterne: { select: { nom: true } },
   rubrique: { select: { title: true, code: true } },
   collecteur: { select: { fullName: true } },
 } satisfies Prisma.ContributionInclude
@@ -681,6 +706,7 @@ router.get('/:id/timeline', authenticate, requireLevel(2), async (req, res) => {
     where: { id },
     include: {
       membre: { include: { user: { select: { fullName: true } } } },
+      contributeurExterne: { select: { nom: true } },
       rubrique: { select: { title: true, code: true } },
       fundsTransfer: { select: { senderName: true, receiverName: true, status: true, createdAt: true, confirmedAt: true, refusedAt: true, cancelledAt: true, transferType: true } },
       bankDeposit: { select: { referenceBordereau: true, depositedByName: true, createdAt: true } },

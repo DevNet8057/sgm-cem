@@ -43,6 +43,7 @@ export async function computeDashboardStats(requestedYear?: number, requestedMon
       orderBy: { createdAt: 'desc' },
       include: {
         membre: { include: { user: { select: { fullName: true } } } },
+        contributeurExterne: { select: { nom: true } },
         rubrique: { select: { title: true, code: true } },
         collecteur: { select: { fullName: true } },
       }
@@ -57,6 +58,7 @@ export async function computeDashboardStats(requestedYear?: number, requestedMon
       where: { statut: 'CONFIRME', createdAt: periodFilter },
       include: {
         membre: { include: { user: { select: { fullName: true } } } },
+        contributeurExterne: { select: { nom: true } },
         rubrique: { select: { id: true, code: true, title: true, targetAmount: true } },
       }
     }),

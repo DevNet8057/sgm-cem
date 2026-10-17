@@ -272,7 +272,7 @@ export function Ged() {
             <table className="w-full text-sm table-mobile-cards">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50">
-                  {['Document', 'Commission', 'Type', 'Statut', 'Cree le', 'Actions'].map(col => (
+                  {['Document', 'Commission', 'Type', 'Statut', 'Créé le', 'Actions'].map(col => (
                     <th key={col} className="px-4 py-3 text-left text-xs font-semibold text-gray-500">{col}</th>
                   ))}
                 </tr>
@@ -281,7 +281,7 @@ export function Ged() {
                 {isLoading ? (
                   Array.from({ length: 8 }).map((_, i) => <SkeletonTableRow key={i} cols={6} />)
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan={6}><EmptyState icon={FolderKanban} title="Aucun document" description="Les documents des commissions apparaitront ici." /></td></tr>
+                  <tr><td colSpan={6}><EmptyState icon={FolderKanban} title="Aucun document" description="Les documents des commissions apparaîtront ici." /></td></tr>
                 ) : filtered.map(document => (
                   <DocumentRow
                     key={document.id}

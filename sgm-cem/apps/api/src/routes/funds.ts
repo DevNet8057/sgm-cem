@@ -91,6 +91,7 @@ router.get('/contributions', authenticate, requireLevel(2), async (req, res) => 
     include: {
       collecteur: { select: { id: true, fullName: true, email: true, role: true } },
       membre: { include: { user: { select: { fullName: true } } } },
+      contributeurExterne: { select: { nom: true } },
       rubrique: { select: { code: true, title: true } },
       fundsTransfer: { select: { id: true, status: true, senderName: true, receiverName: true } },
     },
@@ -253,6 +254,7 @@ router.get('/transfers', authenticate, requireLevel(2), async (req, res) => {
         select: {
           id: true, montant: true, modePaiement: true,
           membre: { include: { user: { select: { fullName: true } } } },
+          contributeurExterne: { select: { nom: true } },
           rubrique: { select: { code: true, title: true } },
         },
       },
@@ -278,6 +280,7 @@ router.get('/transfers/pending-my-approval', authenticate, requireLevel(2), asyn
       contributions: {
         include: {
           membre: { include: { user: { select: { fullName: true } } } },
+          contributeurExterne: { select: { nom: true } },
           rubrique: { select: { code: true, title: true } },
         },
       },
@@ -687,6 +690,7 @@ router.get('/bank-deposits', authenticate, requireLevel(4), async (_req, res) =>
         select: {
           id: true, montant: true, modePaiement: true,
           membre: { include: { user: { select: { fullName: true } } } },
+          contributeurExterne: { select: { nom: true } },
           rubrique: { select: { code: true, title: true } },
         },
       },

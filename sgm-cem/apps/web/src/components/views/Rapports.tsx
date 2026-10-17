@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Download, Eye, FileText, Printer } from 'lucide-react'
 import api, { getBaseURL } from '@/lib/api'
 import { Button } from '@/components/ui/Button'
-import { formatDate } from '@/lib/utils'
+import { formatDate, contributorName } from '@/lib/utils'
 import { downloadXlsx } from '@/lib/exportXlsx'
 import type { Contribution, Membre, Rubrique } from '@/types'
 
@@ -88,7 +88,7 @@ export function Rapports() {
             { header: 'Date', key: 'date', width: 16 },
           ],
           rows: rows.map(c => ({
-            membre: c.membre?.user.fullName ?? '',
+            membre: contributorName(c),
             rubrique: c.rubrique?.code ?? '',
             montant: c.montant,
             mode: c.modePaiement,

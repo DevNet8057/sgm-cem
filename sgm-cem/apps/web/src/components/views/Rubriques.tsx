@@ -205,7 +205,7 @@ export function Rubriques() {
           {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
         </div>
       ) : rubriques.length === 0 ? (
-        <EmptyState icon={FolderOpen} title="Aucune rubrique" description="Commencez par creer une rubrique de contribution" actionLabel="Creer une rubrique" onAction={startCreate} />
+        <EmptyState icon={FolderOpen} title="Aucune rubrique" description="Commencez par creer une rubrique de contribution" actionLabel="Créer une rubrique" onAction={startCreate} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 stagger-children">
           {rubriques.map(r => (
@@ -246,7 +246,7 @@ function RubriqueEditor({ mode, form, setForm, error, loading, onCancel, onSubmi
       className="mb-5 bg-white rounded-[18px] border border-gray-100 p-4 grid grid-cols-1 md:grid-cols-4 gap-3"
     >
       <div className="md:col-span-4 flex items-center justify-between">
-        <h3 className="font-display font-semibold text-[#0F4A0F]">{mode === 'create' ? 'Creer une rubrique' : 'Modifier la rubrique'}</h3>
+        <h3 className="font-display font-semibold text-[#0F4A0F]">{mode === 'create' ? 'Créer une rubrique' : 'Modifier la rubrique'}</h3>
         <button type="button" onClick={onCancel} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
       </div>
       {/* Toggle urgent */}
@@ -310,7 +310,7 @@ function RubriqueEditor({ mode, form, setForm, error, loading, onCancel, onSubmi
       {error && <p className="md:col-span-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-[10px] px-3 py-2">{error}</p>}
       <div className="md:col-span-4 flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={onCancel}>Annuler</Button>
-        <Button loading={loading}>{mode === 'create' ? 'Creer la rubrique' : 'Enregistrer les changements'}</Button>
+        <Button loading={loading}>{mode === 'create' ? 'Créer la rubrique' : 'Enregistrer les changements'}</Button>
       </div>
     </form>
   )

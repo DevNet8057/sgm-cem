@@ -118,3 +118,22 @@ export const FUND_TRANSFER_STATUS_LABELS: Record<string, string> = {
   REFUSED: 'Refusé',
   CANCELLED: 'Annulé',
 }
+
+type ContributorSource = {
+  membre?: { user: { fullName: string } } | null
+  contributeurExterne?: { nom: string } | null
+  collecteur?: { fullName: string } | null
+}
+
+/** Qui a contribué (UX-10) : membre, donateur d'une collecte publique, ou remise groupée déclarée par le staff. */
+export function contributorKind(c: ContributorSource): 'MEMBRE' | 'DON_PUBLIC' | 'REMISE_GROUPEE' {
+  if (c.membre) return 'MEMBRE'
+  return c.contributeurExterne ? 'DON_PUBLIC' : 'REMISE_GROUPEE'
+}
+
+/** Nom à afficher, jamais « Membre inconnu ». */
+export function contributorName(c: ContributorSource): string {
+  if (c.membre) return c.membre.user.fullName
+  if (c.contributeurExterne) return c.contributeurExterne.nom
+  return c.collecteur ? `Remise groupée (déclarée par ${c.collecteur.fullName})` : 'Remise groupée'
+}

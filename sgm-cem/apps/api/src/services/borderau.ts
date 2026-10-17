@@ -24,6 +24,7 @@ export async function generateBorderauHtml(transferId: string): Promise<string> 
       contributions: {
         include: {
           membre: { include: { user: { select: { fullName: true } } } },
+          contributeurExterne: { select: { nom: true } },
           rubrique: { select: { code: true, title: true } },
         },
         orderBy: { createdAt: 'asc' },
@@ -42,7 +43,7 @@ export async function generateBorderauHtml(transferId: string): Promise<string> 
 
   const rows = transfer.contributions.map(c => `
     <tr>
-      <td>${e(c.membre?.user.fullName ?? '-')}</td>
+      <td>${e(c.membre?.user.fullName ?? (c.contributeurExterne ? `${c.contributeurExterne.nom} (don public)` : 'Remise groupée'))}</td>
       <td><span class="code">${e(c.rubrique?.code ?? '-')}</span> ${e(c.rubrique?.title ?? '')}</td>
       <td class="num">${formatXAF(c.montant)}</td>
     </tr>`).join('')

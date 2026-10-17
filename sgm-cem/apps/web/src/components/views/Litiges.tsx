@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CheckCircle2, MessageSquare, Paperclip, XCircle } from 'lucide-react'
 import api from '@/lib/api'
-import { formatAmount, formatDateTime, MODE_PAIEMENT_LABELS } from '@/lib/utils'
+import { formatAmount, formatDateTime, MODE_PAIEMENT_LABELS, contributorName } from '@/lib/utils'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -46,7 +46,7 @@ export function Litiges() {
         setReceiptTarget({
           contributionId: variables.id,
           initialReceiptUrl: res.data.data.receiptUrl ?? null,
-          memberName: contribution?.membre?.user.fullName,
+          memberName: contribution && contributorName(contribution),
           amount: contribution?.montant,
           rubriqueLabel: contribution?.rubrique?.title,
         })
@@ -134,8 +134,8 @@ export function Litiges() {
                   <tr key={c.id} className="border-b border-gray-50 hover:bg-red-50/30 transition-colors">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
-                        <Avatar name={c.membre?.user.fullName ?? '—'} size="sm" />
-                        <p className="font-medium text-gray-800">{c.membre?.user.fullName ?? '-'}</p>
+                        <Avatar name={contributorName(c)} size="sm" />
+                        <p className="font-medium text-gray-800">{contributorName(c)}</p>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-600" data-label="Rubrique">

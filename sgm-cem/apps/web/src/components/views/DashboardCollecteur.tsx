@@ -3,7 +3,7 @@ import { TodoCard } from '@/components/dashboard/TodoCard'
 import { useQuery } from '@tanstack/react-query'
 import { CheckCircle2, Clock, CreditCard, TrendingUp, Wallet } from 'lucide-react'
 import api from '@/lib/api'
-import { formatAmount, formatDateTime } from '@/lib/utils'
+import { formatAmount, formatDateTime, contributorName } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
 import { useAppStore } from '@/store/appStore'
 import { Button } from '@/components/ui/Button'
@@ -43,7 +43,7 @@ export function DashboardCollecteur() {
             variant="yellow"
           >
             <CreditCard size={14} />
-            Enregistrer un paiement
+            Encaisser un paiement
           </Button>
         </div>
       </div>
@@ -89,7 +89,7 @@ export function DashboardCollecteur() {
             {(myContribs ?? []).slice(0, 10).map(c => (
               <div key={c.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50/60 transition-colors">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 truncate">{c.membre?.user.fullName ?? '—'}</p>
+                  <p className="text-sm font-semibold text-gray-800 truncate">{contributorName(c)}</p>
                   <p className="text-xs text-gray-400 truncate">{c.rubrique?.code} · {formatDateTime(c.createdAt)}</p>
                 </div>
                 <div className="text-right shrink-0 space-y-0.5">

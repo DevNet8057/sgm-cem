@@ -1,9 +1,9 @@
 'use client'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Activity, AlertTriangle, ChevronsUpDown, Clock, CreditCard, Eye, FileText, Filter, Loader2, MapPin, Paperclip, Plus, Search, Wand2, X } from 'lucide-react'
+import { Activity, AlertTriangle, Banknote, ChevronsUpDown, Clock, CreditCard, Eye, FileText, Filter, Loader2, MapPin, Paperclip, Plus, Search, Wand2, X } from 'lucide-react'
 import api, { getBaseURL } from '@/lib/api'
-import { cn, formatAmount, formatDate, formatDateTime, MODE_PAIEMENT_LABELS } from '@/lib/utils'
+import { cn, formatAmount, formatDate, formatDateTime, MODE_PAIEMENT_LABELS, contributorKind, contributorName } from '@/lib/utils'
 import { useAppStore } from '@/store/appStore'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -16,6 +16,7 @@ import { Modal } from '@/components/ui/Modal'
 import { AllocationEditor, type PaymentAllocation } from '@/components/payments/AllocationEditor'
 import { newClientRequestId, queueContribution } from '@/lib/offlineQueue'
 import { Avatar } from '@/components/ui/Avatar'
+import { CompactRow, ContributorBadge, DetailLine, DetailSheet } from '@/components/ui/CompactList'
 import { useFocusHighlight } from '@/hooks/useFocusHighlight'
 import type { Contribution, Membre, ModePaiement, Rubrique } from '@/types'
 
@@ -63,6 +64,8 @@ export function Contributions() {
   const [declareError, setDeclareError] = useState('')
   const [receiptLoading, setReceiptLoading] = useState<string | null>(null)
   const [timelineId, setTimelineId] = useState<string | null>(null)
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const [chooserOpen, setChooserOpen] = useState(false)
   const [proofUploading, setProofUploading] = useState<string | null>(null)
   const [receiptTarget, setReceiptTarget] = useState<{
     contributionId: string
@@ -145,7 +148,7 @@ export function Contributions() {
         setReceiptTarget({
           contributionId: data.id,
           initialReceiptUrl: data.receiptUrl ?? null,
-          memberName: data.membre?.user.fullName ?? selectedMembre?.user.fullName,
+          memberName: contributorName(data),
           amount: data.montant,
           rubriqueLabel: data.rubrique?.title ?? selectedRubrique?.title,
         })
@@ -294,11 +297,80 @@ export function Contributions() {
     }
   }
 
+  // Actions d'une contribution (tableau sur grand écran, feuille de détail sur mobile)
+  function renderActions(c: Contribution, withLabels = false) {
+    return (
+      <>
+        <button
+          onClick={() => { setDetailId(null); setTimelineId(c.id) }}
+          title="Voir la traçabilité" aria-label="Voir la traçabilité"
+          className="flex items-center gap-1 min-h-9 px-2.5 py-1.5 rounded-[8px] text-xs font-semibold text-blue-600 border border-blue-200 hover:bg-blue-50 active:scale-95 transition-all"
+        >
+          <Activity size={11} />
+          {withLabels && 'Traçabilité'}
+        </button>
+        {/* H7 : Upload preuve de paiement */}
+        {c.statut === 'EN_ATTENTE_CONFIRMATION' && (
+          <label
+            title={c.proofUrl ? 'Remplacer la preuve' : 'Joindre une preuve de paiement'} aria-label={c.proofUrl ? 'Remplacer la preuve' : 'Joindre une preuve de paiement'}
+            className={cn(
+              'flex items-center gap-1 min-h-9 px-2.5 py-1.5 rounded-[8px] text-xs font-semibold border cursor-pointer active:scale-95 transition-all',
+              c.proofUrl ? 'text-green-600 border-green-200 hover:bg-green-50' : 'text-gray-500 border-gray-200 hover:bg-gray-50'
+            )}
+          >
+            {proofUploading === c.id
+              ? <Loader2 size={11} className="animate-spin" />
+              : <Paperclip size={11} />}
+            {withLabels && (c.proofUrl ? 'Remplacer la preuve' : 'Joindre une preuve')}
+            <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,.webp"
+              onChange={e => { const f = e.target.files?.[0]; if (f) uploadProof(c.id, f) }} />
+          </label>
+        )}
+        {c.statut !== 'EN_ATTENTE_CONFIRMATION' && c.proofUrl && (
+          <a
+            href={c.proofUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Voir la preuve de paiement" aria-label="Voir la preuve de paiement"
+            className="flex items-center gap-1 min-h-9 px-2.5 py-1.5 rounded-[8px] text-xs font-semibold border text-green-600 border-green-200 hover:bg-green-50 transition-colors"
+          >
+            <Paperclip size={11} />
+            {withLabels && 'Voir la preuve'}
+          </a>
+        )}
+        {c.statut === 'CONFIRME' && (
+        <>
+            <button
+              onClick={() => window.open(`${getBaseURL()}/contributions/${c.id}/receipt`, '_blank')}
+              title="Afficher le reçu" aria-label="Afficher le reçu"
+              className="flex items-center gap-1 min-h-9 min-h-9 px-2.5 py-1.5 rounded-[8px] text-xs font-semibold text-[#1A6B1A] border border-[#1A6B1A]/25 hover:bg-[#E8F5E8] active:scale-95 transition-all"
+            >
+              <Eye size={11} />
+              {withLabels && 'Afficher le reçu'}
+            </button>
+            <button
+              onClick={() => downloadReceipt(c.id, contributorName(c))}
+              disabled={receiptLoading === c.id}
+              title="Télécharger / partager le reçu" aria-label="Télécharger / partager le reçu"
+              className="flex items-center gap-1.5 min-h-9 px-2.5 py-1.5 rounded-[8px] text-xs font-semibold text-[#1A6B1A] border border-[#1A6B1A]/25 hover:bg-[#E8F5E8] active:scale-95 transition-all disabled:opacity-40"
+            >
+              {receiptLoading === c.id
+                ? <Loader2 size={11} className="animate-spin" />
+                : <FileText size={11} />}
+              <span className={withLabels ? '' : 'hidden sm:inline'}>{withLabels ? 'Partager le reçu' : 'Reçu'}</span>
+            </button>
+        </>
+      )}
+      </>
+    )
+  }
+
   const contributions: Contribution[] = data?.data ?? []
   const pagination = data?.pagination
   const pending = contributions.filter(c => c.statut === 'EN_ATTENTE_CONFIRMATION').length
   const litiges = contributions.filter(c => c.statut === 'LITIGE').length
   const highlightedId = useFocusHighlight(contributions.map(c => c.id))
+  const detail = contributions.find(c => c.id === detailId) ?? null
 
   return (
     <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter">
@@ -324,18 +396,16 @@ export function Contributions() {
                 </span>
               )}
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setShowStepper(true)}>
-              <Wand2 size={14} />
-              Guidé
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => { setShowDeclare(v => !v); setShowForm(false); setDeclareSplitMode(false); setDeclareAllocationBudget(''); setDeclareAllocations([]) }}>
-              {showDeclare ? <X size={14} /> : <MapPin size={14} />}
-              {showDeclare ? 'Fermer' : 'Déclarer'}
-            </Button>
-            <Button size="sm" onClick={() => { setShowForm(v => !v); setShowDeclare(false); resetSplitState() }}>
-              {showForm ? <X size={14} /> : <Plus size={14} />}
-              {showForm ? 'Fermer' : 'Rapide'}
-            </Button>
+            {/* Une seule entrée « Encaisser » (UX-11) : le choix du cas vient ensuite */}
+            {showForm || showDeclare ? (
+              <Button size="sm" variant="outline" onClick={() => { setShowForm(false); setShowDeclare(false) }}>
+                <X size={14} /> Fermer
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => setChooserOpen(true)}>
+                <Plus size={14} /> Encaisser
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -486,8 +556,8 @@ export function Contributions() {
                 options={(rubriquesData ?? []).filter(r => r.status === 'OUVERTE').map(r => ({ value: r.id, label: r.title, sublabel: r.code }))}
               />
               <Input label="Montant" type="number" value={form.montant} onChange={montant => setForm({ ...form, montant })} required />
-              <Input label="Telephone paiement" value={form.mobileMoneyPhone} onChange={mobileMoneyPhone => setForm({ ...form, mobileMoneyPhone })} />
-              <Input label="Reference" value={form.referencePaiement} onChange={referencePaiement => setForm({ ...form, referencePaiement })} />
+              <Input label="Téléphone de paiement" value={form.mobileMoneyPhone} onChange={mobileMoneyPhone => setForm({ ...form, mobileMoneyPhone })} />
+              <Input label="Référence" value={form.referencePaiement} onChange={referencePaiement => setForm({ ...form, referencePaiement })} />
               <div className="flex items-end">
                 <div className="w-full rounded-[10px] bg-[#E8F5E8] px-3 py-2 text-xs text-[#0F4A0F]">
                   Attendu: <span className="font-bold font-mono">{formatAmount(expectedAmount)}</span>
@@ -610,7 +680,8 @@ export function Contributions() {
         <input
           value={search}
           onChange={e => { setSearch(e.target.value); setPage(1) }}
-          placeholder="Rechercher par nom de membre ou rubrique…"
+          placeholder="Rechercher (nom, rubrique)…"
+          aria-label="Rechercher une contribution par nom ou rubrique"
           className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30 focus:border-[#1A6B1A]"
         />
       </div>
@@ -633,11 +704,32 @@ export function Contributions() {
           <h3 className="font-display font-semibold text-white text-sm">Liste des contributions</h3>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm table-mobile-cards">
+        {/* Mobile : liste compacte, détail en feuille (UX-09) */}
+        <ul className="md:hidden" aria-label="Contributions">
+          {isLoading ? (
+            Array.from({ length: 6 }).map((_, i) => <li key={i} className="mx-4 my-3 h-11 animate-pulse rounded-lg bg-gray-100" />)
+          ) : contributions.length === 0 ? (
+            <li><EmptyState icon={CreditCard} title="Aucune contribution" description="Les contributions enregistrées apparaîtront ici" /></li>
+          ) : contributions.map(c => (
+            <CompactRow
+              key={c.id}
+              focusId={c.id}
+              highlighted={highlightedId === c.id}
+              title={contributorName(c)}
+              badge={<ContributorBadge kind={contributorKind(c)} />}
+              subtitle={`${c.rubrique?.code ?? ''} · ${MODE_PAIEMENT_LABELS[c.modePaiement]} · ${formatDate(c.createdAt)}`}
+              amount={formatAmount(c.montant)}
+              status={<StatusBadge status={c.statut} />}
+              onClick={() => setDetailId(c.id)}
+            />
+          ))}
+        </ul>
+
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
-                {['Membre', 'Rubrique', 'Montant', 'Mode', 'Statut', 'Date', ''].map(col => (
+                {['Contributeur', 'Rubrique', 'Montant', 'Mode', 'Statut', 'Date', ''].map(col => (
                   <th key={col} className="px-4 py-3 text-left text-xs font-semibold text-gray-500">
                     {col ? <span className="flex items-center gap-1">{col} <ChevronsUpDown size={10} /></span> : null}
                   </th>
@@ -648,7 +740,7 @@ export function Contributions() {
               {isLoading ? (
                 Array.from({ length: 8 }).map((_, i) => <SkeletonTableRow key={i} cols={6} />)
               ) : contributions.length === 0 ? (
-                <tr><td colSpan={7}><EmptyState icon={CreditCard} title="Aucune contribution" description="Les contributions enregistrees apparaitront ici" /></td></tr>
+                <tr><td colSpan={7}><EmptyState icon={CreditCard} title="Aucune contribution" description="Les contributions enregistrées apparaîtront ici" /></td></tr>
               ) : (
                 contributions.map(c => (
                   <tr key={c.id} data-focus-id={c.id} className={cn(
@@ -657,8 +749,9 @@ export function Contributions() {
                   )}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
-                        <Avatar name={c.membre?.user.fullName ?? '—'} size="sm" />
-                        <p className="font-medium text-gray-800">{c.membre?.user.fullName ?? '-'}</p>
+                        <Avatar name={contributorName(c)} size="sm" />
+                        <p className="font-medium text-gray-800">{contributorName(c)}</p>
+                        <ContributorBadge kind={contributorKind(c)} />
                       </div>
                     </td>
                     <td className="px-4 py-3 text-gray-600 text-xs" data-label="Rubrique">{c.rubrique?.code}</td>
@@ -668,62 +761,7 @@ export function Contributions() {
                     <td className="px-4 py-3 text-xs text-gray-400" data-label="Date">{formatDate(c.createdAt)}</td>
                     <td className="px-4 py-3" data-label="Actions">
                       <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => setTimelineId(c.id)}
-                          title="Voir la traçabilité"
-                          className="flex items-center gap-1 px-2 py-1.5 rounded-[8px] text-xs font-semibold text-blue-600 border border-blue-200 hover:bg-blue-50 active:scale-95 transition-all"
-                        >
-                          <Activity size={11} />
-                        </button>
-                        {/* H7 : Upload preuve de paiement */}
-                        {c.statut === 'EN_ATTENTE_CONFIRMATION' && (
-                          <label
-                            title={c.proofUrl ? 'Remplacer la preuve' : 'Joindre une preuve de paiement'}
-                            className={cn(
-                              'flex items-center gap-1 px-2 py-1.5 rounded-[8px] text-xs font-semibold border cursor-pointer active:scale-95 transition-all',
-                              c.proofUrl ? 'text-green-600 border-green-200 hover:bg-green-50' : 'text-gray-500 border-gray-200 hover:bg-gray-50'
-                            )}
-                          >
-                            {proofUploading === c.id
-                              ? <Loader2 size={11} className="animate-spin" />
-                              : <Paperclip size={11} />}
-                            <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,.webp"
-                              onChange={e => { const f = e.target.files?.[0]; if (f) uploadProof(c.id, f) }} />
-                          </label>
-                        )}
-                        {c.statut !== 'EN_ATTENTE_CONFIRMATION' && c.proofUrl && (
-                          <a
-                            href={c.proofUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title="Voir la preuve de paiement"
-                            className="flex items-center gap-1 px-2 py-1.5 rounded-[8px] text-xs font-semibold border text-green-600 border-green-200 hover:bg-green-50 transition-colors"
-                          >
-                            <Paperclip size={11} />
-                          </a>
-                        )}
-                        {c.statut === 'CONFIRME' && (
-                          <>
-                            <button
-                              onClick={() => window.open(`${getBaseURL()}/contributions/${c.id}/receipt`, '_blank')}
-                              title="Afficher le reçu"
-                              className="flex items-center gap-1 px-2 py-1.5 rounded-[8px] text-xs font-semibold text-[#1A6B1A] border border-[#1A6B1A]/25 hover:bg-[#E8F5E8] active:scale-95 transition-all"
-                            >
-                              <Eye size={11} />
-                            </button>
-                            <button
-                              onClick={() => downloadReceipt(c.id, c.membre?.user.fullName)}
-                              disabled={receiptLoading === c.id}
-                              title="Télécharger / partager le reçu"
-                              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] text-xs font-semibold text-[#1A6B1A] border border-[#1A6B1A]/25 hover:bg-[#E8F5E8] active:scale-95 transition-all disabled:opacity-40"
-                            >
-                              {receiptLoading === c.id
-                                ? <Loader2 size={11} className="animate-spin" />
-                                : <FileText size={11} />}
-                              <span className="hidden sm:inline">Reçu</span>
-                            </button>
-                          </>
-                        )}
+                        {renderActions(c)}
                       </div>
                     </td>
                   </tr>
@@ -749,6 +787,45 @@ export function Contributions() {
           </div>
         )}
       </div>
+
+
+      <DetailSheet open={chooserOpen} onClose={() => setChooserOpen(false)} title="Encaisser">
+        <div className="space-y-2">
+          {[
+            { icon: Banknote, label: 'Un membre me paie', hint: 'Espèces reçues en main ou virement : enregistré tout de suite', onPick: () => { resetSplitState(); setShowForm(true) } },
+            { icon: Wand2, label: 'Être guidé pas à pas', hint: 'Le même enregistrement, étape par étape', onPick: () => setShowStepper(true) },
+            { icon: MapPin, label: 'Déclarer une remise à confirmer', hint: 'Argent remis à un collecteur ou au trésorier, qui confirmera la réception', onPick: () => { setDeclareSplitMode(false); setDeclareAllocationBudget(''); setDeclareAllocations([]); setShowDeclare(true) } },
+          ].map(option => (
+            <button key={option.label} type="button"
+              onClick={() => { setChooserOpen(false); option.onPick() }}
+              className="flex min-h-[64px] w-full items-center gap-3 rounded-[14px] border border-gray-100 px-4 py-3 text-left hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A6B1A]">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#E8F5E8] text-[#1A6B1A]"><option.icon size={18} /></span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-gray-800">{option.label}</span>
+                <span className="block text-xs text-slate-500">{option.hint}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </DetailSheet>
+
+      {/* Détail d'une contribution (mobile) */}
+      <DetailSheet open={!!detail} onClose={() => setDetailId(null)} title={detail ? contributorName(detail) : ''}
+        footer={detail && <div className="flex flex-wrap items-center gap-2">{renderActions(detail, true)}</div>}>
+        {detail && (
+          <div>
+            <p className="mb-3 text-center font-display text-3xl font-bold text-[#0F4A0F]">{formatAmount(detail.montant)}</p>
+            <DetailLine label="Statut"><StatusBadge status={detail.statut} /></DetailLine>
+            <DetailLine label="Rubrique">{detail.rubrique ? `${detail.rubrique.code} — ${detail.rubrique.title}` : '—'}</DetailLine>
+            <DetailLine label="Mode">{MODE_PAIEMENT_LABELS[detail.modePaiement]}</DetailLine>
+            {detail.collecteur && <DetailLine label="Collecteur">{detail.collecteur.fullName}</DetailLine>}
+            {detail.referencePaiement && <DetailLine label="Référence">{detail.referencePaiement}</DetailLine>}
+            <DetailLine label="Enregistrée le">{formatDateTime(detail.createdAt)}</DetailLine>
+            {detail.confirmedAt && <DetailLine label="Confirmée le">{formatDateTime(detail.confirmedAt)}</DetailLine>}
+            {detail.litigeMotif && <DetailLine label="Motif du litige">{detail.litigeMotif}</DetailLine>}
+          </div>
+        )}
+      </DetailSheet>
 
       {/* Stepper guidé */}
       {showStepper && (
