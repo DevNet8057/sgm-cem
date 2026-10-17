@@ -1,13 +1,9 @@
 import { Router } from 'express'
 import express from 'express'
 import { verifyYeliiSignature } from '../services/yelii.service'
-import { getPrisma } from '../lib/prisma'
-import { generateReceiptPDF } from '../services/receipt'
-import { sendWhatsAppDocument, sendWhatsApp, alertTresoriers, notifyMemberConfirmed } from '../services/notification'
-import { broadcastToAll } from '../lib/socket'
+import { applyProviderOutcome } from '../services/payment-status.service'
 
 const router = Router()
-const prisma = getPrisma()
 
 /**
  * POST /webhooks/yelii
@@ -64,136 +60,21 @@ async function processYeliiWebhook(envelope: YeliiEnvelope) {
   if (envelope.event !== 'collect.transaction.updated') return
 
   const { transactionId, status, amount, netCredited } = envelope.data
-
-  const contribution = await prisma.contribution.findFirst({
-    where: { externalTransactionId: transactionId },
-    include: {
-      membre: {
-        include: {
-          user: { select: { id: true, phone: true, whatsappPhone: true, fullName: true, email: true } },
-        },
-      },
-      // contribution publique : pas de membre, notifier le contributeur externe
-      contributeurExterne: { select: { phone: true, nom: true } },
-      rubrique: { select: { title: true, code: true } },
-    },
-  })
-
-  if (!contribution) {
-    console.warn(`[Yelii] Transaction ${transactionId} inconnue`)
-    return
-  }
-
-  // Idempotence — RB-12
-  if (
-    contribution.paymentStatus === 'SUCCESS' ||
-    contribution.paymentStatus === 'FAILED' ||
-    contribution.statut === 'CONFIRME' ||
-    contribution.statut === 'ANNULE'
-  ) {
-    console.info(`[Yelii] ${transactionId} déjà traitée — ignorée`)
-    return
-  }
-
-  // contribution publique : pas de membre, notifier le contributeur externe
-  const memberPhone = contribution.membre?.user.whatsappPhone ?? contribution.membre?.user.phone ?? contribution.contributeurExterne?.phone
-  const memberName = contribution.membre?.user.fullName ?? contribution.contributeurExterne?.nom ?? 'Contributeur'
-  // Notifications et reçu affichent le montant DÛ à la rubrique (§1bis), pas le montant majoré.
-  const montantStr = contribution.montant.toLocaleString('fr-FR')
-
-  // Cas 4 — montant reçu incohérent : Yelii renvoie le montant MAJORÉ (§1bis),
-  // on compare donc à amountChargedToPayer (fallback montant pour l'historique/espèces).
-  const expectedCharged = contribution.amountChargedToPayer ?? contribution.montant
-  if (SUCCESS_STATUSES.has(status) && amount != null && amount !== expectedCharged) {
-    console.warn(`[Yelii] Montant incohérent pour ${transactionId} : attendu ${expectedCharged}, reçu ${amount}`)
-    await alertTresoriers(
-      'Montant incohérent — paiement Mobile Money',
-      `${memberName} · attendu ${expectedCharged.toLocaleString('fr-FR')} FCFA, reçu ${amount.toLocaleString('fr-FR')} FCFA (transaction ${transactionId})`,
-      { contributionId: contribution.id, transactionId, expectedAmount: expectedCharged, receivedAmount: amount },
-      { view: 'contributions', id: contribution.id }
-    )
-    return
-  }
-
-  if (SUCCESS_STATUSES.has(status)) {
-    // Écriture conditionnelle : la route de polling (payment-status.service.ts,
-    // appelée toutes les 5s) peut confirmer la contribution entre le findFirst
-    // ci-dessus et cette écriture. La condition sur statut='EN_ATTENTE_CONFIRMATION'
-    // rend l'opération atomique et évite un double reçu/double notification.
-    const { count } = await prisma.contribution.updateMany({
-      where: { id: contribution.id, statut: 'EN_ATTENTE_CONFIRMATION' },
-      data: {
-        statut: 'CONFIRME',
-        confirmedAt: new Date(), // RB-01 : horodatage serveur
-        paymentStatus: 'SUCCESS',
-        netAmount: netCredited ?? null,
-        // Paiement Mobile Money : l'argent est crédité directement dans le wallet
-        // Yelii de l'organisation, géré par le trésorier — aucun collecteur ne le
-        // détient physiquement, donc pas de EN_TRANSIT/CHEZ_COLLECTEUR ici.
-        localisationFonds: 'REMIS_TRESORIER',
-      },
-    })
-
-    if (count === 0) {
-      console.info(`[Yelii] ${transactionId} — déjà confirmé par un autre chemin (polling/réconciliation), webhook ignoré`)
-      return
-    }
-
-    const receiptUrl = await generateReceiptPDF(contribution.id)
-    const msg = `CEM Melen - Paiement confirmé\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${contribution.rubrique.title}\nMerci pour votre contribution !`
-
-    // Membre avec compte : notifyMemberConfirmed regroupe in-app (cliquable,
-    // targetView='mes-contributions') + WhatsApp + email en un seul appel —
-    // avant cet ajout, seul un WhatsApp partait ici, sans notification in-app.
-    // Contributeur externe (collecte publique, pas de compte User) : WhatsApp
-    // seul, comportement inchangé, notifyMemberConfirmed ne s'applique pas
-    // (elle exige un userId).
-    if (contribution.membre) {
-      try {
-        await notifyMemberConfirmed({
-          userId: contribution.membre.user.id,
-          memberPhone,
-          memberEmail: contribution.membre.user.email,
-          memberName,
-          montant: contribution.montant,
-          rubriqueCode: contribution.rubrique.code,
-          receiptUrl,
-          contributionId: contribution.id,
-        })
-      } catch (e) {
-        console.error('[Notification] Échec notification membre (webhook Yelii):', e)
-      }
-    } else if (memberPhone) {
-      let sent = false
-      if (receiptUrl) sent = await sendWhatsAppDocument(memberPhone, receiptUrl, msg)
-      if (!sent) await sendWhatsApp(memberPhone, msg)
-    }
-
-    // Temps réel — rafraîchit les tableaux de bord connectés (données minimales)
-    broadcastToAll('contribution:confirmed', { contributionId: contribution.id, rubriqueId: contribution.rubriqueId })
-
-    console.info(`[Yelii] ✅ ${transactionId} — confirmé (net: ${netCredited} FCFA)`)
-  } else if (FAILED_STATUSES.has(status)) {
-    // Même garde que la branche succès : évite une double notification d'échec
-    // si le polling a déjà tranché le statut entre-temps.
-    const { count } = await prisma.contribution.updateMany({
-      where: { id: contribution.id, statut: 'EN_ATTENTE_CONFIRMATION' },
-      data: { statut: 'ANNULE', paymentStatus: 'FAILED' },
-    })
-
-    if (count === 0) {
-      console.info(`[Yelii] ${transactionId} — déjà confirmé par un autre chemin (polling/réconciliation), webhook ignoré`)
-      return
-    }
-
-    if (memberPhone) {
-      const failedMsg = `CEM Melen - Paiement échoué\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${contribution.rubrique.title}\nRéessayez ou contactez un collecteur.`
-      await sendWhatsApp(memberPhone, failedMsg)
-    }
-
-    console.info(`[Yelii] ❌ ${transactionId} — échoué`)
-  } else {
+  const outcome = SUCCESS_STATUSES.has(status) ? 'success' : FAILED_STATUSES.has(status) ? 'failed' : null
+  if (!outcome) {
     console.warn(`[Yelii] ${transactionId} — statut non géré: "${status}"`)
+    return
+  }
+
+  // Moteur commun (sondage, webhooks, réconciliation) : toutes les lignes de la
+  // transaction (paiement réparti) sont traitées ensemble, une seule fois.
+  try {
+    const result = await applyProviderOutcome(transactionId, {
+      provider: 'yelii', status: outcome, amount, netCredited, source: 'webhook',
+    })
+    console.info(`[Yelii] ${transactionId} — ${result}`)
+  } catch (e) {
+    console.error(`[Yelii] Échec du traitement de ${transactionId}`, e)
   }
 }
 

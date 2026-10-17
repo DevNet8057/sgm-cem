@@ -72,19 +72,27 @@ if [ "$HAS_DATA" = "t" ] && [ "${SKIP_PRE_START_BACKUP:-0}" != "1" ]; then
   fi
 fi
 
-# Le projet n'a pas de dossier prisma/migrations (schéma appliqué via db push
-# en dev) : `migrate deploy` ne créerait AUCUNE table. `db push` synchronise
-# le schéma de façon idempotente sans perte de données.
-# Note : `prisma generate` est déjà exécuté au build (Dockerfile étape 7),
-# donc on utilise --skip-generate pour gagner ~3s au démarrage.
-echo ">>> [API] Synchronisation du schéma Prisma (db push)..."
-pnpm exec prisma db push --skip-generate
+# ── Schéma : migrations Prisma versionnées (prisma/migrations) ──────────
+# Base créée autrefois par `db push` (tables présentes, pas de table
+# _prisma_migrations) : adoption UNE fois — `db push` sans --accept-data-loss
+# (refuse toute perte de données) aligne le schéma, puis la ligne de base est
+# marquée appliquée. Ensuite, et pour toute base neuve : `migrate deploy`.
+HAS_MIGRATIONS=$(psql "$PG_URL" -tAc "select to_regclass('public._prisma_migrations') is not null" 2>/dev/null || echo "f")
+if [ "$HAS_DATA" = "t" ] && [ "$HAS_MIGRATIONS" != "t" ]; then
+  echo ">>> [API] Base existante sans historique de migrations — adoption de la ligne de base..."
+  pnpm exec prisma db push --skip-generate
+  pnpm exec prisma migrate resolve --applied 0_baseline
+fi
+echo ">>> [API] Application des migrations (migrate deploy)..."
+pnpm exec prisma migrate deploy
 
 # Seed uniquement si la base est vide (aucun utilisateur) : sans lui, aucun
 # compte admin n'existe et la connexion est impossible au premier démarrage.
 USERS=$(node -e "const{PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.user.count().then(c=>console.log(c)).catch(()=>console.log('ERR')).finally(()=>p.\$disconnect())")
 if [ "$USERS" = "0" ]; then
-  echo ">>> [API] Base vide — seed initial (comptes + rubriques + config)..."
+  # Seed de BASE (admin, paramètres, rubriques, config) — jamais de données de
+  # démonstration sauf SEED_DEMO=1 explicite.
+  echo ">>> [API] Base vide — seed initial (admin + rubriques + config)..."
   pnpm exec ts-node prisma/seed.ts
   pnpm exec ts-node prisma/seed-config.ts
 else

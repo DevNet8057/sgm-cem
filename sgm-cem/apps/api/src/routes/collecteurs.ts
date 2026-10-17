@@ -127,6 +127,7 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
     chezResponsable: amountFor(flowGroups, 'CHEZ_RESPONSABLE'),
     remisTresorier: amountFor(flowGroups, 'REMIS_TRESORIER'),
     enCaisse: amountFor(flowGroups, 'EN_CAISSE'),
+    portefeuilleElectronique: amountFor(flowGroups, 'PORTEFEUILLE_ELECTRONIQUE'),
     enBanque: amountFor(flowGroups, 'EN_BANQUE'),
     totalConfirme: flowGroups.reduce((sum, item) => sum + (item._sum.montant ?? 0), 0),
     especesTotal,

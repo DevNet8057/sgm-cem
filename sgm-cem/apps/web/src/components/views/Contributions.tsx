@@ -447,6 +447,9 @@ export function Contributions() {
             // Les paiements MoMo/Orange/carte se font en ligne et sont confirmés par le prestataire
             options={STAFF_ENTRY_MODES.map(value => ({ value, label: MODE_PAIEMENT_LABELS[value] }))}
           />
+          <p className="md:col-span-4 -mt-1 text-xs text-gray-500">
+            Mobile Money ou carte : utilisez le mode « Guidé » — le paiement est confirmé automatiquement par le prestataire.
+          </p>
           {/* Répartition multi-rubriques (staff, ESPECES uniquement) */}
           {form.modePaiement === 'ESPECES' && (
             <label className="md:col-span-4 flex items-center gap-2.5 cursor-pointer select-none rounded-[10px] bg-[#E8F5E8] border border-[#1A6B1A]/20 px-4 py-3">
@@ -827,7 +830,8 @@ const STATUS_CHIPS = [
   { label: 'Annulé',     value: 'ANNULE',                  color: 'bg-gray-100 text-gray-500 border-gray-200', activeColor: 'bg-gray-500 text-white border-gray-500' },
 ] as const
 
-const STAFF_ENTRY_MODES: ModePaiement[] = ['ESPECES', 'VIREMENT', 'YELII']
+// Mobile Money et carte : parcours « Guidé » (paiement en ligne confirmé par le prestataire)
+const STAFF_ENTRY_MODES: ModePaiement[] = ['ESPECES', 'VIREMENT']
 
 const MODE_CHIPS = [
   { label: 'Espèces',     value: 'ESPECES',      color: 'bg-green-50 text-green-700 border-green-200', activeColor: 'bg-green-700 text-white border-green-700' },

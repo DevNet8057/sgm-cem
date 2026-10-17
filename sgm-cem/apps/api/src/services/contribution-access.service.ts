@@ -124,13 +124,17 @@ function hasValidAuthorization(
   )
 }
 
+// Litige possible tant que l'argent n'a pas quitté son premier détenteur :
+// chez le collecteur (même après un transfert refusé ou annulé), en attente
+// de paiement électronique, ou sur le portefeuille électronique non versé.
 function canManageDisputeFunds(record: ContributionAccessRecord): boolean {
+  if (record.bankDepositId) return false
+  const location = record.localisationFonds
   return (
-    !record.transferId &&
-    !record.bankDepositId &&
-    (!record.localisationFonds ||
-      record.localisationFonds === 'CHEZ_COLLECTEUR' ||
-      record.localisationFonds === 'EN_TRANSIT')
+    !location ||
+    location === 'CHEZ_COLLECTEUR' ||
+    location === 'PORTEFEUILLE_ELECTRONIQUE' ||
+    (location === 'EN_TRANSIT' && !record.transferId)
   )
 }
 

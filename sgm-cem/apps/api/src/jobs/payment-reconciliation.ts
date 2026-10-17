@@ -7,6 +7,8 @@ import { CONTRIBUTION_SYNC_SELECT, syncPaymentContributionStatus } from '../serv
 const prisma = new PrismaClient()
 
 const STALE_AFTER_MS = 15 * 60 * 1000 // 15 minutes
+// Une transaction bloquée n'est signalée qu'une fois par processus (le job tourne toutes les 10 min)
+const alertedStale = new Set<string>()
 
 /**
  * I8 — Job de réconciliation failsafe (section 11 Cas 2 du doc paiements).
@@ -41,13 +43,18 @@ export function schedulePaymentReconciliation(): void {
 export async function runPaymentReconciliation(): Promise<{ checked: number; confirmed: number; failed: number }> {
   const staleSince = new Date(Date.now() - STALE_AFTER_MS)
 
+  // YELII inclus : c'est le mode des paiements répartis (lots), auparavant
+  // jamais repris. Une ligne par transaction suffit — le moteur commun traite
+  // toutes les lignes d'une même transaction ensemble.
   const stuck = await prisma.contribution.findMany({
     where: {
-      paymentStatus: 'PROCESSING',
-      modePaiement: { in: ['MTN_MOMO', 'ORANGE_MONEY', 'CARTE_VISA'] },
+      statut: 'EN_ATTENTE_CONFIRMATION',
+      paymentStatus: { in: ['PROCESSING', 'PENDING'] },
+      modePaiement: { in: ['YELII', 'MTN_MOMO', 'ORANGE_MONEY', 'CARTE_VISA'] },
       externalTransactionId: { not: null },
       createdAt: { lte: staleSince },
     },
+    distinct: ['externalTransactionId'],
     select: {
       ...CONTRIBUTION_SYNC_SELECT,
       createdAt: true,
@@ -57,8 +64,10 @@ export async function runPaymentReconciliation(): Promise<{ checked: number; con
   let confirmed = 0
   let failed = 0
 
+  const stillPending = new Set<string>()
   for (const contribution of stuck) {
     const result = await syncPaymentContributionStatus(contribution)
+    if (result.statut === 'EN_ATTENTE_CONFIRMATION') stillPending.add(contribution.id)
     if (contribution.statut !== 'CONFIRME' && result.statut === 'CONFIRME') {
       confirmed++
     } else if (contribution.statut !== 'ANNULE' && result.statut === 'ANNULE') {
@@ -73,8 +82,9 @@ export async function runPaymentReconciliation(): Promise<{ checked: number; con
   // Cible cliquable uniquement si une seule transaction est bloquée : au-delà,
   // il n'y a pas UNE contribution à ouvrir, `data.transactionIds` reste la
   // liste informative (contexte non structurel, comme prévu pour `data`).
-  const veryStale = stuck.filter(c => Date.now() - c.createdAt.getTime() > 60 * 60 * 1000)
+  const veryStale = stuck.filter(c => stillPending.has(c.id) && Date.now() - c.createdAt.getTime() > 60 * 60 * 1000 && !alertedStale.has(c.externalTransactionId!))
   if (veryStale.length > 0) {
+    veryStale.forEach(c => alertedStale.add(c.externalTransactionId!))
     await alertTresoriers(
       'Paiements digitaux bloqués',
       `${veryStale.length} paiement(s) Mobile Money/carte en PROCESSING depuis plus d'1h — vérification manuelle recommandée.`,

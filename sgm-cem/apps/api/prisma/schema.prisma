@@ -118,6 +118,9 @@ enum LocalisationFonds {
   REMIS_TRESORIER
   EN_CAISSE
   EN_BANQUE
+  // Paiement électronique confirmé par le prestataire (Yelii, CinetPay) :
+  // l'argent est sur le compte marchand, aucune personne ne le détient (décision du 17/10/2026)
+  PORTEFEUILLE_ELECTRONIQUE
 }
 
 enum DocumentStatut {

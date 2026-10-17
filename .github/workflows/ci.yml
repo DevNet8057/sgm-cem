@@ -111,9 +111,13 @@ jobs:
           PUPPETEER_SKIP_DOWNLOAD: 'true'
         run: pnpm install --frozen-lockfile
 
-      - name: Push Prisma schema to test DB
+      - name: Migrations sur la base de test (comme en production)
         working-directory: sgm-cem/apps/api
-        run: pnpm prisma db push --skip-generate && pnpm prisma generate
+        run: pnpm prisma migrate deploy && pnpm prisma generate
+
+      - name: Schéma et migrations alignés (aucune modification sans migration)
+        working-directory: sgm-cem/apps/api
+        run: pnpm prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
 
       - name: Seed (base jetable)
         working-directory: sgm-cem/apps/api

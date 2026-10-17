@@ -18,6 +18,7 @@ const LOCATION_LABELS: Record<string, string> = {
   REMIS_TRESORIER: 'Remis trésorier',
   EN_CAISSE: 'En caisse',
   EN_BANQUE: 'En banque',
+  PORTEFEUILLE_ELECTRONIQUE: 'Portefeuille électronique',
 }
 
 
@@ -45,7 +46,7 @@ export function Collecteurs() {
       const res = await api.get('/contributions', { params: { limit: 200 } })
       return (res.data.data as Contribution[]).filter(c =>
         c.statut === 'CONFIRME' &&
-        (c.localisationFonds === 'REMIS_TRESORIER' || c.localisationFonds === 'EN_CAISSE')
+        (c.localisationFonds === 'REMIS_TRESORIER' || c.localisationFonds === 'EN_CAISSE' || c.localisationFonds === 'PORTEFEUILLE_ELECTRONIQUE')
       )
     },
     enabled: data?.myRole === 'TRESORIER' || data?.myRole === 'ADMIN' || data?.myRole === 'DEVELOPER',
@@ -466,6 +467,8 @@ function MoneyFlow({ flow, selectedTotal }: {
   const chezCollecteur = flow?.chezCollecteur ?? 0
   const enTransit = flow?.enTransit ?? 0
   const electronique = flow?.electroniqueTotal ?? 0
+  // Électronique confirmé et pas encore versé en banque (compte marchand Yelii/CinetPay)
+  const portefeuille = flow?.portefeuilleElectronique ?? 0
   const chezTresorier = (flow?.remisTresorier ?? 0) + (flow?.chezResponsable ?? 0) + (flow?.enCaisse ?? 0)
   const enBanque = flow?.enBanque ?? 0
 
@@ -475,7 +478,7 @@ function MoneyFlow({ flow, selectedTotal }: {
         <div>
           <h3 className="font-display font-semibold text-[#0F4A0F] text-lg">Trajet de l&apos;argent</h3>
           <p className="text-xs text-gray-500">
-            Espèces : contributeur → collecteur → trésorier. Mobile Money / Carte : crédité directement chez le trésorier, aucun collecteur ne le détient.
+            Espèces : contributeur → collecteur → trésorier. Mobile Money / Carte : crédité sur le portefeuille électronique (compte marchand), aucune personne ne le détient.
           </p>
         </div>
         {selectedTotal > 0 && (
@@ -496,7 +499,7 @@ function MoneyFlow({ flow, selectedTotal }: {
       <FlowLane label="Mobile Money & Carte — direct, sans collecteur" icon={Smartphone} amount={electronique}>
         <FlowStep icon={Smartphone} label="Yelii / CinetPay" value={electronique} active={electronique > 0} />
         <FlowTrack active={electronique > 0} instant />
-        <FlowStep icon={ShieldCheck} label="Chez le trésorier" value={electronique} active={electronique > 0} ghost />
+        <FlowStep icon={Wallet} label="Portefeuille électronique" value={portefeuille} active={portefeuille > 0} ghost />
       </FlowLane>
 
       {/* Convergence — trésorerie puis banque */}
@@ -511,13 +514,13 @@ function MoneyFlow({ flow, selectedTotal }: {
 
       <div className="mt-4 h-2 rounded-full bg-gray-100 overflow-hidden flex">
         <FlowBar color="bg-amber-400" value={chezCollecteur + enTransit} total={flow?.totalConfirme ?? 0} />
-        <FlowBar color="bg-purple-400" value={electronique} total={flow?.totalConfirme ?? 0} />
-        <FlowBar color="bg-[#1A6B1A]" value={chezTresorier - electronique} total={flow?.totalConfirme ?? 0} />
+        <FlowBar color="bg-purple-400" value={portefeuille} total={flow?.totalConfirme ?? 0} />
+        <FlowBar color="bg-[#1A6B1A]" value={chezTresorier} total={flow?.totalConfirme ?? 0} />
         <FlowBar color="bg-[#0F4A0F]" value={enBanque} total={flow?.totalConfirme ?? 0} />
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400">
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400" /> Espèces en circulation</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-400" /> Mobile Money / Carte</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-400" /> Portefeuille électronique</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#1A6B1A]" /> Trésorerie</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#0F4A0F]" /> Banque</span>
         <span className="ml-auto font-semibold text-gray-500">Total confirmé tracé : {formatAmount(flow?.totalConfirme ?? 0)}</span>

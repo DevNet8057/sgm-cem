@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
-import { getYeliiStatus, requestYelii } from '../services/payment'
+import { syncPaymentContributionStatus } from '../services/payment-status.service'
 import { generateReceiptPDF, generateReceiptPdf } from '../services/receipt'
 import { getFileStream } from '../services/storage'
 import { getConfig } from '../services/config.service'
@@ -26,9 +26,10 @@ function actorOf(req: { user?: { userId: string; role: string } }): Contribution
   return { userId: req.user!.userId, role: req.user!.role }
 }
 
-// Saisie manuelle par le staff : espèces, virement, ou demande de paiement Yelii.
-// Les paiements MoMo/Orange/carte ne sont confirmés QUE par le prestataire (RG-13).
-const STAFF_ENTRY_MODES = ['ESPECES', 'VIREMENT', 'YELII'] as const
+// Saisie manuelle par le staff : espèces et virements seulement. Mobile Money et
+// carte passent par le parcours de paiement (/payments/initiate, commission,
+// webhook, réconciliation) et ne sont confirmés QUE par le prestataire (RG-13).
+const STAFF_ENTRY_MODES = ['ESPECES', 'VIREMENT'] as const
 
 const createSchema = z.object({
   membreId: z.string(),
@@ -245,9 +246,6 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
     })
     if (!designated) throw new AppError('NOT_FOUND', 'Collecteur désigné introuvable ou inactif', 404)
   }
-  if (data.modePaiement === 'YELII' && !data.mobileMoneyPhone) {
-    throw new AppError('VALIDATION_ERROR', 'Numéro Mobile Money requis pour une demande de paiement Yelii', 400)
-  }
 
   const [rubrique, membre] = await Promise.all([
     prisma.rubrique.findUnique({ where: { id: data.rubriqueId } }),
@@ -290,25 +288,6 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
   let receiptUrl: string | null = null
   if (isDirectCash) {
     receiptUrl = await generateReceiptPDF(contribution.id)
-  }
-
-  if (data.modePaiement === 'YELII' && data.mobileMoneyPhone) {
-    const payment = await requestYelii({
-      phone: data.mobileMoneyPhone,
-      amount: contribution.montant,
-      externalId: contribution.id,
-      channel: data.paymentChannel === 'ORANGE' ? 'ORANGE' : 'MTN',
-      note: `Contribution ${contribution.id}`,
-    })
-
-    await prisma.contribution.update({
-      where: { id: contribution.id },
-      data: {
-        momoTransactionId: payment.transactionId || undefined,
-        referencePaiement: payment.externalId ?? contribution.id,
-        ...(payment.success ? {} : { statut: 'ANNULE', litigeMotif: payment.message ?? 'Échec de la collecte Yelii' }),
-      },
-    })
   }
 
   await prisma.auditLog.create({
@@ -429,27 +408,9 @@ router.get('/:id/payment-status', authenticate, requireLevel(2), async (req, res
     return
   }
 
-  if (contribution.modePaiement === 'YELII' && contribution.momoTransactionId) {
-    const remoteStatus = await getYeliiStatus(contribution.momoTransactionId)
-    if (remoteStatus === 'CONFIRMED' && contribution.statut === 'EN_ATTENTE_CONFIRMATION') {
-      const updated = await prisma.contribution.update({
-        where: { id: contribution.id },
-        data: { statut: 'CONFIRME', confirmedAt: new Date(), referencePaiement: contribution.referencePaiement ?? contribution.momoTransactionId },
-      })
-      res.json({ success: true, data: { id: updated.id, statut: updated.statut } })
-      return
-    }
-    if (remoteStatus === 'FAILED' && contribution.statut === 'EN_ATTENTE_CONFIRMATION') {
-      const updated = await prisma.contribution.update({
-        where: { id: contribution.id },
-        data: { statut: 'ANNULE', litigeMotif: 'Paiement Yelii échoué ou annulé.' },
-      })
-      res.json({ success: true, data: { id: updated.id, statut: updated.statut } })
-      return
-    }
-  }
-
-  res.json({ success: true, data: { id: contribution.id, statut: contribution.statut } })
+  // Même synchronisation que partout ailleurs (contrôle du montant, reçu, audit)
+  const synced = await syncPaymentContributionStatus(contribution)
+  res.json({ success: true, data: { id: synced.id, statut: synced.statut } })
 })
 
 router.patch('/:id/confirm', authenticate, requireLevel(2), async (req, res) => {

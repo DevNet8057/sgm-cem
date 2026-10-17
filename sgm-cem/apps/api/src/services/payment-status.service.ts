@@ -4,7 +4,7 @@ import { getYeliiTransaction } from './yelii.service'
 import { verifyCinetpayTransaction } from './cinetpay.service'
 import { generateReceiptPDF } from './receipt'
 import { broadcastToAll } from '../lib/socket'
-import { sendWhatsApp, sendWhatsAppDocument, alertTresoriers } from './notification'
+import { sendWhatsApp, sendWhatsAppDocument, alertTresoriers, notifyMemberConfirmed } from './notification'
 import { audit } from './audit.service'
 
 /**
@@ -122,7 +122,11 @@ async function getRemotePaymentState(
 
   // Source de vérité CinetPay : /payment/check uniquement. Les paramètres du
   // retour navigateur ne sont jamais utilisés pour décider d'une transition.
-  const verification = await verifyCinetpayTransaction(txId)
+  return cinetpayRemoteState(await verifyCinetpayTransaction(txId))
+}
+
+/** Interprète la réponse de /payment/check (sondage et webhook CinetPay). */
+export function cinetpayRemoteState(verification: Awaited<ReturnType<typeof verifyCinetpayTransaction>>): RemotePaymentState {
   const remoteCode = String(verification.code ?? '').trim().toUpperCase()
   const remoteStatus = verification.data?.status?.trim().toUpperCase() ?? ''
   const rawAmount = verification.data?.amount?.trim()
@@ -147,119 +151,7 @@ async function runSync(
   try {
     const remote = await getRemotePaymentState(contribution, txId)
     if (remote.status === 'processing' || remote.status === 'unknown') return snapshot
-
-    if (remote.status === 'success') {
-      // Yelii renvoie le montant majoré ; CinetPay doit renvoyer exactement le
-      // montant dû à la contribution, obligatoirement en XAF.
-      const expectedAmount = remote.provider === 'yelii'
-        ? contribution.amountChargedToPayer ?? contribution.montant
-        : contribution.montant
-      const amountMatches = remote.provider === 'yelii'
-        ? remote.amount == null || remote.amount === expectedAmount
-        : remote.amount === expectedAmount
-      const currencyMatches = remote.provider === 'yelii' || remote.currency === 'XAF'
-
-      if (!amountMatches || !currencyMatches) {
-        const receivedAmountLabel = remote.amount != null ? remote.amount.toLocaleString('fr-FR') : 'absent'
-        const receivedCurrency = remote.currency || (remote.provider === 'yelii' ? 'FCFA' : 'devise absente')
-        console.warn(
-          `[PaymentStatus] Données incohérentes pour ${txId} : ` +
-          `${expectedAmount} XAF attendus, ${receivedAmountLabel} ${receivedCurrency} reçus`
-        )
-        if (!mismatchAlerted.has(txId)) {
-          await alertTresoriers(
-            remote.provider === 'yelii'
-              ? 'Montant incohérent — paiement Mobile Money'
-              : 'Paiement CinetPay incohérent',
-            `${expectedAmount.toLocaleString('fr-FR')} XAF attendus, ` +
-            `${receivedAmountLabel} ${receivedCurrency} reçus (transaction ${txId})`,
-            {
-              contributionId: contribution.id,
-              transactionId: txId,
-              expectedAmount,
-              expectedCurrency: 'XAF',
-              receivedAmount: remote.amount ?? null,
-              receivedCurrency,
-              source: 'payment_status_poll',
-              provider: remote.provider,
-            },
-            { view: 'contributions', id: contribution.id }
-          )
-          mismatchAlerted.add(txId)
-        }
-        return snapshot
-      }
-
-      const netAmount = remote.provider === 'yelii' ? remote.netCredited ?? null : null
-      const { count } = await prisma.contribution.updateMany({
-        where: { id: contribution.id, statut: 'EN_ATTENTE_CONFIRMATION' },
-        data: {
-          statut: 'CONFIRME',
-          confirmedAt: new Date(),
-          paymentStatus: 'SUCCESS',
-          netAmount,
-          localisationFonds: 'REMIS_TRESORIER',
-          referencePaiement: contribution.referencePaiement ?? txId,
-        },
-      })
-
-      if (count === 1) {
-        // Gagnant de la course — seul appelant à générer le reçu et à diffuser l'événement.
-        const receiptUrl = await generateReceiptPDF(contribution.id)
-        broadcastToAll('contribution:confirmed', { contributionId: contribution.id, rubriqueId: contribution.rubriqueId })
-        void notifyContributeur(
-          contribution.id,
-          'success',
-          receiptUrl ?? null,
-          'CONFIRM',
-          {
-            transactionId: txId,
-            source: 'payment_status_poll',
-            provider: remote.provider,
-            netAmount,
-            ...(remote.remoteCode && { remoteCode: remote.remoteCode }),
-            ...(remote.remoteStatus && { remoteStatus: remote.remoteStatus }),
-          }
-        ).catch((e: unknown) => console.error('[PaymentStatus] Notification ou audit échoué', e))
-        return { id: contribution.id, statut: 'CONFIRME', paymentStatus: 'SUCCESS', receiptUrl: receiptUrl ?? null }
-      }
-
-      // Perdant (webhook, job de réconciliation ou autre requête déjà passés) — relire l'état réel.
-      const current = await prisma.contribution.findUnique({
-        where: { id: contribution.id },
-        select: { id: true, statut: true, paymentStatus: true, receiptUrl: true },
-      })
-      return current ? { id: current.id, statut: current.statut, paymentStatus: current.paymentStatus, receiptUrl: current.receiptUrl ?? null } : snapshot
-    }
-
-    const { count } = await prisma.contribution.updateMany({
-      where: { id: contribution.id, statut: 'EN_ATTENTE_CONFIRMATION' },
-      data: {
-        statut: 'ANNULE',
-        paymentStatus: 'FAILED',
-        litigeMotif: remote.provider === 'yelii'
-          ? 'Paiement Yelii échoué ou annulé.'
-          : 'Paiement CinetPay refusé ou annulé.',
-      },
-    })
-
-    if (count === 1) {
-      void notifyContributeur(
-        contribution.id,
-        'failed',
-        null,
-        'REJECT',
-        {
-          transactionId: txId,
-          source: 'payment_status_poll',
-          provider: remote.provider,
-          ...(remote.remoteCode && { remoteCode: remote.remoteCode }),
-          ...(remote.remoteStatus && { remoteStatus: remote.remoteStatus }),
-        }
-      ).catch((e: unknown) => console.error('[PaymentStatus] Notification ou audit échoué', e))
-      return { id: contribution.id, statut: 'ANNULE', paymentStatus: 'FAILED', receiptUrl: snapshot.receiptUrl }
-    }
-
+    await applyProviderOutcome(txId, { ...remote, status: remote.status, source: 'payment_status_poll' })
     const current = await prisma.contribution.findUnique({
       where: { id: contribution.id },
       select: { id: true, statut: true, paymentStatus: true, receiptUrl: true },
@@ -271,6 +163,145 @@ async function runSync(
     console.error('[PaymentStatus]', e)
     return snapshot
   }
+}
+
+export interface ProviderOutcome {
+  provider: PaymentProvider
+  status: 'success' | 'failed'
+  amount?: number
+  currency?: string
+  netCredited?: number
+  remoteCode?: string
+  remoteStatus?: string
+  source: 'payment_status_poll' | 'webhook' | 'reconciliation'
+}
+
+export type ProviderOutcomeResult = 'confirmed' | 'failed' | 'mismatch' | 'already_processed' | 'unknown_transaction'
+
+/**
+ * Applique la réponse d'un prestataire à TOUTE la transaction : un paiement
+ * réparti (PaymentBatch) partage un seul identifiant fournisseur entre
+ * plusieurs lignes. Le montant reçu est comparé au total de la transaction, et
+ * toutes les lignes changent d'état ensemble (preuve P1 de l'audit : avant,
+ * chaque ligne était comparée au total et aucune n'était jamais confirmée).
+ *
+ * Point d'entrée unique du sondage, des webhooks Yelii et CinetPay et de la
+ * réconciliation. Écritures conditionnelles : un seul appelant « gagne » et
+ * émet reçus, notifications et audit.
+ */
+export async function applyProviderOutcome(txId: string, outcome: ProviderOutcome): Promise<ProviderOutcomeResult> {
+  const lines = await prisma.contribution.findMany({
+    where: { externalTransactionId: txId },
+    select: { id: true, statut: true, montant: true, amountChargedToPayer: true, paymentBatchId: true, rubriqueId: true, referencePaiement: true },
+    orderBy: { createdAt: 'asc' },
+  })
+  if (lines.length === 0) return 'unknown_transaction'
+  const pending = lines.filter(line => line.statut === 'EN_ATTENTE_CONFIRMATION')
+  if (pending.length === 0) return 'already_processed'
+
+  if (outcome.status === 'success') {
+    // Yelii renvoie le montant majoré (commission à la charge du payeur) ;
+    // CinetPay doit renvoyer exactement le montant dû, obligatoirement en XAF.
+    const expectedAmount = lines.reduce((sum, line) => sum + (
+      outcome.provider === 'yelii' ? line.amountChargedToPayer ?? line.montant : line.montant
+    ), 0)
+    const amountMatches = outcome.provider === 'yelii'
+      ? outcome.amount == null || outcome.amount === expectedAmount
+      : outcome.amount === expectedAmount
+    const currencyMatches = outcome.provider === 'yelii' || outcome.currency === 'XAF'
+
+    if (!amountMatches || !currencyMatches) {
+      const receivedAmountLabel = outcome.amount != null ? outcome.amount.toLocaleString('fr-FR') : 'absent'
+      const receivedCurrency = outcome.currency || (outcome.provider === 'yelii' ? 'FCFA' : 'devise absente')
+      console.warn(`[PaymentStatus] Données incohérentes pour ${txId} : ${expectedAmount} XAF attendus, ${receivedAmountLabel} ${receivedCurrency} reçus`)
+      if (!mismatchAlerted.has(txId)) {
+        mismatchAlerted.add(txId)
+        await alertTresoriers(
+          outcome.provider === 'yelii' ? 'Montant incohérent — paiement Mobile Money' : 'Paiement CinetPay incohérent',
+          `${expectedAmount.toLocaleString('fr-FR')} XAF attendus, ${receivedAmountLabel} ${receivedCurrency} reçus (transaction ${txId})`,
+          {
+            contributionId: lines[0].id,
+            contributionIds: lines.map(line => line.id),
+            transactionId: txId,
+            expectedAmount,
+            expectedCurrency: 'XAF',
+            receivedAmount: outcome.amount ?? null,
+            receivedCurrency,
+            source: outcome.source,
+            provider: outcome.provider,
+          },
+          { view: 'contributions', id: lines[0].id }
+        )
+      }
+      return 'mismatch'
+    }
+
+    // Net crédité connu pour la transaction entière : rangé seulement s'il n'y a qu'une ligne
+    const netAmount = outcome.provider === 'yelii' && lines.length === 1 ? outcome.netCredited ?? null : null
+    const confirmedAt = new Date()
+    const { count } = await prisma.$transaction(async tx => {
+      const result = await tx.contribution.updateMany({
+        where: { externalTransactionId: txId, statut: 'EN_ATTENTE_CONFIRMATION' },
+        data: {
+          statut: 'CONFIRME',
+          confirmedAt,
+          paymentStatus: 'SUCCESS',
+          netAmount,
+          // Compte marchand Yelii/CinetPay : aucune personne ne détient cet argent
+          localisationFonds: 'PORTEFEUILLE_ELECTRONIQUE',
+        },
+      })
+      // Référence de paiement par défaut = identifiant fournisseur
+      await tx.contribution.updateMany({
+        where: { externalTransactionId: txId, referencePaiement: null },
+        data: { referencePaiement: txId },
+      })
+      await tx.paymentBatch.updateMany({ where: { externalTransactionId: txId, status: 'PENDING' }, data: { status: 'CONFIRMED' } })
+      return result
+    })
+    if (count === 0) return 'already_processed'
+
+    // Gagnant de la course — seul appelant à générer les reçus et à notifier
+    for (const line of pending) {
+      const receiptUrl = await generateReceiptPDF(line.id)
+      broadcastToAll('contribution:confirmed', { contributionId: line.id, rubriqueId: line.rubriqueId })
+      void notifyContributeur(line.id, 'success', receiptUrl ?? null, 'CONFIRM', {
+        transactionId: txId,
+        source: outcome.source,
+        provider: outcome.provider,
+        netAmount,
+        lines: lines.length,
+        ...(outcome.remoteCode && { remoteCode: outcome.remoteCode }),
+        ...(outcome.remoteStatus && { remoteStatus: outcome.remoteStatus }),
+      }, { notify: line.id === pending[0].id, batchTotal: lines.length > 1 ? lines.reduce((s, l) => s + l.montant, 0) : undefined })
+        .catch((e: unknown) => console.error('[PaymentStatus] Notification ou audit échoué', e))
+    }
+    return 'confirmed'
+  }
+
+  const { count } = await prisma.$transaction(async tx => {
+    const result = await tx.contribution.updateMany({
+      where: { externalTransactionId: txId, statut: 'EN_ATTENTE_CONFIRMATION' },
+      data: {
+        statut: 'ANNULE',
+        paymentStatus: 'FAILED',
+        litigeMotif: outcome.provider === 'yelii' ? 'Paiement Yelii échoué ou annulé.' : 'Paiement CinetPay refusé ou annulé.',
+      },
+    })
+    await tx.paymentBatch.updateMany({ where: { externalTransactionId: txId, status: 'PENDING' }, data: { status: 'FAILED' } })
+    return result
+  })
+  if (count === 0) return 'already_processed'
+  for (const line of pending) {
+    void notifyContributeur(line.id, 'failed', null, 'REJECT', {
+      transactionId: txId,
+      source: outcome.source,
+      provider: outcome.provider,
+      ...(outcome.remoteCode && { remoteCode: outcome.remoteCode }),
+      ...(outcome.remoteStatus && { remoteStatus: outcome.remoteStatus }),
+    }, { notify: line.id === pending[0].id }).catch((e: unknown) => console.error('[PaymentStatus] Notification ou audit échoué', e))
+  }
+  return 'failed'
 }
 
 // AuditLog.userId référence User : les contributions publiques utilisent le
@@ -306,18 +337,20 @@ async function notifyContributeur(
   issue: 'success' | 'failed',
   receiptUrl: string | null,
   auditAction: 'CONFIRM' | 'REJECT',
-  auditDetails: Prisma.InputJsonValue
+  auditDetails: Prisma.InputJsonValue,
+  // Lot réparti : audit par ligne, mais UN seul message au payeur (montant total)
+  options: { notify: boolean; batchTotal?: number } = { notify: true },
 ): Promise<void> {
   const contribution = await prisma.contribution.findUnique({
     where: { id: contributionId },
     include: {
       membre: {
         include: {
-          user: { select: { id: true, whatsappPhone: true, phone: true, fullName: true } },
+          user: { select: { id: true, whatsappPhone: true, phone: true, fullName: true, email: true } },
         },
       },
       contributeurExterne: { select: { phone: true, nom: true } },
-      rubrique: { select: { title: true } },
+      rubrique: { select: { title: true, code: true } },
     },
   })
   if (!contribution) return
@@ -339,20 +372,38 @@ async function notifyContributeur(
     console.error('[PaymentStatus] Résolution de l’identité d’audit échouée', e)
   }
 
+  if (!options.notify) return
   const phone = contribution.membre?.user.whatsappPhone ?? contribution.membre?.user.phone ?? contribution.contributeurExterne?.phone
+  const memberName = contribution.membre?.user.fullName ?? contribution.contributeurExterne?.nom ?? 'Contributeur'
+  const montant = options.batchTotal ?? contribution.montant
+  const rubriqueLabel = options.batchTotal ? 'paiement réparti sur plusieurs rubriques' : contribution.rubrique.title
+
+  // Membre avec compte : in-app + WhatsApp (reçu joint) + e-mail
+  if (issue === 'success' && contribution.membre) {
+    await notifyMemberConfirmed({
+      userId: contribution.membre.user.id,
+      memberPhone: phone,
+      memberEmail: contribution.membre.user.email,
+      memberName,
+      montant,
+      rubriqueCode: options.batchTotal ? 'Paiement réparti' : contribution.rubrique.code,
+      receiptUrl,
+      contributionId: contribution.id,
+    })
+    return
+  }
   if (!phone) return
 
-  const memberName = contribution.membre?.user.fullName ?? contribution.contributeurExterne?.nom ?? 'Contributeur'
   // Notifications affichent le montant DÛ à la rubrique (§1bis), pas le montant majoré.
-  const montantStr = contribution.montant.toLocaleString('fr-FR')
+  const montantStr = montant.toLocaleString('fr-FR')
 
   if (issue === 'success') {
-    const msg = `CEM Melen - Paiement confirmé\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${contribution.rubrique.title}\nMerci pour votre contribution !`
+    const msg = `CEM Melen - Paiement confirmé\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${rubriqueLabel}\nMerci pour votre contribution !`
     let sent = false
     if (receiptUrl) sent = await sendWhatsAppDocument(phone, receiptUrl, msg)
     if (!sent) await sendWhatsApp(phone, msg)
   } else {
-    const msg = `CEM Melen - Paiement échoué\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${contribution.rubrique.title}\nRéessayez ou contactez un collecteur.`
+    const msg = `CEM Melen - Paiement échoué\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${rubriqueLabel}\nRéessayez ou contactez un collecteur.`
     await sendWhatsApp(phone, msg)
   }
 }

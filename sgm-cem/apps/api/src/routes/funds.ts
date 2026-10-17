@@ -58,6 +58,7 @@ router.get('/overview', authenticate, requireLevel(2), async (req, res) => {
     chezResponsable: amountFor(flowGroups, 'CHEZ_RESPONSABLE'),
     remisTresorier: amountFor(flowGroups, 'REMIS_TRESORIER'),
     enCaisse: amountFor(flowGroups, 'EN_CAISSE'),
+    portefeuilleElectronique: amountFor(flowGroups, 'PORTEFEUILLE_ELECTRONIQUE'),
     enBanque: amountFor(flowGroups, 'EN_BANQUE'),
     totalConfirme: flowGroups.reduce((sum, item) => sum + (item._sum.montant ?? 0), 0),
   }
@@ -319,19 +320,20 @@ router.patch('/transfers/:id/confirm', authenticate, requireLevel(2), async (req
     ['RESPONSABLE', 'ADJOINT_RESPONSABLE'].includes(userRole) ? 'CHEZ_RESPONSABLE' :
     'CHEZ_COLLECTEUR'
 
-  const result = await prisma.$transaction(async (tx) => {
-    // Mettre à jour le transfert
-    const updatedTransfer = await tx.fundsTransfer.update({
-      where: { id },
+  await prisma.$transaction(async (tx) => {
+    // Transition conditionnelle : une seule réponse (confirmation OU refus OU annulation)
+    const claimed = await tx.fundsTransfer.updateMany({
+      where: { id, status: 'PENDING_APPROVAL' },
       data: {
         status: 'CONFIRMED',
         confirmedAt: new Date(),
       },
     })
+    if (claimed.count !== 1) throw new AppError('ALREADY_PROCESSED', 'Ce transfert a déjà été traité', 400)
 
     // Mettre à jour les contributions
     await tx.contribution.updateMany({
-      where: { transferId: id },
+      where: { transferId: id, localisationFonds: 'EN_TRANSIT' },
       data: {
         localisationFonds: newLocation as 'CHEZ_COLLECTEUR' | 'CHEZ_RESPONSABLE' | 'REMIS_TRESORIER' | 'EN_TRANSIT',
         collecteurId: userRole === 'COLLECTEUR' ? userId : undefined,
@@ -349,11 +351,10 @@ router.patch('/transfers/:id/confirm', authenticate, requireLevel(2), async (req
         details: {
           fromStatus: 'PENDING_APPROVAL',
           toStatus: 'CONFIRMED',
+          newLocation,
         },
       },
     })
-
-    return updatedTransfer
   })
 
   // Générer le bordereau PDF
@@ -401,23 +402,22 @@ router.patch('/transfers/:id/refuse', authenticate, requireLevel(2), async (req,
   }
 
   await prisma.$transaction(async (tx) => {
-    // Mettre à jour le transfert
-    await tx.fundsTransfer.update({
-      where: { id },
+    const claimed = await tx.fundsTransfer.updateMany({
+      where: { id, status: 'PENDING_APPROVAL' },
       data: {
         status: 'REFUSED',
         refusalReason: data.reason,
         refusedAt: new Date(),
       },
     })
+    if (claimed.count !== 1) throw new AppError('ALREADY_PROCESSED', 'Ce transfert a déjà été traité', 400)
 
-    // Retourner les contributions à l'expéditeur
-    const originalCollecteurId = transfer.senderId
+    // Les fonds reviennent à leur détenteur (collecteurId inchangé à l'envoi —
+    // un transfert initié par l'administrateur ne lui attribue pas l'argent)
     await tx.contribution.updateMany({
-      where: { transferId: id },
+      where: { transferId: id, localisationFonds: 'EN_TRANSIT' },
       data: {
         localisationFonds: 'CHEZ_COLLECTEUR',
-        collecteurId: originalCollecteurId,
       },
     })
 
@@ -477,17 +477,18 @@ router.patch('/transfers/:id/cancel', authenticate, requireLevel(2), async (req,
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.fundsTransfer.update({
-      where: { id },
+    const claimed = await tx.fundsTransfer.updateMany({
+      where: { id, status: 'PENDING_APPROVAL' },
       data: {
         status: 'CANCELLED',
         cancelledAt: new Date(),
       },
     })
+    if (claimed.count !== 1) throw new AppError('BUSINESS_RULE', 'Ce transfert ne peut plus être annulé', 400)
 
     // Retourner les contributions
     await tx.contribution.updateMany({
-      where: { transferId: id },
+      where: { transferId: id, localisationFonds: 'EN_TRANSIT' },
       data: {
         localisationFonds: 'CHEZ_COLLECTEUR',
       },
@@ -596,19 +597,22 @@ router.patch('/bank-deposit', authenticate, async (req, res) => {
   }
 
   const schema = z.object({
-    contributionIds:   z.array(z.string()).min(1),
+    contributionIds:   z.array(z.string()).min(1).max(500),
     referenceBordereau: z.string().min(1, 'La référence de bordereau est requise'),
     dateBordereau:     z.string().optional(),
     note:              z.string().max(500).optional(),
   })
   const { contributionIds, referenceBordereau, dateBordereau, note } = schema.parse(req.body)
 
-  // Vérifier que toutes les contributions sont chez le trésorier/en caisse
+  // Déposables : fonds remis au trésorier, en caisse, ou sur le portefeuille
+  // électronique (versement du compte marchand Yelii/CinetPay vers la banque)
+  const DEPOSITABLE = ['REMIS_TRESORIER', 'EN_CAISSE', 'PORTEFEUILLE_ELECTRONIQUE'] as const
   const contributions = await prisma.contribution.findMany({
     where: {
       id:                { in: contributionIds },
       statut:            'CONFIRME',
-      localisationFonds: { in: ['REMIS_TRESORIER', 'EN_CAISSE'] },
+      localisationFonds: { in: [...DEPOSITABLE] },
+      bankDepositId:     null,
     },
     select: { id: true, montant: true, localisationFonds: true },
   })
@@ -627,20 +631,27 @@ router.patch('/bank-deposit', authenticate, async (req, res) => {
   // Le dépôt est un ENREGISTREMENT consultable (preuve pour l'ADMIN),
   // plus seulement une ligne d'audit : référence de bordereau/relevé + date +
   // déposant + contributions liées.
-  const deposit = await prisma.bankDeposit.create({
-    data: {
-      referenceBordereau,
-      dateBordereau: dateBordereau ? new Date(dateBordereau) : null,
-      note,
-      totalAmount,
-      depositedById: req.user!.userId,
-      depositedByName: depositor?.fullName ?? req.user!.email,
-    },
-  })
-
-  await prisma.contribution.updateMany({
-    where: { id: { in: contributionIds } },
-    data:  { localisationFonds: 'EN_BANQUE', bankDepositId: deposit.id },
+  // Enregistrement du dépôt et déplacement des fonds : tout ou rien, et une
+  // contribution ne peut pas entrer dans deux dépôts simultanés
+  const deposit = await prisma.$transaction(async tx => {
+    const created = await tx.bankDeposit.create({
+      data: {
+        referenceBordereau,
+        dateBordereau: dateBordereau ? new Date(dateBordereau) : null,
+        note,
+        totalAmount,
+        depositedById: req.user!.userId,
+        depositedByName: depositor?.fullName ?? req.user!.email,
+      },
+    })
+    const moved = await tx.contribution.updateMany({
+      where: { id: { in: contributionIds }, statut: 'CONFIRME', localisationFonds: { in: [...DEPOSITABLE] }, bankDepositId: null },
+      data:  { localisationFonds: 'EN_BANQUE', bankDepositId: created.id },
+    })
+    if (moved.count !== contributionIds.length) {
+      throw new AppError('BUSINESS_RULE', 'Certaines contributions viennent d\'être déposées, rechargez la page', 409)
+    }
+    return created
   })
 
   await prisma.auditLog.create({
