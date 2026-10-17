@@ -14,6 +14,7 @@ const PUBLIC_ROUTES = [
   /^\w+ \/webhooks\//,
   /^GET \/api\/csrf-token$/,
   /^GET \/api\/health(\/ready)?$/, // sondes de supervision
+  /^GET \/api\/status$/, // état du mode maintenance (bandeau), sans donnée
   /^\w+ \/api\/public\//,
   /^POST \/api\/auth\/(login|forgot-password|otp\/request|otp\/verify|google|refresh)$/,
 ]

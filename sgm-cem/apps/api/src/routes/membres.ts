@@ -6,6 +6,7 @@ import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { getPrisma } from '../lib/prisma'
+import { findInactiveMembers } from '../services/inactive-members.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -98,6 +99,11 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
     data: membres,
     pagination: { page: currentPage, limit: pageSize, total, totalPages: Math.ceil(total / pageSize) },
   })
+})
+
+// ─── GET /membres/inactifs (EF-M03-07) ─────────────────────────────────
+router.get('/inactifs', authenticate, requireLevel(3), async (_req, res) => {
+  res.json({ success: true, data: await findInactiveMembers() })
 })
 
 // ─── GET /membres/search (recherche pour lier un couple) ──────────────

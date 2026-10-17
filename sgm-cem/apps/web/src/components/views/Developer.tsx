@@ -9,7 +9,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Webhook, KeyRound, Percent, Network, SlidersHorizontal, Bell, ToggleLeft,
+  Webhook, KeyRound, Percent, Network, SlidersHorizontal, Bell, 
   Eye, EyeOff, History, Save, RefreshCw, PlugZap, Terminal, ShieldAlert, X, Info,
 } from 'lucide-react'
 import api from '@/lib/api'
@@ -49,7 +49,6 @@ const SECTIONS = [
   { id: 'INFRASTRUCTURE',   label: 'Infrastructure & réseau', icon: Network },
   { id: 'SYSTEM_BEHAVIOR',  label: 'Comportement système',    icon: SlidersHorizontal },
   { id: 'NOTIFICATIONS',    label: 'Notifications',           icon: Bell },
-  { id: 'FEATURE_FLAGS',    label: 'Feature flags',           icon: ToggleLeft },
 ] as const
 
 const BOOL_VALUES = ['true', 'false']

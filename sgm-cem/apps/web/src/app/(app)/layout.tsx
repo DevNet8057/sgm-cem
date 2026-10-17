@@ -14,7 +14,8 @@ import { useSocket } from '@/hooks/useSocket'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { useActivityTracker } from '@/hooks/useActivityTracker'
 import { usePendingCounts } from '@/hooks/usePendingCounts'
-import { Bell, X as XIcon } from 'lucide-react'
+import { Bell, Wrench, X as XIcon } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 
 // Bandeau visible pendant toute une impersonation (développeur connecté
 // "en tant que" un autre utilisateur) — retour au compte DEVELOPER en un clic.
@@ -60,6 +61,25 @@ function readPushDismissed(): boolean {
     const until = Number(localStorage.getItem(PUSH_DISMISS_KEY) ?? 0)
     return until > Date.now()
   } catch { return false }
+}
+
+// Mode maintenance (EF-M14-03) : les écritures sont suspendues côté serveur
+function MaintenanceBanner() {
+  const { data } = useQuery<{ maintenance: boolean; message: string }>({
+    queryKey: ['api-status'],
+    queryFn: async () => {
+      const api = (await import('@/lib/api')).default
+      return (await api.get('/status')).data.data
+    },
+    refetchInterval: 60_000,
+  })
+  if (!data?.maintenance) return null
+  return (
+    <div role="status" className="flex items-center gap-2 bg-amber-100 px-3 py-2 text-xs font-semibold text-amber-900 sm:justify-center">
+      <Wrench size={14} className="shrink-0" aria-hidden />
+      <span>{data.message} Consultation possible, enregistrements suspendus.</span>
+    </div>
+  )
 }
 
 function PushPermissionBanner() {
@@ -143,6 +163,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col overflow-hidden">
         <TopBar />
         <ImpersonationBanner />
+        <MaintenanceBanner />
         <PushPermissionBanner />
         <OfflineBanner isOffline={isOffline} queuedCount={queuedCount} />
         <main className="flex-1 overflow-y-auto scrollbar-thin page-transition">

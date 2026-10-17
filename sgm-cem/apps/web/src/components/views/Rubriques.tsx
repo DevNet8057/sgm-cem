@@ -1,13 +1,14 @@
 'use client'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Archive, Bell, Edit3, FolderOpen, Lock, Plus, Search, Unlock, X } from 'lucide-react'
+import { AlertTriangle, Archive, Bell, CalendarPlus, Edit3, FolderOpen, Lock, Plus, Search, Unlock, X } from 'lucide-react'
 import api from '@/lib/api'
 import { cn, formatAmount, progressGradient } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { SkeletonCard } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Modal } from '@/components/ui/Modal'
 import type { Rubrique, RubriqueStatut } from '@/types'
 
 const emptyForm = {
@@ -43,14 +44,29 @@ export function Rubriques() {
     queryFn: async () => (await api.get('/rubriques')).data.data,
   })
 
-  const { data: settings } = useQuery({
-    queryKey: ['settings'],
-    queryFn: async () => (await api.get('/settings')).data.data,
+  // Ratios lisibles par les responsables (niveau 3) : /settings complet est réservé à la trésorerie
+  const { data: settings } = useQuery<{ etudiantRatio: number; coupleRatio: number; defaultIncreaseRate: number }>({
+    queryKey: ['settings-ratios'],
+    queryFn: async () => (await api.get('/settings/ratios')).data.data,
     staleTime: 5 * 60 * 1000,
   })
 
-  const etudiantRatio: number = (settings as { etudiantRatio?: number })?.etudiantRatio ?? 0.5
-  const coupleRatio: number = (settings as { coupleRatio?: number })?.coupleRatio ?? 1.5
+  // Reconduction N → N+1 (EF-M04-03)
+  const [renewFor, setRenewFor] = useState<Rubrique | null>(null)
+  const [renewRate, setRenewRate] = useState('')
+  const [renewError, setRenewError] = useState('')
+  const renew = useMutation({
+    mutationFn: () => api.post(`/rubriques/${renewFor!.id}/reconduire`, { increaseRate: Number(renewRate) }),
+    onSuccess: async () => { setRenewFor(null); await resetAndRefresh() },
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { error?: { message?: string } } } }
+      setRenewError(e.response?.data?.error?.message ?? 'Reconduction impossible')
+    },
+  })
+  const revalue = (v?: number | null) => v == null ? null : Math.max(100, Math.round(v * (1 + (Number(renewRate) || 0) / 100) / 100) * 100)
+
+  const etudiantRatio: number = settings?.etudiantRatio ?? 0.5
+  const coupleRatio: number = settings?.coupleRatio ?? 1.5
 
   const createRubrique = useMutation({
     mutationFn: async () => api.post('/rubriques', serializeForm(form)),
@@ -215,10 +231,39 @@ export function Rubriques() {
               loadingStatus={updateStatus.isPending}
               onEdit={() => startEdit(r)}
               onStatus={(status) => updateStatus.mutate({ id: r.id, status })}
+              onRenew={() => { setRenewError(''); setRenewRate(String(settings?.defaultIncreaseRate ?? 0)); setRenewFor(r) }}
             />
           ))}
         </div>
       )}
+
+      <Modal open={!!renewFor} onClose={() => setRenewFor(null)} size="sm"
+        title={renewFor ? `Reconduire en ${renewFor.fiscalYear + 1}` : ''}
+        description="Une nouvelle rubrique est créée pour l'année suivante, avec les mêmes caractéristiques ; celle-ci reste inchangée.">
+        {renewFor && (
+          <div className="space-y-3">
+            <label className="block text-xs font-semibold text-gray-600">
+              Revalorisation des montants (%)
+              <input type="number" min={0} max={100} step="0.5" value={renewRate} onChange={e => setRenewRate(e.target.value)}
+                className="mt-1 block min-h-11 w-full rounded-[10px] border border-gray-200 px-3 text-base" />
+            </label>
+            <ul className="space-y-1 rounded-[10px] bg-gray-50 px-3 py-2 text-sm text-gray-700">
+              {([['Travailleur', renewFor.amountTravailleur], ['Étudiant', renewFor.amountEtudiant], ['Couple', renewFor.amountCouple], ['Objectif', renewFor.targetAmount]] as const)
+                .filter(([, v]) => v != null)
+                .map(([label, v]) => <li key={label} className="flex justify-between"><span>{label}</span><span className="font-mono">{formatAmount(v)} → <b>{formatAmount(revalue(v))}</b></span></li>)}
+              {renewFor.amountTravailleur == null && renewFor.amountEtudiant == null && renewFor.amountCouple == null && <li>Contribution libre</li>}
+            </ul>
+            <p className="text-xs text-slate-500">Montants arrondis à la centaine ; dates décalées d&apos;un an.</p>
+            {renewError && <p role="alert" className="text-sm text-red-600">{renewError}</p>}
+            <div className="flex justify-end gap-2 border-t border-gray-100 pt-3">
+              <Button variant="ghost" onClick={() => setRenewFor(null)}>Annuler</Button>
+              <Button loading={renew.isPending} disabled={renewRate === '' || Number(renewRate) < 0 || Number(renewRate) > 100} onClick={() => renew.mutate()}>
+                <CalendarPlus size={14} /> Reconduire
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }
@@ -316,11 +361,12 @@ function RubriqueEditor({ mode, form, setForm, error, loading, onCancel, onSubmi
   )
 }
 
-function RubriqueCard({ rubrique: r, loadingStatus, onEdit, onStatus }: {
+function RubriqueCard({ rubrique: r, loadingStatus, onEdit, onStatus, onRenew }: {
   rubrique: Rubrique
   loadingStatus: boolean
   onEdit: () => void
   onStatus: (status: RubriqueStatut) => void
+  onRenew: () => void
 }) {
   const ratio = r.targetAmount ? (r.totalCollecte ?? 0) / r.targetAmount : 0
   const topColor = r.priority === 'URGENT' ? 'from-red-500 to-red-400' :
@@ -367,6 +413,7 @@ function RubriqueCard({ rubrique: r, loadingStatus, onEdit, onStatus }: {
 
         <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-100">
           <Button size="sm" variant="outline" onClick={onEdit}><Edit3 size={13} />Modifier</Button>
+          <Button size="sm" variant="ghost" onClick={onRenew}><CalendarPlus size={13} />Reconduire</Button>
           {r.status !== 'OUVERTE' ? (
             <Button size="sm" variant="ghost" loading={loadingStatus} onClick={() => onStatus('OUVERTE')}><Unlock size={13} />Ouvrir</Button>
           ) : (

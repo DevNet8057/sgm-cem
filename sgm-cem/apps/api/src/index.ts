@@ -15,6 +15,7 @@ import { rubriquesRouter } from './routes/rubriques'
 import { contributionsRouter } from './routes/contributions'
 import { exportsRouter } from './routes/exports'
 import { privacyRouter } from './routes/privacy'
+import { maintenanceGuard, maintenanceStatus } from './middleware/maintenance'
 import { collecteursRouter } from './routes/collecteurs'
 import { collectesRouter } from './routes/collectes'
 import { commissionsRouter } from './routes/commissions'
@@ -151,6 +152,10 @@ app.use('/api', (req: Request, res: Response, next: NextFunction) => {
   if (req.path === '/auth/google') return next()
   doubleCsrfProtection(req, res, next)
 })
+
+// Mode maintenance : état public (bandeau) et blocage des écritures
+app.get('/api/status', (_req, res) => { res.json({ success: true, data: maintenanceStatus() }) })
+app.use('/api', maintenanceGuard)
 
 mount('/api/auth', authRouter)
 mount('/api/membres', membresRouter)

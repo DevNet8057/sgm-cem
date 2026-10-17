@@ -30,6 +30,13 @@ router.get('/', authenticate, requireLevel(4), async (_req, res) => {
   res.json({ success: true, data: settings })
 })
 
+// Ratios et revalorisation : nécessaires à qui crée ou reconduit une rubrique
+// (responsables, niveau 3), sans exposer le reste des paramètres
+router.get('/ratios', authenticate, requireLevel(3), async (_req, res) => {
+  const s = await prisma.systemSettings.upsert({ where: { id: 'singleton' }, update: {}, create: { id: 'singleton' } })
+  res.json({ success: true, data: { etudiantRatio: s.etudiantRatio, coupleRatio: s.coupleRatio, defaultIncreaseRate: s.defaultIncreaseRate } })
+})
+
 router.patch('/', authenticate, requireLevel(4), async (req, res) => {
   const data = settingsSchema.parse(req.body)
 

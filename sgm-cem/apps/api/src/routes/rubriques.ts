@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { getPrisma } from '../lib/prisma'
+import { audit } from '../services/audit.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -77,6 +78,53 @@ router.post('/', authenticate, requireLevel(3), async (req, res) => {
     }
   })
 
+  res.status(201).json({ success: true, data: rubrique })
+})
+
+// POST /api/rubriques/:id/reconduire — reconduction N → N+1 (EF-M04-03) :
+// mêmes caractéristiques, montants revalorisés de defaultIncreaseRate %
+// (arrondis à la centaine), dates décalées d'un an ; la rubrique d'origine est inchangée
+const RENEW_ROUNDING = 100
+const renewSchema = z.object({
+  fiscalYear: z.number().int().min(2000).max(2100).optional(),
+  increaseRate: z.number().min(0).max(100).optional(),
+  code: z.string().trim().min(2).max(40).optional(),
+})
+
+router.post('/:id/reconduire', authenticate, requireLevel(3), async (req, res) => {
+  const body = renewSchema.parse(req.body)
+  const source = await prisma.rubrique.findUnique({ where: { id: String(req.params.id) }, include: { collectePublique: { select: { id: true } } } })
+  if (!source) throw new AppError('NOT_FOUND', 'Rubrique introuvable', 404)
+  if (source.collectePublique) throw new AppError('BUSINESS_RULE', 'Une collecte publique ne se reconduit pas.', 400)
+  const settings = await prisma.systemSettings.upsert({ where: { id: 'singleton' }, update: {}, create: { id: 'singleton' } })
+
+  const year = body.fiscalYear ?? source.fiscalYear + 1
+  const rate = body.increaseRate ?? settings.defaultIncreaseRate
+  const yearShift = year - source.fiscalYear
+  const code = body.code ?? (source.code.includes(String(source.fiscalYear))
+    ? source.code.replace(String(source.fiscalYear), String(year))
+    : `${source.code}-${year}`)
+  if (await prisma.rubrique.findUnique({ where: { code } })) {
+    throw new AppError('DUPLICATE', `Le code ${code} existe déjà : la rubrique a peut-être déjà été reconduite.`, 409, 'code')
+  }
+  const revalue = (v: number | null) => v === null ? null : Math.max(RENEW_ROUNDING, Math.round(v * (1 + rate / 100) / RENEW_ROUNDING) * RENEW_ROUNDING)
+  const shift = (d: Date | null) => { if (!d) return null; const n = new Date(d); n.setFullYear(n.getFullYear() + yearShift); return n }
+
+  const rubrique = await prisma.rubrique.create({
+    data: {
+      code, title: source.title.includes(String(source.fiscalYear)) ? source.title.replace(String(source.fiscalYear), String(year)) : source.title,
+      description: source.description, type: source.type, priority: source.priority, status: 'OUVERTE', fiscalYear: year,
+      openDate: shift(source.openDate)!, closeDate: shift(source.closeDate),
+      amountTravailleur: revalue(source.amountTravailleur), amountEtudiant: revalue(source.amountEtudiant), amountCouple: revalue(source.amountCouple),
+      targetAmount: revalue(source.targetAmount), targetAll: source.targetAll, personnesConcernees: source.personnesConcernees,
+      isAnnualReference: source.isAnnualReference,
+      createdById: req.user!.userId, createdByName: req.user!.email,
+    },
+  })
+  await audit({
+    req, userId: req.user!.userId, userName: req.user!.email, action: 'CREATE', entityType: 'Rubrique', entityId: rubrique.id,
+    details: { code, reconduiteDe: source.code, revalorisation: rate },
+  })
   res.status(201).json({ success: true, data: rubrique })
 })
 

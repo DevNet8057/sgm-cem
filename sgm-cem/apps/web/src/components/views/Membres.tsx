@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Download, Edit3, FileUp, Heart, HeartOff,
-  Plus, Search, Users, X,
+  Plus, Search, UserMinus, Users, X,
 } from 'lucide-react'
 import api from '@/lib/api'
 import { cn, formatDate } from '@/lib/utils'
@@ -12,6 +12,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { SkeletonTableRow } from '@/components/ui/Skeleton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Avatar } from '@/components/ui/Avatar'
+import { Modal } from '@/components/ui/Modal'
 import type { Membre } from '@/types'
 
 const GROUPES    = ['TEMPLE', 'MVOG_BETSI', 'BISCUITERIE', 'OBILI', 'SCIENCES', 'POLYTECHNIQUE']
@@ -43,6 +44,7 @@ type MemberForm = typeof emptyForm
 
 export function Membres() {
   const queryClient = useQueryClient()
+  const [showInactive, setShowInactive] = useState(false)
   const [search,          setSearch]          = useState('')
   const [filterGroupe,    setFilterGroupe]    = useState('')
   const [filterStatut,    setFilterStatut]    = useState('')
@@ -165,6 +167,7 @@ export function Membres() {
 
   return (
     <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter">
+      <InactiveMembersModal open={showInactive} onClose={() => setShowInactive(false)} />
       {/* Header */}
       <div className="relative overflow-hidden rounded-[18px] border border-[#0F4A0F]/10 bg-white mb-6 shadow-cem-sm">
         <div className="absolute inset-y-0 left-0 w-2 bg-[#2563EB]" />
@@ -177,7 +180,10 @@ export function Membres() {
               <p className="text-gray-500 text-sm mt-0.5">{pagination?.total ?? 0} membre(s) enregistré(s)</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => setShowInactive(true)}>
+              <UserMinus size={14} /> Inactifs
+            </Button>
             <Button size="sm" variant="outline" onClick={() => { setMode(mode === 'import' ? 'none' : 'import'); setError('') }}>
               <FileUp size={14} /> Importer
             </Button>
@@ -605,5 +611,34 @@ function Select({ label, value, onChange, options }: {
         {options.map(o => <option key={o} value={o}>{o.replace(/_/g, ' ')}</option>)}
       </select>
     </label>
+  )
+}
+
+// Membres sans contribution confirmée depuis le seuil d'inactivité (EF-M03-07)
+function InactiveMembersModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { data, isLoading } = useQuery<{ thresholdMonths: number; members: Array<{ id: string; memberId: string; nom: string; groupe: string; phone: string | null; derniereContribution: string | null }> }>({
+    queryKey: ['membres-inactifs'],
+    queryFn: async () => (await api.get('/membres/inactifs')).data.data,
+    enabled: open,
+  })
+  return (
+    <Modal open={open} onClose={onClose} size="lg" title="Membres inactifs"
+      description={data ? `${data.members.length} membre(s) sans contribution confirmée depuis plus de ${data.thresholdMonths} mois (seuil réglable dans Paramètres).` : ''}>
+      {isLoading ? <p className="text-sm text-gray-500">Chargement…</p> : (
+        <ul className="max-h-[55vh] divide-y divide-gray-100 overflow-y-auto">
+          {(data?.members ?? []).map(m => (
+            <li key={m.id} className="flex items-center gap-3 py-2.5">
+              <Avatar name={m.nom} size="sm" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-gray-800">{m.nom}</span>
+                <span className="block truncate text-xs text-slate-500">{m.memberId} · {m.groupe}{m.phone ? ` · ${m.phone}` : ''}</span>
+              </span>
+              <span className="shrink-0 text-right text-xs text-slate-500">{m.derniereContribution ? `Dernière : ${formatDate(m.derniereContribution)}` : 'Aucune contribution'}</span>
+            </li>
+          ))}
+          {data && data.members.length === 0 && <li className="py-4 text-center text-sm text-gray-500">Aucun membre inactif.</li>}
+        </ul>
+      )}
+    </Modal>
   )
 }

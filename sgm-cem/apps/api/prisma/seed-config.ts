@@ -103,7 +103,7 @@ const initialConfigs: SeedConf[] = [
   { key: 'API_URL', category: 'INFRASTRUCTURE', label: 'URL de l\'API' },
   {
     key: 'MAINTENANCE_MODE', category: 'INFRASTRUCTURE', label: 'Mode maintenance',
-    description: 'true = l\'API répond 503 à toutes les requêtes métier.', defaultValue: 'false',
+    description: 'true = les écritures sont refusées (503) sauf pour le développeur ; lecture, connexion et webhooks des prestataires continuent. Un bandeau prévient les utilisateurs.', defaultValue: 'false',
   },
   {
     key: 'MAINTENANCE_MESSAGE', category: 'INFRASTRUCTURE', label: 'Message de maintenance',
@@ -149,10 +149,7 @@ const initialConfigs: SeedConf[] = [
   },
   { key: 'VAPID_SUBJECT', category: 'NOTIFICATIONS', label: 'Web Push — contact (mailto:)' },
 
-  // ── Section G — Feature flags ────────────────────────────────────────
-  { key: 'FEATURE_OFFLINE_PWA', category: 'FEATURE_FLAGS', label: 'Mode hors ligne PWA', defaultValue: 'true' },
-  { key: 'FEATURE_QUERY_BUILDER', category: 'FEATURE_FLAGS', label: 'Query builder avancé', defaultValue: 'true' },
-  { key: 'FEATURE_PERCENT_DISTRIBUTION', category: 'FEATURE_FLAGS', label: 'Répartition par pourcentage (Partie E)', defaultValue: 'false' },
+  // Section G (interrupteurs FEATURE_*) retirée au lot 4.5 : aucun n'avait d'effet
 ]
 
 async function seedConfig() {

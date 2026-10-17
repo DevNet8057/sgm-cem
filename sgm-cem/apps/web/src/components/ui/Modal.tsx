@@ -27,7 +27,7 @@ export function Modal({ open, onClose, title, description, children, size = 'md'
   return (
     <div className="fixed inset-0 z-[500] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-[fadein_0.15s_ease]" onClick={onClose} />
-      <div className={cn(
+      <div role="dialog" aria-modal="true" aria-label={title} className={cn(
         'relative w-full bg-white rounded-[20px] shadow-cem-xl animate-modal-in overflow-hidden',
         sizes[size]
       )}>
@@ -38,7 +38,9 @@ export function Modal({ open, onClose, title, description, children, size = 'md'
             {description && <p className="text-sm text-gray-500 mt-0.5">{description}</p>}
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Fermer"
             className="shrink-0 w-8 h-8 flex items-center justify-center rounded-[8px] text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
           >
             <X size={16} />

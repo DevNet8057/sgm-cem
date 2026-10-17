@@ -213,7 +213,7 @@ Légende : ● = autorisé · ◐ = autorisé sur son propre périmètre · ○ 
 | EF-M03-04 | Importer des membres depuis un modèle tableur (CSV/XLSX → JSON) avec rapport ligne à ligne (créé / rejeté / motif). L'import est atomique ou rejouable sans doublon. | S | 🟡 (atomique, sans rapport détaillé, mot de passe par défaut) |
 | EF-M03-05 | Rechercher un membre par nom, téléphone ou numéro, avec filtres (groupe, catégorie, statut, profil). | M | ✅ |
 | EF-M03-06 | Fiche membre consolidée : historique des contributions, reste à payer par rubrique, litiges, déclarations en attente. | S | 🟡 |
-| EF-M03-07 | Signaler automatiquement les membres **inactifs** (aucune contribution confirmée depuis `inactivityMonthsThreshold` mois) aux responsables. | S | ❌ (paramètre saisi mais sans effet) |
+| EF-M03-07 | Signaler automatiquement les membres **inactifs** (aucune contribution confirmée depuis `inactivityMonthsThreshold` mois) aux responsables. | S | ✅ (lot 4.5) |
 | EF-M03-08 | Archivage d'un membre parti, sans suppression de son historique financier. | S | 🟡 (désactivation seule) |
 
 ### M04 — Rubriques
@@ -221,8 +221,8 @@ Légende : ● = autorisé · ◐ = autorisé sur son propre périmètre · ○ 
 | ID | Exigence | Prio. | Statut |
 |---|---|---|---|
 | EF-M04-01 | Créer une rubrique : code unique, titre, description, type (`REGULIERE_MENSUELLE`, `PONCTUELLE`, `URGENTE`), priorité (`NORMAL`, `PRIORITAIRE`, `URGENT`), exercice, dates d'ouverture et de clôture, montants par profil (ou libre), objectif de collecte, public concerné. | M | ✅ |
-| EF-M04-02 | **Pré-remplissage des montants** : à la saisie du montant TRAVAILLEUR, les montants ÉTUDIANT et COUPLE sont proposés selon `etudiantRatio` et `coupleRatio` (modifiables). | S | ❌ (ratios saisis dans Paramètres mais inutilisés, sauf dans un simulateur) |
-| EF-M04-03 | Reconduction annuelle d'une rubrique (N → N+1) avec revalorisation de `defaultIncreaseRate` %. | C | ❌ 🆕 |
+| EF-M04-02 | **Pré-remplissage des montants** : à la saisie du montant TRAVAILLEUR, les montants ÉTUDIANT et COUPLE sont proposés selon `etudiantRatio` et `coupleRatio` (modifiables). | S | ✅ (lot 4.5) |
+| EF-M04-03 | Reconduction annuelle d'une rubrique (N → N+1) avec revalorisation de `defaultIncreaseRate` %. | C | ✅ (lot 4.5) |
 | EF-M04-04 | Ouvrir, fermer ou archiver une rubrique. Une rubrique fermée n'accepte plus de paiement ; une rubrique archivée disparaît des listes courantes. Confirmation exigée. | M | 🟡 (aucune confirmation) |
 | EF-M04-05 | Suivi d'une rubrique : total confirmé, en attente, nombre de payeurs, taux de recouvrement (payeurs à jour / membres concernés), progression vers l'objectif. | S | 🟡 (total et nombre seulement) |
 | EF-M04-06 | Un collecteur ne voit sur une rubrique que **ses propres** totaux ; le global est réservé au niveau 3 et plus. | S | ❌ |
@@ -358,10 +358,10 @@ Voir la matrice détaillée au §8.
 
 | ID | Exigence | Prio. | Statut |
 |---|---|---|---|
-| EF-M14-01 | Paramètres métier (ADMIN) : identité (nom, verset), ratios, revalorisation, seuils (inactivité, relance, rétention des fonds, rappels de transfert). **Chaque paramètre affiché DOIT avoir un effet** ; sinon il est retiré de l'écran. | M | ⚠️ (5 paramètres sans effet) |
+| EF-M14-01 | Paramètres métier (ADMIN) : identité (nom, verset), ratios, revalorisation, seuils (inactivité, relance, rétention des fonds, rappels de transfert). **Chaque paramètre affiché DOIT avoir un effet** ; sinon il est retiré de l'écran. | M | ✅ (lots 4.3 et 4.5) |
 | EF-M14-02 | Panneau développeur : configuration à chaud (URL, clés, taux, interrupteurs), secrets masqués, révélation auditée et réauthentifiée 🆕, historique par clé, recalcul de l'URL du webhook, test de connexion Yelii. | M | ✅ |
-| EF-M14-03 | **Mode maintenance** (`MAINTENANCE_MODE`, `MAINTENANCE_MESSAGE`) : bloque toutes les écritures sauf pour DEVELOPER, et affiche un bandeau. | S | ❌ (clés sans effet) |
-| EF-M14-04 | Les interrupteurs déclarés (`FEATURE_OFFLINE_PWA`, `FEATURE_QUERY_BUILDER`, `FEATURE_PERCENT_DISTRIBUTION`, `LOG_LEVEL`) sont soit branchés, soit retirés. | S | ❌ |
+| EF-M14-03 | **Mode maintenance** (`MAINTENANCE_MODE`, `MAINTENANCE_MESSAGE`) : bloque toutes les écritures sauf pour DEVELOPER, et affiche un bandeau. | S | ✅ (lot 4.5) |
+| EF-M14-04 | Les interrupteurs déclarés (`FEATURE_OFFLINE_PWA`, `FEATURE_QUERY_BUILDER`, `FEATURE_PERCENT_DISTRIBUTION`, `LOG_LEVEL`) sont soit branchés, soit retirés. | S | ✅ (lot 4.5 : `LOG_LEVEL` branché, `FEATURE_*` retirés) |
 
 ### M15 — Application mobile (PWA) et hors ligne
 
