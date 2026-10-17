@@ -47,7 +47,7 @@ export default function PolitiqueConfidentialitePage() {
 
           <section>
             <h2 className="text-lg font-semibold text-slate-900">2. Ce que nous traitons, pourquoi et combien de temps</h2>
-            <div className="mt-2 overflow-x-auto">
+            <div className="mt-2 overflow-x-auto" tabIndex={0} role="region" aria-label="Tableau des traitements (défilement horizontal)">
               <table className="w-full min-w-[480px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-200 text-slate-500">

@@ -256,28 +256,30 @@ export function Parametres() {
             <p className="text-xs text-gray-500 mb-3">Choisissez le son joué à chaque nouvelle notification.</p>
             <div className="space-y-2">
               {NOTIF_SOUNDS.map(s => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => { setSelectedSound(s.id); saveSoundId(s.id) }}
-                  className={cn(
-                    'w-full flex items-center justify-between rounded-[10px] px-3 py-2.5 border text-sm font-medium transition-all',
-                    selectedSound === s.id
-                      ? 'bg-[#E8F5E8] border-[#1A6B1A]/30 text-[#1A6B1A]'
-                      : 'bg-gray-50 border-gray-200 text-gray-700 hover:border-[#1A6B1A]/30'
-                  )}
-                >
-                  <span>{s.label}</span>
+                <div key={s.id} className={cn(
+                  'flex items-center rounded-[10px] border text-sm font-medium transition-all',
+                  selectedSound === s.id
+                    ? 'bg-[#E8F5E8] border-[#1A6B1A]/30 text-[#1A6B1A]'
+                    : 'bg-gray-50 border-gray-200 text-gray-700 hover:border-[#1A6B1A]/30'
+                )}>
                   <button
                     type="button"
-                    onClick={e => { e.stopPropagation(); s.play() }}
-                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-[#1A6B1A] transition-colors"
-                    title="Tester ce son"
+                    aria-pressed={selectedSound === s.id}
+                    onClick={() => { setSelectedSound(s.id); saveSoundId(s.id) }}
+                    className="min-h-11 flex-1 px-3 text-left"
+                  >
+                    {s.label}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => s.play()}
+                    className="flex min-h-11 items-center gap-1 px-3 text-xs text-gray-600 hover:text-[#1A6B1A] transition-colors"
+                    aria-label={`Tester le son ${s.label}`}
                   >
                     <Play size={11} />
                     Tester
                   </button>
-                </button>
+                </div>
               ))}
             </div>
             {selectedSound === 'off' && (

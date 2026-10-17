@@ -86,7 +86,7 @@ export function Litiges() {
         <div className="absolute inset-y-0 left-0 w-1.5 bg-red-500" />
         <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-red-600">À résoudre</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-red-700">À résoudre</p>
             <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Litiges</h2>
             <p className="text-gray-500 text-sm mt-0.5">{litiges.length} contribution(s) contestée(s)</p>
           </div>

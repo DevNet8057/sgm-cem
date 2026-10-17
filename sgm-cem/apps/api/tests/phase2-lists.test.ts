@@ -59,4 +59,13 @@ describe('Listes paginées côté serveur', () => {
     const res = await list({ rubriqueId, modePaiement: 'MTN_MOMO' })
     expect(res.body.pagination.total).toBe(1)
   })
+
+  it('la liste des membres est bornée (valeur invalide ou démesurée)', async () => {
+    const cookie = await testCookie({ userId: tresorier.id, role: 'TRESORIER', email: tresorier.email })
+    const invalid = await request(app).get('/api/membres').query({ limit: 'abc', page: 'x' }).set('Cookie', cookie)
+    expect(invalid.status).toBe(200)
+    expect(invalid.body.pagination).toMatchObject({ page: 1, limit: 20 })
+    const huge = await request(app).get('/api/membres').query({ limit: 1_000_000 }).set('Cookie', cookie)
+    expect(huge.body.pagination.limit).toBe(100)
+  })
 })

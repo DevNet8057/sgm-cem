@@ -127,7 +127,7 @@ export function Rubriques() {
         <div className="absolute inset-y-0 left-0 w-1.5 bg-[#F59E0B]" />
         <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-amber-600">Catégorisation</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-amber-800">Catégorisation</p>
             <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Rubriques</h2>
             <p className="text-gray-500 text-sm mt-0.5">{data?.length ?? 0} rubrique(s) configurée(s)</p>
           </div>
@@ -333,7 +333,7 @@ function RubriqueCard({ rubrique: r, loadingStatus, onEdit, onStatus }: {
         <div className="flex items-start justify-between mb-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className="font-mono text-[11px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{r.code}</span>
+              <span className="font-mono text-[11px] text-gray-600 bg-gray-100 px-2 py-0.5 rounded">{r.code}</span>
               <StatusBadge status={r.priority === 'URGENT' ? 'URGENT' : r.status} dot={false} />
             </div>
             <h3 className="font-display font-semibold text-gray-800 text-sm leading-tight">{r.title}</h3>
@@ -346,7 +346,7 @@ function RubriqueCard({ rubrique: r, loadingStatus, onEdit, onStatus }: {
           <AmountPill label="Etud." value={r.amountEtudiant} />
           <AmountPill label="Couple" value={r.amountCouple} />
           {r.amountTravailleur == null && r.amountEtudiant == null && r.amountCouple == null && (
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-gray-100 text-gray-500">Contribution libre</span>
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-gray-100 text-gray-600">Contribution libre</span>
           )}
         </div>
 

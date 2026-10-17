@@ -57,7 +57,7 @@ export function RubriquesMembre() {
       <div className="relative overflow-hidden rounded-[18px] border border-[#0F4A0F]/10 bg-white mb-6">
         <div className="absolute inset-y-0 left-0 w-1.5 bg-[#F59E0B]" />
         <div className="p-5">
-          <p className="text-xs font-bold uppercase tracking-widest text-amber-600">Rubriques ouvertes</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-amber-800">Rubriques ouvertes</p>
           <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Ce que vous pouvez encore payer</h2>
           <p className="text-gray-500 text-sm mt-0.5">Les rubriques urgentes ou prioritaires apparaissent en premier.</p>
         </div>
@@ -120,7 +120,7 @@ function RubriqueMembreCard({ rubrique: r, balance, highlighted, onPay }: {
         <div className="flex items-start justify-between mb-3 gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1 flex-wrap">
-              <span className="font-mono text-[11px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{r.code}</span>
+              <span className="font-mono text-[11px] text-gray-600 bg-gray-100 px-2 py-0.5 rounded">{r.code}</span>
               {r.priority !== 'NORMAL' && <StatusBadge status={r.priority} dot={false} />}
             </div>
             <h3 className="font-display font-semibold text-gray-800 text-sm leading-tight">{r.title}</h3>
@@ -150,7 +150,7 @@ function RubriqueMembreCard({ rubrique: r, balance, highlighted, onPay }: {
             )}
           </div>
         ) : (
-          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-gray-100 text-gray-500 block mb-3 w-fit">Contribution libre</span>
+          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-gray-100 text-gray-600 block mb-3 w-fit">Contribution libre</span>
         )}
 
         <Button size="sm" className="w-full py-2" onClick={() => onPay(balance?.remainingAmount && balance.remainingAmount > 0 ? balance.remainingAmount : undefined)}>

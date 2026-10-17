@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { Download, Eye, FileText, Printer } from 'lucide-react'
-import api, { getBaseURL } from '@/lib/api'
+import api, { fetchAllPages, getBaseURL } from '@/lib/api'
 import { Button } from '@/components/ui/Button'
 import { formatDate, contributorName } from '@/lib/utils'
 import { downloadXlsx } from '@/lib/exportXlsx'
@@ -20,7 +20,7 @@ export function Rapports() {
     setError('')
     try {
       if (type === 'membres') {
-        const rows = (await api.get('/membres', { params: { limit: 500 } })).data.data as Membre[]
+        const rows = await fetchAllPages<Membre>('/membres')
         await downloadXlsx({
           filename: 'membres.xlsx',
           sheetName: 'Membres',
@@ -73,7 +73,7 @@ export function Rapports() {
       }
 
       if (type === 'contributions') {
-        const rows = (await api.get('/contributions', { params: { limit: 500 } })).data.data as Contribution[]
+        const rows = await fetchAllPages<Contribution>('/contributions')
         await downloadXlsx({
           filename: 'contributions.xlsx',
           sheetName: 'Contributions',
@@ -123,7 +123,7 @@ export function Rapports() {
       <div className="relative overflow-hidden rounded-[18px] border border-[#0F4A0F]/10 bg-white mb-6">
         <div className="absolute inset-y-0 left-0 w-1.5 bg-[#7C3AED]" />
         <div className="p-5">
-          <p className="text-xs font-bold uppercase tracking-widest text-purple-600">Exports</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-purple-700">Exports</p>
           <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Rapports</h2>
           <p className="text-gray-500 text-sm mt-0.5">Exports Excel mis en forme et rapport financier PDF, aux couleurs de SGM-CEM.</p>
         </div>

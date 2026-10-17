@@ -76,7 +76,7 @@ export function Statistiques() {
         <div className="absolute inset-y-0 left-0 w-1.5 bg-[#7C3AED]" />
         <div className="p-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-purple-600">Analyse</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-purple-700">Analyse</p>
             <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Statistiques</h2>
             <p className="text-gray-500 text-sm mt-0.5">Vue financière et opérationnelle du ministère</p>
           </div>
@@ -133,7 +133,7 @@ export function Statistiques() {
           {monthlyLoading ? (
             <div className="h-72 skeleton rounded-[12px]" />
           ) : (
-            <ResponsiveContainer width="100%" height={280}>
+            <div aria-hidden="true" className="w-full"><ResponsiveContainer width="100%" height={280}>
               <BarChart data={monthly ?? []} barSize={26}>
                 <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
                 <YAxis hide />
@@ -151,7 +151,7 @@ export function Statistiques() {
                   ))}
                 </Bar>
               </BarChart>
-            </ResponsiveContainer>
+            </ResponsiveContainer></div>
           )}
         </section>
 
@@ -164,16 +164,16 @@ export function Statistiques() {
             <div className="h-60 flex items-center justify-center text-gray-400 text-sm">Aucune donnée</div>
           ) : (
             <div className="flex flex-col items-center gap-4">
-              <ResponsiveContainer width="100%" height={200}>
+              <div aria-hidden="true" className="w-full"><ResponsiveContainer width="100%" height={200}>
                 <PieChart>
-                  <Pie data={statusData} dataKey="value" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3}>
+                  <Pie rootTabIndex={-1} data={statusData} dataKey="value" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3}>
                     {statusData.map(item => (
                       <Cell key={item.name} fill={item.color} />
                     ))}
                   </Pie>
                   <Tooltip formatter={(v: number) => [v, '']} />
                 </PieChart>
-              </ResponsiveContainer>
+              </ResponsiveContainer></div>
               <div className="w-full space-y-2">
                 {statusData.map(item => (
                   <div key={item.name} className="flex items-center justify-between text-sm">

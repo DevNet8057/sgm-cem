@@ -176,7 +176,7 @@ export function CollectesPubliques() {
         <div className="absolute inset-y-0 left-0 w-1.5 bg-[#F5C400]" />
         <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-amber-600">Dons &amp; campagnes</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-amber-800">Dons &amp; campagnes</p>
             <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Collectes publiques</h2>
             <p className="text-gray-500 text-sm mt-0.5">{collectes.length} collecte(s) publique(s) configurée(s)</p>
           </div>
@@ -267,7 +267,7 @@ function CollecteCard({ collecte: c, highlighted, activeToggleLoading, urgentTog
         <div className="flex items-start justify-between mb-3 gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className="font-mono text-[11px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{c.rubrique.code}</span>
+              <span className="font-mono text-[11px] text-gray-600 bg-gray-100 px-2 py-0.5 rounded">{c.rubrique.code}</span>
               <span className={cn(
                 'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border',
                 c.isActive ? 'bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]' : 'bg-[#F8FAFC] text-[#94A3B8] border-[#E2E8F0]'
@@ -315,6 +315,9 @@ function CollecteCard({ collecte: c, highlighted, activeToggleLoading, urgentTog
             <span className="text-[11px] text-gray-400">{c.isActive ? 'Activée' : 'Désactivée'}</span>
             <button
               type="button"
+              role="switch"
+              aria-checked={c.isActive}
+              aria-label="Collecte activée"
               disabled={activeToggleLoading || urgentToggleLoading}
               onClick={() => onToggleActive(!c.isActive)}
               className={cn(
@@ -673,15 +676,18 @@ function ChampRow({ champ, onChange, onRemove }: {
       )}
 
       <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
-        <div
+        <button
+          type="button"
+          role="switch"
+          aria-checked={champ.required}
           onClick={() => onChange({ ...champ, required: !champ.required })}
           className={cn('w-9 h-5 rounded-full relative transition-colors', champ.required ? 'bg-[#1A6B1A]' : 'bg-gray-300')}
         >
-          <div className={cn(
-            'absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform',
+          <span className={cn(
+            'absolute block top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform',
             champ.required ? 'translate-x-4' : 'translate-x-0.5'
           )} />
-        </div>
+        </button>
         <span className="text-xs font-semibold text-gray-600">Champ obligatoire</span>
       </label>
     </div>

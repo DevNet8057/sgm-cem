@@ -223,43 +223,43 @@ export function Journal() {
 
       {/* Filtres */}
       <div className="bg-white rounded-[18px] border border-gray-100 p-4 mb-4 flex flex-wrap items-end gap-3">
-        <div className="flex flex-col gap-1">
-          <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Action</label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Action</span>
           <select value={action} onChange={e => { setAction(e.target.value); setPage(1) }} className={filterInputCls}>
             <option value="">Toutes</option>
             {Object.entries(ACTION_LABELS).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Élément</label>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Élément</span>
           <select value={entityType} onChange={e => { setEntityType(e.target.value); setPage(1) }} className={filterInputCls}>
             <option value="">Tous</option>
             {Object.entries(ENTITY_LABELS).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
-        </div>
+        </label>
         {canSeeOthers && (
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Utilisateur</label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Utilisateur</span>
             <select value={userId} onChange={e => { setUserId(e.target.value); setPage(1) }} className={cn(filterInputCls, 'max-w-[180px]')}>
               <option value="">Tous</option>
               {(actors ?? []).map(a => (
                 <option key={a.id} value={a.id}>{a.fullName} ({ROLE_LABELS[a.role] ?? a.role})</option>
               ))}
             </select>
-          </div>
+          </label>
         )}
-        <div className="flex flex-col gap-1">
-          <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Du</label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Du</span>
           <input type="date" value={from} onChange={e => { setFrom(e.target.value); setPage(1) }} className={filterInputCls} />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Au</label>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Au</span>
           <input type="date" value={to} onChange={e => { setTo(e.target.value); setPage(1) }} className={filterInputCls} />
-        </div>
+        </label>
         {hasFilters && (
           <button
             onClick={resetFilters}

@@ -22,6 +22,10 @@ export const lightTheme: ThemeConfig = {
     colorBgContainer:    '#FFFFFF',
     colorBgElevated:     '#FFFFFF',
     colorBorder:         '#E2E8F0',
+    // Texte secondaire : contraste AA (≥ 4,5:1) sur blanc (UX-08)
+    colorTextSecondary:  '#5B6472',
+    colorTextDescription:'#5B6472',
+    colorTextPlaceholder:'#6B7280',
     colorBorderSecondary:'#F1F5F9',
     borderRadius:        10,
     borderRadiusLG:      20,

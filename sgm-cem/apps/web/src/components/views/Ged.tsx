@@ -150,7 +150,7 @@ export function Ged() {
         <div className="absolute inset-y-0 left-0 w-1.5 bg-[#0EA5E9]" />
         <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-sky-600">Documents</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-sky-700">Documents</p>
             <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">GED Commissions</h2>
             <p className="text-gray-500 text-sm mt-0.5">Soumission et validation des documents des commissions</p>
           </div>
@@ -261,7 +261,7 @@ export function Ged() {
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un document..."
                 className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30" />
             </div>
-            <select value={statut} onChange={e => setStatut(e.target.value)}
+            <select value={statut} onChange={e => setStatut(e.target.value)} aria-label="Filtrer par statut"
               className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30">
               <option value="">Tous les statuts</option>
               {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -372,7 +372,7 @@ function Status({ status }: { status: DocumentStatut }) {
   const tone = status === 'APPROUVE' ? 'bg-green-100 text-green-800' :
     status === 'EN_ATTENTE' ? 'bg-amber-100 text-amber-800' :
     status === 'REJETE' ? 'bg-red-100 text-red-700' :
-    status === 'ARCHIVE' ? 'bg-gray-100 text-gray-500' : 'bg-blue-100 text-blue-800'
+    status === 'ARCHIVE' ? 'bg-gray-100 text-gray-600' : 'bg-blue-100 text-blue-800'
   return <span className={cn('inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold', tone)}>{STATUS_LABELS[status]}</span>
 }
 

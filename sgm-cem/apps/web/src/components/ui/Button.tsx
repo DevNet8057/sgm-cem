@@ -15,7 +15,7 @@ const V: Record<Variant, string> = {
   yellow:  'bg-[#F5C400] text-[#0F4A0F] font-bold shadow-cem-yellow hover:bg-[#D4A800] focus:ring-[#F5C400]/40',
   outline: 'border-2 border-[#1A6B1A] text-[#1A6B1A] hover:bg-[#1A6B1A] hover:text-white focus:ring-[#1A6B1A]/30',
   ghost:   'text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus:ring-gray-200',
-  danger:  'bg-[#EF4444] text-white shadow-[0_4px_16px_rgba(239,68,68,0.3)] hover:bg-[#DC2626] focus:ring-red-300',
+  danger:  'bg-[#DC2626] text-white shadow-[0_4px_16px_rgba(239,68,68,0.3)] hover:bg-[#B91C1C] focus:ring-red-300',
 }
 const S: Record<Size, string> = {
   sm:   'gap-1.5 px-3 py-1.5 text-xs rounded-[8px]',

@@ -149,7 +149,7 @@ export function Dashboard() {
         <Panel title="Répartition des paiements">
           {(stats?.modePaiementStats?.length ?? 0) === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Aucune contribution confirmée" /> : (
             <div>
-              <ResponsiveContainer width="100%" height={190}><PieChart><Pie data={stats?.modePaiementStats ?? []} dataKey="count" nameKey="modePaiement" innerRadius={50} outerRadius={78} paddingAngle={3}>{(stats?.modePaiementStats ?? []).map(item => <Cell key={item.modePaiement} fill={MODE_COLORS[item.modePaiement]} />)}</Pie><Tooltip content={<ModeTooltip />} /></PieChart></ResponsiveContainer>
+              <div aria-hidden="true" className="w-full"><ResponsiveContainer width="100%" height={190}><PieChart><Pie rootTabIndex={-1} data={stats?.modePaiementStats ?? []} dataKey="count" nameKey="modePaiement" innerRadius={50} outerRadius={78} paddingAngle={3}>{(stats?.modePaiementStats ?? []).map(item => <Cell key={item.modePaiement} fill={MODE_COLORS[item.modePaiement]} />)}</Pie><Tooltip content={<ModeTooltip />} /></PieChart></ResponsiveContainer></div>
               <div className="space-y-2">{(stats?.modePaiementStats ?? []).slice(0, 4).map(item => <div key={item.modePaiement} className="flex items-center justify-between text-sm"><span className="flex items-center gap-2 text-slate-600"><i className="h-2.5 w-2.5 rounded-full" style={{ background: MODE_COLORS[item.modePaiement] }} />{MODE_PAIEMENT_LABELS[item.modePaiement]}</span><strong className="text-[#0F4A0F]">{item.count} ({item.share} %)</strong></div>)}</div>
             </div>
           )}
@@ -194,7 +194,7 @@ export function Dashboard() {
         </Panel>
 
         <Panel title="Taux par rubrique">
-          {(stats?.contributionRates?.length ?? 0) === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Aucune rubrique active" /> : <div className="space-y-4">{(stats?.contributionRates ?? []).map(item => <button key={item.rubriqueId} onClick={() => setActiveView('rubriques')} className="w-full text-left"><div className="mb-1 flex justify-between text-xs"><strong className="text-slate-700">{item.code}</strong><span>{item.rate == null ? 'Libre' : `${item.rate} %`}</span></div><Progress percent={Math.min(100, item.rate ?? 0)} showInfo={false} strokeColor={(item.rate ?? 0) >= 80 ? '#1A6B1A' : (item.rate ?? 0) >= 50 ? '#F5C400' : '#EF4444'} /><div className="flex justify-between text-[11px] text-slate-400"><span>{formatAmount(item.total)}</span><span>{item.count} paiement(s)</span></div></button>)}</div>}
+          {(stats?.contributionRates?.length ?? 0) === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Aucune rubrique active" /> : <div className="space-y-4">{(stats?.contributionRates ?? []).map(item => <button key={item.rubriqueId} onClick={() => setActiveView('rubriques')} className="w-full text-left"><div className="mb-1 flex justify-between text-xs"><strong className="text-slate-700">{item.code}</strong><span>{item.rate == null ? 'Libre' : `${item.rate} %`}</span></div><Progress aria-label={`Taux de contribution ${item.code}`} percent={Math.min(100, item.rate ?? 0)} showInfo={false} strokeColor={(item.rate ?? 0) >= 80 ? '#1A6B1A' : (item.rate ?? 0) >= 50 ? '#F5C400' : '#EF4444'} /><div className="flex justify-between text-[11px] text-slate-400"><span>{formatAmount(item.total)}</span><span>{item.count} paiement(s)</span></div></button>)}</div>}
         </Panel>
 
         <div className="space-y-5">

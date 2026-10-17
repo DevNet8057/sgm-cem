@@ -23,8 +23,8 @@ Référence : [`07_FEUILLE_DE_ROUTE.md`](07_FEUILLE_DE_ROUTE.md).
 | 0.0 Protection des données | ✅ | Voir ci-dessus |
 | 0 Sécuriser | ✅ 17/10/2026 | Voir « Phase 0 — détail » ci-dessous |
 | 1 Fiabiliser | ✅ 17/10/2026 | Voir « Phase 1 — détail » ; jalon J1 : reste la partie serveur et juridique de la check-list GO |
-| 2 Mobile-first | ⏳ en cours | — |
-| 3 Socle et domaine | ⏸ | — |
+| 2 Mobile-first | ✅ 17/10/2026 | Voir « Phase 2 — détail » ; jalon J2 : reste la validation des parcours sur appareils réels |
+| 3 Socle et domaine | ⏳ en cours | — |
 | 4 Gouvernance | ⏸ | — |
 
 ## Phase 0 — détail (livré)
@@ -56,6 +56,21 @@ Référence : [`07_FEUILLE_DE_ROUTE.md`](07_FEUILLE_DE_ROUTE.md).
 
 Reporté (avec raison) : utilisateur non-root dans les images (propriété des volumes existants à reprendre, nécessite un test Docker réel) → phase 3.
 
+## Phase 2 — détail (livré)
+| Lot | Livré | Vérification |
+|---|---|---|
+| 2.1 antd v6 | antd 6.6 et API sémantique (`classNames`/`styles`), plus aucun sélecteur `.ant-*` dans le code ; **ordre des couches CSS fixé** (`antd` sous les utilitaires Tailwind : la remise à zéro d'antd annulait des classes Tailwind, ex. liens soulignés) | Captures avant/après : seul changement visible = soulignement des liens |
+| 2.2 Une URL par écran | `/dashboard/<écran>` : retour arrière, lien direct et rafraîchissement fiables ; notifications push ouvrant l'écran concerné | Navigateur réel. **Reporté à 3.4** : groupes de routes `(membre)/(staff)/(admin)` et feuilles en routes interceptées (découpage structurel, sans effet visible) |
+| 2.3 Navigation par rôle | Table unique des droits (menu, onglets, accès) ; onglets orientés tâches avec badges ; bloc « À traiter » | Captures 360 px par rôle |
+| 2.4 Payer / Encaisser | Paiement membre en 3 écrans (montant dû prérempli, modes indisponibles masqués) ; **un seul bouton « Encaisser »** (membre qui paie / assistant / remise à confirmer) ; récapitulatif avant toute confirmation financière | Navigateur réel |
+| 2.5 Listes | Listes compactes sur deux lignes + **feuille de détail** (mobile) ; fonds **regroupés par collecteur** (repliables), barre de remise collante ; dépôt bancaire regroupé par emplacement ; utilisateurs : recherche, filtre par rôle ; plus de « Membre inconnu » (don public nommé, remise groupée attribuée) ; **bug corrigé** : le dépôt bancaire ne voyait que les 100 contributions les plus récentes ; **bug corrigé** : la recherche des contributions était ignorée par l'API ; **bugs corrigés** : exports Excel « Membres » et « Contributions » tronqués (100 ou 500 lignes) et sélecteur de membres de « Encaisser » limité à 100 → lecture de toutes les pages ; `/membres` borné (≤ 100 par page, valeur invalide sans erreur 500) | « Fonds collecteurs » 6 089 → 2 268 px ; tests `phase2-lists` (121 contributions, 2 pages) |
+| 2.6 Accessibilité | Zoom autorisé, champs 16 px sur mobile, cibles 44 px, libellés liés, toasts annoncés (`aria-live`), contrastes AA (gris secondaire, sur-titres, boutons rouges, badges), graphiques décoratifs masqués avec équivalent texte, interrupteurs `role="switch"` ; **audit axe-core** (`pnpm --filter web a11y`) + job CI | axe WCAG 2.1 AA : **0 violation sérieuse ou critique** sur 24 écrans (4 rôles + pages publiques), sur la base de vérification **et** en simulation fidèle du job CI (base vierge + données de démonstration) |
+| 2.7 Performance | Polices via `next/font` (auto-hébergées), écrans chargés à la demande (`next/dynamic`), 10 paquets Radix inutilisés retirés | `/dashboard` : **866 kB → 139 kB** de JavaScript au premier chargement |
+| 2.8 Push et PWA | Bannière de notifications sur l'accueil seulement, « Plus tard » retenu 30 jours, activation depuis « Mon profil » ; icônes maskable ; service worker v4 (pas de page d'erreur en cache) ; **saisie hors ligne idempotente** (clé `clientRequestId`, migration additive) | Rejeu simulé dans le navigateur : 1 seule contribution ; tests `phase2-offline` |
+| Migrations | L'adoption d'une base `db push` n'utilise plus `db push` : SQL de `migrate diff` appliqué en transaction, **refusé s'il supprime quoi que ce soit** | Base `main` historique, base de vérification (montants identiques), refus d'une colonne à supprimer |
+
+Non fait (avec raison) : budget Lighthouse en CI (mesure ponctuelle ci-dessous, pas de seuil bloquant tant que la CI GitHub ne tourne pas) ; validation sur appareils réels (jalon J2) — à faire par l'équipe avec 2 ou 3 téléphones Android d'entrée de gamme.
+
 ## ⚠️ Avant de déployer cette version
 1. **Sauvegarder** la base (`scripts/backup-db.ps1`) — l'API le fait aussi automatiquement au démarrage.
 2. Dans le `.env` racine : `CSRF_SECRET`, `JWT_SECRET`, `REFRESH_TOKEN_SECRET` doivent faire **≥ 32 caractères** (`openssl rand -base64 48`), sinon l'API refuse de démarrer en production.
@@ -63,6 +78,7 @@ Reporté (avec raison) : utilisateur non-root dans les images (propriété des v
 4. Reconstruire les images (`docker compose build`) : passage à Node 24.
 5. Premier démarrage : l'API sauvegarde la base, l'**adopte** dans le système de migrations puis reclasse les paiements électroniques dans « Portefeuille électronique » (la sauvegarde garde l'état d'avant).
 6. Après la mise à jour, les trésoriers peuvent recevoir des alertes sur d'anciens paiements Mobile Money bloqués : c'est la réconciliation qui reprend enfin les paiements répartis.
+7. Si un téléphone garde des contributions saisies hors ligne avec l'ancienne version, elles sont envoyées normalement à la reconnexion (sans protection anti-doublon pour ces anciennes saisies seulement) : vérifier la file avant la mise à jour si possible.
 
 ## Actions qui restent à faire par l'association (hors code)
 - **Révoquer la clé Yelii** qui figurait dans `docs/reference/PAYMENT_FLOWS_SGM_CEM.md` (exposée dans l'historique Git) et en générer une nouvelle dans la console Yelii, puis la saisir dans le panneau développeur.

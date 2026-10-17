@@ -346,7 +346,7 @@ export function Developer() {
                 onClick={() => setActiveSection(s.id)}
                 className={cn(
                   'flex items-center gap-2.5 px-3.5 py-2.5 rounded-[10px] text-xs font-semibold whitespace-nowrap transition-all',
-                  active ? 'bg-[#0F4A0F] text-white shadow-cem' : 'text-gray-500 hover:bg-gray-100'
+                  active ? 'bg-[#0F4A0F] text-white shadow-cem' : 'text-gray-600 hover:bg-gray-100'
                 )}
               >
                 <Icon size={15} className={active ? 'text-[#F5C400]' : 'text-gray-400'} />

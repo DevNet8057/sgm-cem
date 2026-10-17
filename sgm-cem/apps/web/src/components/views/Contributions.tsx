@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Activity, AlertTriangle, Banknote, ChevronsUpDown, Clock, CreditCard, Eye, FileText, Filter, Loader2, MapPin, Paperclip, Plus, Search, Wand2, X } from 'lucide-react'
-import api, { getBaseURL } from '@/lib/api'
+import api, { fetchAllPages, getBaseURL } from '@/lib/api'
 import { cn, formatAmount, formatDate, formatDateTime, MODE_PAIEMENT_LABELS, contributorKind, contributorName } from '@/lib/utils'
 import { useAppStore } from '@/store/appStore'
 import { Button } from '@/components/ui/Button'
@@ -90,7 +90,7 @@ export function Contributions() {
 
   const { data: membresData } = useQuery({
     queryKey: ['membres', 'select'],
-    queryFn: async () => (await api.get('/membres', { params: { limit: 100 } })).data.data as Membre[],
+    queryFn: () => fetchAllPages<Membre>('/membres'),
   })
 
   const { data: rubriquesData } = useQuery<Rubrique[]>({
@@ -907,7 +907,7 @@ const STATUS_CHIPS = [
   { label: 'En attente', value: 'EN_ATTENTE_CONFIRMATION', color: 'bg-amber-50 text-amber-700 border-amber-200', activeColor: 'bg-amber-500 text-white border-amber-500' },
   { label: 'Confirmé',   value: 'CONFIRME',                color: 'bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]', activeColor: 'bg-[#1A6B1A] text-white border-[#1A6B1A]' },
   { label: 'Litige',     value: 'LITIGE',                  color: 'bg-red-50 text-red-700 border-red-200',  activeColor: 'bg-red-600 text-white border-red-600' },
-  { label: 'Annulé',     value: 'ANNULE',                  color: 'bg-gray-100 text-gray-500 border-gray-200', activeColor: 'bg-gray-500 text-white border-gray-500' },
+  { label: 'Annulé',     value: 'ANNULE',                  color: 'bg-gray-100 text-gray-600 border-gray-200', activeColor: 'bg-gray-500 text-white border-gray-500' },
 ] as const
 
 // Mobile Money et carte : parcours « Guidé » (paiement en ligne confirmé par le prestataire)

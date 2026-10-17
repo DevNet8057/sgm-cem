@@ -138,3 +138,16 @@ api.interceptors.response.use(
 )
 
 export default api
+
+/**
+ * Toutes les lignes d'une liste paginée (pages de 100, le maximum de l'API) :
+ * pour les sélecteurs et les exports, qui ne doivent jamais être tronqués.
+ */
+export async function fetchAllPages<T>(url: string, params: Record<string, unknown> = {}): Promise<T[]> {
+  const rows: T[] = []
+  for (let page = 1; ; page++) {
+    const { data } = await api.get(url, { params: { ...params, page, limit: 100 } })
+    rows.push(...(data.data as T[]))
+    if (!data.pagination || page >= data.pagination.totalPages) return rows
+  }
+}

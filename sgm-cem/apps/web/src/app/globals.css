@@ -1,3 +1,8 @@
+/* Ordre des couches : les styles antd passent AVANT les utilitaires Tailwind.
+   Sans cette déclaration, la couche antd (déclarée plus tard) l'emportait sur
+   les classes Tailwind (ex. liens soulignés annulés par la remise à zéro d'antd). */
+@layer properties, theme, base, antd, components, utilities;
+
 @import "tailwindcss";
 @config "../../tailwind.config.ts";
 
@@ -118,6 +123,10 @@
 }
 
 @layer utilities {
+  /* Contraste AA (UX-08) : le gris 400 de Tailwind (2,6:1 sur blanc) sert partout
+     de texte secondaire ; il est assombri pour rester lisible au soleil. */
+  .text-gray-400, .text-slate-400 { color: #6B7280; }
+
   .auth-public-background {
     background:
       radial-gradient(circle at 12% 0%, rgba(245, 196, 0, 0.06), transparent 28rem),

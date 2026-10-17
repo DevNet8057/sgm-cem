@@ -172,7 +172,7 @@ export function Membres() {
           <div className="flex items-center gap-3">
             <span className="hidden sm:flex h-11 w-11 items-center justify-center rounded-xl bg-[#2563EB] text-white shrink-0"><Users size={20} /></span>
             <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-blue-600">Annuaire</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-blue-700">Annuaire</p>
               <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Membres</h2>
               <p className="text-gray-500 text-sm mt-0.5">{pagination?.total ?? 0} membre(s) enregistré(s)</p>
             </div>
@@ -209,7 +209,7 @@ export function Membres() {
             <div>
               <label className="text-xs font-semibold text-gray-600 block mb-1">Téléphone (= WhatsApp)</label>
               <div className="flex gap-1.5">
-                <span className="flex items-center px-2 py-2 bg-gray-100 border border-gray-200 rounded-[8px] text-xs text-gray-500 shrink-0">🇨🇲</span>
+                <span className="flex items-center px-2 py-2 bg-gray-100 border border-gray-200 rounded-[8px] text-xs text-gray-600 shrink-0">🇨🇲</span>
                 <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value.replace(/\D/g, '') }))}
                   placeholder="6XXXXXXXX"
                   className="flex-1 px-3 py-2 border border-gray-200 rounded-[8px] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30" />

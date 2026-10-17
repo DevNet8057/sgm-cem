@@ -528,7 +528,7 @@ function FlowStep({ icon: Icon, label, value, active, muted, ghost }: {
     <div className={cn(
       'relative rounded-[14px] border p-3 lg:p-4 transition-all duration-300',
       active ? 'border-[#1A6B1A]/40 bg-[#F2FFF4] shadow-cem' : 'border-gray-100 bg-gray-50/70',
-      muted && !active && 'opacity-80',
+      muted && !active && 'bg-gray-50',
       ghost && 'border-dashed'
     )}>
       {active && <span className="absolute right-3 top-3 h-2 w-2 rounded-full bg-[#F5C400] animate-ping" />}

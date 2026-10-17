@@ -71,7 +71,10 @@ const MEMBRE_INCLUDE = {
 // ─── GET /membres ─────────────────────────────────────────────────────
 router.get('/', authenticate, requireLevel(2), async (req, res) => {
   const { page = '1', limit = '20', search, groupe, statut, profilFinancier } = req.query as Record<string, string>
-  const skip = (parseInt(page) - 1) * parseInt(limit)
+  // Pages bornées (≤ 100) : une valeur invalide ou démesurée ne charge pas toute la base
+  const currentPage = Math.max(1, parseInt(page, 10) || 1)
+  const pageSize = Math.min(100, Math.max(1, parseInt(limit, 10) || 20))
+  const skip = (currentPage - 1) * pageSize
 
   const where = {
     isActive: true,
@@ -83,7 +86,7 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
 
   const [membres, total] = await Promise.all([
     prisma.membre.findMany({
-      where, skip, take: parseInt(limit),
+      where, skip, take: pageSize,
       include: MEMBRE_INCLUDE,
       orderBy: { createdAt: 'desc' },
     }),
@@ -93,7 +96,7 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
   res.json({
     success: true,
     data: membres,
-    pagination: { page: parseInt(page), limit: parseInt(limit), total, totalPages: Math.ceil(total / parseInt(limit)) },
+    pagination: { page: currentPage, limit: pageSize, total, totalPages: Math.ceil(total / pageSize) },
   })
 })
 

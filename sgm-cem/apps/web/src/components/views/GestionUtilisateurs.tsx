@@ -161,7 +161,7 @@ export function GestionUtilisateurs() {
           </button>
         )}
         <button title="Modifier" aria-label="Modifier" onClick={() => startEdit(u)}
-          className="w-9 h-9 flex items-center justify-center rounded-[7px] border border-gray-200 text-gray-500 hover:bg-gray-100 transition-colors">
+          className="w-9 h-9 flex items-center justify-center rounded-[7px] border border-gray-200 text-gray-600 hover:bg-gray-100 transition-colors">
           <Edit3 size={12} />
         </button>
         <button title="Réinitialiser mot de passe" aria-label="Réinitialiser mot de passe" onClick={() => { setResetTarget(u); setResetPassword('') }}
@@ -190,7 +190,7 @@ export function GestionUtilisateurs() {
         <div className="absolute inset-y-0 left-0 w-1.5 bg-violet-500" />
         <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-violet-600">Administration</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-violet-700">Administration</p>
             <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Gestion des utilisateurs</h2>
             <p className="text-gray-500 text-sm mt-0.5">{users.length} compte(s) enregistré(s)</p>
           </div>

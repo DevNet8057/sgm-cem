@@ -147,6 +147,7 @@ export function MonProfil() {
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadPhoto.isPending}
+              aria-label="Changer la photo de profil"
               className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
             >
               {uploadPhoto.isPending
@@ -213,7 +214,7 @@ export function MonProfil() {
                   <span className="flex items-center gap-1"><Phone size={11} /> Téléphone</span>
                 </label>
                 <div className="flex gap-2">
-                  <span className="flex items-center px-2.5 py-2.5 bg-gray-100 border border-gray-200 rounded-[10px] text-xs text-gray-500">🇨🇲 +237</span>
+                  <span className="flex items-center px-2.5 py-2.5 bg-gray-100 border border-gray-200 rounded-[10px] text-xs text-gray-600">🇨🇲 +237</span>
                   <input value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
                     placeholder="6XXXXXXXX"
                     className="flex-1 px-3 py-2.5 border border-gray-200 rounded-[10px] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30" />
@@ -224,7 +225,7 @@ export function MonProfil() {
                   <span className="flex items-center gap-1">💬 WhatsApp</span>
                 </label>
                 <div className="flex gap-2">
-                  <span className="flex items-center px-2.5 py-2.5 bg-gray-100 border border-gray-200 rounded-[10px] text-xs text-gray-500">🇨🇲 +237</span>
+                  <span className="flex items-center px-2.5 py-2.5 bg-gray-100 border border-gray-200 rounded-[10px] text-xs text-gray-600">🇨🇲 +237</span>
                   <input value={whatsappPhone} onChange={e => setWhatsappPhone(e.target.value.replace(/\D/g, ''))}
                     placeholder="6XXXXXXXX"
                     className="flex-1 px-3 py-2.5 border border-gray-200 rounded-[10px] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30" />

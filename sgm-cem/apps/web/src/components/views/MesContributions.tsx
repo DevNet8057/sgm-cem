@@ -136,7 +136,7 @@ export function MesContributions() {
         <SummaryCard
           label="En attente"
           value={`${summary?.pendingCount ?? 0} · ${formatAmount(summary?.pendingAmount ?? 0)}`}
-          color="#F59E0B" bg="#FEFCE8"
+          color="#B45309" bg="#FEFCE8"
         />
       </div>
 
