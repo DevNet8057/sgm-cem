@@ -14,7 +14,7 @@ const prisma = getPrisma()
 const PUBLIC_ROUTES = [
   /^\w+ \/webhooks\//,
   /^GET \/api\/csrf-token$/,
-  /^GET \/api\/health$/,
+  /^GET \/api\/health(\/ready)?$/, // sondes de supervision
   /^\w+ \/api\/public\//,
   /^POST \/api\/auth\/(login|forgot-password|otp\/request|otp\/verify|google|refresh)$/,
 ]

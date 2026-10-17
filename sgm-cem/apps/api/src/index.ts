@@ -35,6 +35,12 @@ import { scheduleMonthlyCron } from './services/cron'
 import { initSocketIO } from './lib/socket'
 import { loadConfigCache } from './services/config.service'
 import { apiLimiter } from './middleware/rate-limit'
+import { randomUUID } from 'crypto'
+import pinoHttp from 'pino-http'
+import { applyLogLevel, logger } from './lib/logger'
+import { initErrorTracking } from './lib/error-tracking'
+import { getPrisma } from './lib/prisma'
+import { getConfig } from './services/config.service'
 import { getCsrfSecret, getTrustProxy } from './lib/security'
 
 const app = express()
@@ -42,6 +48,24 @@ const PORT = process.env.PORT ?? 3001
 
 // Derrière Caddy : req.ip et req.secure reflètent le vrai client (voir lib/security.ts)
 app.set('trust proxy', getTrustProxy())
+
+initErrorTracking()
+
+// Identifiant de requête : repris de Caddy (X-Request-Id) s'il est bien formé,
+// renvoyé au client et présent dans chaque ligne de journal.
+const REQUEST_ID = /^[A-Za-z0-9-]{8,64}$/
+app.use(pinoHttp({
+  logger,
+  genReqId: (req, res) => {
+    const incoming = req.headers['x-request-id']
+    const id = typeof incoming === 'string' && REQUEST_ID.test(incoming) ? incoming : randomUUID()
+    res.setHeader('X-Request-Id', id)
+    return id
+  },
+  customLogLevel: (_req, res, err) => (err || res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info'),
+  autoLogging: { ignore: req => req.url === '/api/health' || req.url === '/api/activity/heartbeat' },
+  serializers: { req: req => ({ id: req.id, method: req.method, url: req.url }), res: res => ({ statusCode: res.statusCode }) },
+}))
 
 app.use(helmet())
 
@@ -130,10 +154,21 @@ app.use('/api/activity', activityRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }))
 
+// Disponibilité réelle (sonde externe, Caddy) : la base répond-elle ?
+app.get('/api/health/ready', async (_req, res) => {
+  try {
+    await getPrisma().$queryRaw`SELECT 1`
+    res.json({ status: 'ready', database: 'ok', version: process.env.APP_VERSION ?? 'dev' })
+  } catch {
+    res.status(503).json({ status: 'unavailable', database: 'injoignable' })
+  }
+})
+
 app.use(errorHandler)
 
 async function bootstrap(): Promise<void> {
   await loadConfigCache()
+  applyLogLevel(getConfig('LOG_LEVEL'))
   startActivityRetentionJob()
   const server = http.createServer(app)
   initSocketIO(server)

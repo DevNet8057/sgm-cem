@@ -12,6 +12,7 @@ import { requireDeveloper } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { getPrisma } from '../lib/prisma'
 import { signAccessToken } from '../lib/session'
+import { applyLogLevel } from '../lib/logger'
 import { updateConfig, getConfigHistory, EXCLUDED_KEYS } from '../services/config.service'
 import { getYeliiWalletBalance } from '../services/yelii.service'
 import { setAuthCookies } from './auth'
@@ -68,6 +69,7 @@ router.put('/config/:key', async (req, res) => {
 
   const requester = await getRequester(req.user!.userId)
   await updateConfig(key, value, requester, reason)
+  if (key === 'LOG_LEVEL') applyLogLevel(value) // effet immédiat sur les journaux
 
   res.json({
     success: true,

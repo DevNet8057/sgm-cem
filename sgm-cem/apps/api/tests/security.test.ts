@@ -62,3 +62,18 @@ describe('Static /uploads — embarquable cross-origin (avatars)', () => {
     expect(res.headers['cross-origin-resource-policy']).toBe('same-origin')
   })
 })
+
+describe('Observabilité', () => {
+  it('chaque réponse porte un identifiant de requête ; un X-Request-Id valide est repris', async () => {
+    const res = await request(app).get('/api/health').set('X-Request-Id', 'abcd1234-requete')
+    expect(res.headers['x-request-id']).toBe('abcd1234-requete')
+    const other = await request(app).get('/api/health').set('X-Request-Id', '<script>')
+    expect(other.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/)
+  })
+
+  it('GET /api/health/ready vérifie la base', async () => {
+    const res = await request(app).get('/api/health/ready')
+    expect(res.status).toBe(200)
+    expect(res.body.database).toBe('ok')
+  })
+})

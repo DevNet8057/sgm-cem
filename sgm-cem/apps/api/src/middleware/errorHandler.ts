@@ -1,5 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
+import { logger } from "../lib/logger";
+import { captureError } from "../lib/error-tracking";
 
 export class AppError extends Error {
   constructor(
@@ -16,7 +18,7 @@ export class AppError extends Error {
 
 export function errorHandler(
   err: unknown,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction,
 ): void {
@@ -63,26 +65,20 @@ export function errorHandler(
     return;
   }
 
-  if (err instanceof Error) {
-    console.error("Application Error:", {
-      name: err.name,
-      message: err.message,
-      stack: err.stack,
-    });
+  // Erreur inattendue : journalisée avec l'identifiant de requête, transmise au suivi d'erreurs
+  const requestId = (req as Request & { id?: string }).id
+  logger.error({ err, requestId, method: req.method, path: req.path }, "Erreur inattendue")
+  captureError(err, { requestId, method: req.method, path: req.path })
 
-    // Handle specific Node.js errors
-    if (err.message.includes("ECONNREFUSED")) {
-      res.status(503).json({
-        success: false,
-        error: {
-          code: "SERVICE_UNAVAILABLE",
-          message: "Base de données non disponible",
-        },
-      });
-      return;
-    }
-  } else {
-    console.error("Non-Error thrown:", err);
+  if (err instanceof Error && err.message.includes("ECONNREFUSED")) {
+    res.status(503).json({
+      success: false,
+      error: {
+        code: "SERVICE_UNAVAILABLE",
+        message: "Base de données non disponible",
+      },
+    });
+    return;
   }
 
   res.status(500).json({
@@ -90,6 +86,8 @@ export function errorHandler(
     error: {
       code: "SERVER_ERROR",
       message: "Une erreur inattendue s'est produite",
+      // À communiquer au support pour retrouver l'incident dans les journaux
+      ...(requestId && { requestId }),
     },
   });
 }
