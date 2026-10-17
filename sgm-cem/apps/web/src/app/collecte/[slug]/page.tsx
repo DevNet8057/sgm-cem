@@ -108,7 +108,8 @@ function PublicShell({ children, animation }: PublicShellProps) {
 
           <footer className="border-t border-slate-100 px-5 py-4 text-center">
             <Typography.Text type="secondary" className="!text-[11px]">
-              Culte d&apos;Enfants de Melen · EEC Yaoundé
+              Culte d&apos;Enfants de Melen · EEC Yaoundé ·{' '}
+              <a href="/confidentialite" className="underline">Confidentialité</a>
             </Typography.Text>
           </footer>
         </Card>

@@ -53,9 +53,12 @@ docker exec sgm-cem-api-1 sh -c 'cd /app/apps/api && pnpm exec ts-node prisma/se
 Incident réel : Yelii, CinetPay et le web push (VAPID) étaient silencieusement cassés en
 conteneur car leurs clés n'existaient que dans `apps/api/.env` (7 variables rapatriées).
 
-### 2. Pas de migrations Prisma — `db push`, pas `migrate deploy`
-Le projet n'a **aucun dossier `prisma/migrations`**. L'entrypoint Docker fait
-`prisma db push` (idempotent). `migrate deploy` ne créerait **aucune table**.
+### 2. Migrations Prisma versionnées (depuis le 17/10/2026)
+L'entrypoint sauvegarde la base puis lance `prisma migrate deploy`
+(`apps/api/prisma/migrations`). Une base créée autrefois par `db push` est adoptée
+**une fois** automatiquement (alignement sans perte, ligne de base marquée appliquée).
+Tout changement de schéma passe par `prisma migrate dev --name …` (voir
+`.claude/instructions/database.md`).
 
 ### 3. Seed automatique conditionnel
 L'entrypoint (`apps/api/docker-entrypoint.sh`) seed la base **uniquement si
@@ -94,8 +97,8 @@ historique — c'est là qu'écrivent les tests vitest et tout `prisma db push` 
 depuis l'hôte) ; les conteneurs, eux, se parlent par le réseau Docker interne
 (`postgres:5432` = le conteneur). Les deux bases s'appellent `sgm_cem` et **divergent**.
 - Vérifier la base du CONTENEUR : `docker exec sgm-cem-postgres-1 psql -U postgres -d sgm_cem …`
-- Le schéma du conteneur est resynchronisé par l'entrypoint (`db push`) à chaque
-  redémarrage de l'api — un `db push` hôte ne suffit PAS pour le conteneur.
+- Le schéma du conteneur est mis à jour par l'entrypoint (`migrate deploy`) à chaque
+  redémarrage de l'api — une migration appliquée côté hôte ne suffit PAS pour le conteneur.
 - Ne jamais comparer des comptages entre les deux sans savoir lequel on interroge.
 
 ### 8. Divers appris à la dure

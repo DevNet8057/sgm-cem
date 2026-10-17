@@ -233,6 +233,8 @@ const initiatePublicSchema = z.object({
   valeursChamps: z.unknown(),
   modePaiement: z.enum(['YELII', 'CARTE_VISA']),
   channel: z.enum(['orange_money', 'mtn_money']).optional(),
+  // Accord explicite du donateur au traitement de ses données (loi n° 2024/017)
+  consentement: z.literal(true, { errorMap: () => ({ message: 'Votre accord sur le traitement de vos données est nécessaire pour enregistrer le don' }) }),
 }).superRefine((data, ctx) => {
   if (data.modePaiement === 'YELII' && !data.channel) {
     ctx.addIssue({
@@ -266,6 +268,9 @@ async function markDraftConverted(draftId: string, contributionId: string): Prom
 }
 
 class DraftAlreadyReserved extends Error {}
+
+// Version de la politique de confidentialité acceptée (page /confidentialite)
+const CONSENT_VERSION = '2026-10-17'
 
 /** Échec certain du paiement : la contribution est annulée et le brouillon libéré pour réessayer. */
 async function releaseDraft(draftId: string, contributionId: string): Promise<void> {
@@ -325,10 +330,10 @@ router.post('/collectes/:slug/initiate', publicLimiter, async (req, res) => {
   const contributeur = existing
     ? await prisma.contributeurExterne.update({
         where: { id: existing.id },
-        data: { nom: data.nom, email: data.email ?? existing.email },
+        data: { nom: data.nom, email: data.email ?? existing.email, consentAt: new Date(), consentVersion: CONSENT_VERSION },
       })
     : await prisma.contributeurExterne.create({
-        data: { nom: data.nom, phone, email: data.email },
+        data: { nom: data.nom, phone, email: data.email, consentAt: new Date(), consentVersion: CONSENT_VERSION },
       })
 
   const storedMode: 'MTN_MOMO' | 'ORANGE_MONEY' | 'CARTE_VISA' = data.modePaiement === 'YELII'

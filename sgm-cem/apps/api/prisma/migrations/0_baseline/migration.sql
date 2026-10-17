@@ -61,6 +61,9 @@ CREATE TYPE "ConfigCategory" AS ENUM ('WEBHOOKS', 'INTEGRATION_KEYS', 'FINANCIAL
 -- CreateEnum
 CREATE TYPE "DraftStatut" AS ENUM ('ACTIF', 'CONVERTI');
 
+-- CreateEnum
+CREATE TYPE "PaymentAttemptStatus" AS ENUM ('INITIATING', 'PROCESSING', 'UNCERTAIN', 'FAILED', 'LINKED');
+
 -- CreateTable
 CREATE TABLE "users" (
     "id" TEXT NOT NULL,
@@ -176,6 +179,8 @@ CREATE TABLE "contributeurs_externes" (
     "nom" TEXT NOT NULL,
     "phone" TEXT NOT NULL,
     "email" TEXT,
+    "consentAt" TIMESTAMP(3),
+    "consentVersion" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "contributeurs_externes_pkey" PRIMARY KEY ("id")
@@ -257,6 +262,26 @@ CREATE TABLE "payment_batches" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "payment_batches_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "payment_attempts" (
+    "id" TEXT NOT NULL,
+    "provider" TEXT NOT NULL,
+    "status" "PaymentAttemptStatus" NOT NULL DEFAULT 'INITIATING',
+    "amount" INTEGER NOT NULL,
+    "phone" TEXT,
+    "channel" TEXT,
+    "contributionIds" TEXT[],
+    "paymentBatchId" TEXT,
+    "providerTransactionId" TEXT,
+    "errorCode" TEXT,
+    "source" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "resolvedAt" TIMESTAMP(3),
+
+    CONSTRAINT "payment_attempts_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -666,6 +691,15 @@ CREATE INDEX "payment_batches_status_idx" ON "payment_batches"("status");
 
 -- CreateIndex
 CREATE INDEX "payment_batches_externalTransactionId_idx" ON "payment_batches"("externalTransactionId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "payment_attempts_providerTransactionId_key" ON "payment_attempts"("providerTransactionId");
+
+-- CreateIndex
+CREATE INDEX "payment_attempts_status_createdAt_idx" ON "payment_attempts"("status", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "payment_attempts_provider_amount_phone_idx" ON "payment_attempts"("provider", "amount", "phone");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "push_subscriptions_endpoint_key" ON "push_subscriptions"("endpoint");

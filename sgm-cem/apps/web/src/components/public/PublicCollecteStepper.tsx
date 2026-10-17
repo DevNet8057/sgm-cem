@@ -48,7 +48,9 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
   const [step, setStep] = useState(0)
   const [error, setError] = useState('')
   // Champ en erreur : mis en évidence (aria-invalid) et focalisé (UX-04)
-  const [errorField, setErrorField] = useState<'nom' | 'phone' | 'montant' | null>(null)
+  const [errorField, setErrorField] = useState<'nom' | 'phone' | 'montant' | 'consentement' | null>(null)
+  // Accord explicite du donateur (loi n° 2024/017) — exigé aussi par l'API
+  const [consentement, setConsentement] = useState(false)
   const nomRef = useRef<HTMLInputElement>(null)
   const phoneRef = useRef<HTMLInputElement>(null)
 
@@ -291,6 +293,7 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
           valeursChamps,
           modePaiement,
           channel: isMobileMoney ? channel : undefined,
+          consentement,
         },
         { headers: { 'X-Draft-Token': token } }
       )
@@ -341,7 +344,7 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
     return ''
   }
 
-  function fieldError(field: 'nom' | 'phone' | 'montant', message: string) {
+  function fieldError(field: 'nom' | 'phone' | 'montant' | 'consentement', message: string) {
     setError(message)
     setErrorField(field)
     if (field === 'nom') nomRef.current?.focus()
@@ -356,6 +359,7 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
       if (phone.replace(/\D/g, '').length < 9) { fieldError('phone', 'Entrez un numéro de téléphone valide (9 chiffres)'); return }
       const champErr = validateChamps()
       if (champErr) { setError(champErr); return }
+      if (!consentement) { fieldError('consentement', 'Cochez la case d’accord pour poursuivre'); return }
     }
     if (step === 1) {
       const amount = Number(montant)
@@ -541,6 +545,26 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
                   )}
                 </div>
               ))}
+
+              <label className={cn(
+                'flex items-start gap-2.5 cursor-pointer select-none rounded-[10px] border p-3',
+                errorField === 'consentement' ? 'border-red-300 bg-red-50' : 'border-gray-100 bg-gray-50'
+              )}>
+                <input
+                  type="checkbox"
+                  checked={consentement}
+                  onChange={e => { setConsentement(e.target.checked); if (errorField === 'consentement') setErrorField(null) }}
+                  aria-invalid={errorField === 'consentement'}
+                  className="mt-0.5 w-5 h-5 shrink-0 rounded border-gray-300 text-[#1A6B1A] focus:ring-[#1A6B1A]/30"
+                />
+                <span className="text-xs leading-relaxed text-gray-600">
+                  J&apos;accepte que le Culte d&apos;Enfants de Melen utilise ces informations pour enregistrer mon don,
+                  m&apos;envoyer mon reçu et me contacter à son sujet.{' '}
+                  <a href="/confidentialite" target="_blank" rel="noopener noreferrer" className="font-semibold text-[#1A6B1A] underline">
+                    Politique de confidentialité
+                  </a>
+                </span>
+              </label>
             </div>
           )}
 

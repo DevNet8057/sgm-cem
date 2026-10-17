@@ -22,8 +22,8 @@ Référence : [`07_FEUILLE_DE_ROUTE.md`](07_FEUILLE_DE_ROUTE.md).
 |---|---|---|
 | 0.0 Protection des données | ✅ | Voir ci-dessus |
 | 0 Sécuriser | ✅ 17/10/2026 | Voir « Phase 0 — détail » ci-dessous |
-| 1 Fiabiliser | ⏸ | — |
-| 2 Mobile-first | ⏸ | — |
+| 1 Fiabiliser | ✅ 17/10/2026 | Voir « Phase 1 — détail » ; jalon J1 : reste la partie serveur et juridique de la check-list GO |
+| 2 Mobile-first | ⏳ en cours | — |
 | 3 Socle et domaine | ⏸ | — |
 | 4 Gouvernance | ⏸ | — |
 
@@ -40,13 +40,34 @@ Référence : [`07_FEUILLE_DE_ROUTE.md`](07_FEUILLE_DE_ROUTE.md).
 | 0.8 Secrets | Clé Yelii retirée de la documentation ; gitleaks en CI (historique complet, faux positifs documentés) | gitleaks : aucun secret |
 | CI | Corrigée (elle ne pouvait pas tourner : chemins `sgm-cem/`, pnpm 8) ; seed sur base jetable ; tests rendus autonomes | Simulation locale sur base vierge : **152/152** |
 
+## Phase 1 — détail (livré)
+| Lot | Livré | Vérification |
+|---|---|---|
+| 1.1 Lots | Moteur unique de confirmation **par transaction** (sondage, webhooks Yelii/CinetPay, réconciliation) : montant comparé au total du lot, toutes les lignes confirmées ensemble, une seule notification ; la réconciliation reprend enfin le mode YELII (lots existants débloqués) | P1 rejouée : **corrigée** (tests `phase1-payments`) |
+| 1.2 Tentatives | Table `payment_attempts` ; webhook orphelin rattaché à l'unique tentative incertaine de même montant/numéro (sinon alerte) ; brouillons publics réservés atomiquement | Tests `phase1-attempts`, `public-collectes` (double soumission simultanée) |
+| 1.3 Transitions | Transferts confirmer/refuser/annuler conditionnels ; dépôt bancaire en transaction ; un refus rend les fonds à leur détenteur réel | Circuit complet vérifié sur API réelle (double envoi, double confirmation, double dépôt refusés) |
+| Décision Bureau | Localisation **« Portefeuille électronique »** ; reclassement des paiements électroniques confirmés non versés (y compris ceux « en caisse ») ; dépôt bancaire possible depuis ce compte | Migration testée sur copie de base peuplée |
+| 1.4 Migrations | `prisma migrate deploy` au démarrage (après sauvegarde) ; adoption unique des bases `db push` ; CI : contrôle d'écart schéma/migrations | Base peuplée (26 utilisateurs / 81 contributions identiques avant/après) et base vierge : 0 écart |
+| 1.5 CI | Matrice RBAC (garde d'authentification sur les 129 routes découvertes automatiquement + droits par rôle), couverture avec plancher, lint et tests web | 300 tests API, 23 tests web |
+| 1.6 Déploiement | `deploy/` : Compose de production, Caddyfile, `.env` modèle, scripts de sauvegarde restic et de test de restauration ; images épinglées ; build en échec si `tsc` échoue | `docker compose config` et `caddy validate` OK ; **construction et démarrage des images non testés** (pas de démon Docker ici) |
+| 1.7 Observabilité | Journaux JSON (pino) avec identifiant de requête, sonde `/api/health/ready`, Sentry/GlitchTip facultatif sans données personnelles | Vérifié sur API réelle |
+| 1.8 UX bloquante | UX-02 (écrans collecteur), UX-03 (totaux serveur, reste à payer, reçus membre), UX-04 (titre, urgence, étapes, téléphone, erreurs) | Captures Playwright 360 px |
+| 1.9 Conformité | Page Confidentialité complète ; consentement explicite des donateurs (case obligatoire, horodaté et versionné en base, exigé par l'API) ; registres des demandes et des violations (`docs/securite/REGISTRES_DONNEES.md`) | Parcours vérifié dans le navigateur |
+
+Reporté (avec raison) : utilisateur non-root dans les images (propriété des volumes existants à reprendre, nécessite un test Docker réel) → phase 3.
+
 ## ⚠️ Avant de déployer cette version
 1. **Sauvegarder** la base (`scripts/backup-db.ps1`) — l'API le fait aussi automatiquement au démarrage.
 2. Dans le `.env` racine : `CSRF_SECRET`, `JWT_SECRET`, `REFRESH_TOKEN_SECRET` doivent faire **≥ 32 caractères** (`openssl rand -base64 48`), sinon l'API refuse de démarrer en production.
 3. Les utilisateurs connectés devront se reconnecter **une fois** (nouveau format de session).
 4. Reconstruire les images (`docker compose build`) : passage à Node 24.
+5. Premier démarrage : l'API sauvegarde la base, l'**adopte** dans le système de migrations puis reclasse les paiements électroniques dans « Portefeuille électronique » (la sauvegarde garde l'état d'avant).
+6. Après la mise à jour, les trésoriers peuvent recevoir des alertes sur d'anciens paiements Mobile Money bloqués : c'est la réconciliation qui reprend enfin les paiements répartis.
 
 ## Actions qui restent à faire par l'association (hors code)
 - **Révoquer la clé Yelii** qui figurait dans `docs/reference/PAYMENT_FLOWS_SGM_CEM.md` (exposée dans l'historique Git) et en générer une nouvelle dans la console Yelii, puis la saisir dans le panneau développeur.
 - Lancer `audit-default-passwords.ts` (voir `DEPLOIEMENT_DOCKER.md`) pour savoir quels comptes utilisent encore l'ancien mot de passe commun, et prévenir leurs titulaires (rien n'est forcé, conformément à la décision du Bureau ; `FORCE_CHANGE=1` si le Bureau le décide).
 - Vérifier si un compte `admin@gmail.com` a été créé par l'ancien script `create-admin-gmail.ts` (mot de passe connu) : le désactiver ou le réinitialiser.
+- **CI GitHub** : depuis au moins le 30/09/2026, aucun job ne démarre (échec en ~3 s, sans journal) — y compris sur `main`. Cause probable côté compte GitHub (minutes ou facturation GitHub Actions) : à vérifier dans *Settings → Billing → Actions*. Les vérifications de ce chantier ont été faites localement (suite complète sur base vierge).
+- **Avis juridique** (loi n° 2024/017) : hébergement, prestataires hors Cameroun (WhatsApp, Twilio, Google), durées de conservation, démarches auprès de l'APDP.
+- Choisir l'hébergement de production, puis tester `deploy/` sur un serveur de préproduction (construction des images, démarrage, restauration).

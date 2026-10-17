@@ -2,22 +2,25 @@
 
 À lire avant tout changement de `apps/api/prisma/schema.prisma` ou des seeds.
 
-## Le point crucial : PAS de migrations
-Ce projet n'a **aucun dossier `prisma/migrations`**. Le schéma s'applique par
-**`prisma db push`** (idempotent) — en dev comme dans l'entrypoint Docker.
-Ne jamais introduire `migrate dev`/`migrate deploy` sans décision explicite de migrer
-tout le workflow (et un plan pour les bases existantes).
+## Le point crucial : migrations versionnées (depuis le 17/10/2026)
+Le schéma s'applique par **`prisma migrate deploy`** (dossier `prisma/migrations`,
+ligne de base `0_baseline`). L'entrypoint Docker sauvegarde la base, puis applique
+les migrations. Une base créée autrefois par `db push` est **adoptée une seule
+fois** automatiquement (`db push` sans perte + `migrate resolve --applied 0_baseline`).
+La CI échoue si `schema.prisma` et les migrations divergent.
 
 ## Workflow d'un changement de schéma
-1. Modifier `schema.prisma`.
-2. Évaluer l'impact sur les **données existantes** (volume Docker `pgdata` = données réelles) :
-   `db push` refuse les changements destructeurs — c'est un signal d'alarme, pas un obstacle à contourner avec `--accept-data-loss`.
-3. `pnpm --filter api exec prisma db push` puis `prisma generate`.
-4. Adapter les seeds si besoin — ils doivent rester **idempotents** (upsert, `update: {}` pour ne pas écraser) : ils peuvent être rejoués sur une base pleine sans dégât.
-5. En conteneur : redémarrer l'api suffit (l'entrypoint refait `db push` à chaque boot).
+1. Modifier `schema.prisma` — changements **additifs** de préférence (colonne nullable, nouvelle table).
+2. Créer la migration sur une base de dev jetable :
+   `pnpm --filter api exec prisma migrate dev --name <nom_en_snake_case>` ; relire le SQL généré.
+3. Données existantes (volume `pgdata` = données réelles) : jamais de suppression de
+   colonne/table ni de contrainte qui échouerait sur l'existant sans plan validé par l'utilisateur.
+   Une reprise de données = migration SQL **idempotente** (rejouable sans effet).
+4. Adapter les seeds si besoin — ils doivent rester **idempotents** (upsert, `update: {}`).
+5. En conteneur : redémarrer l'api (sauvegarde automatique puis `migrate deploy`).
 
 ## Seeds
-- `prisma/seed.ts` — comptes (admin depuis `ADMIN_EMAIL`/`ADMIN_PASSWORD`), 11 rubriques, membres et contributions de démo. Exécuté automatiquement par l'entrypoint Docker **seulement si la base est vide** (0 utilisateur).
+- `prisma/seed.ts` — admin (`ADMIN_EMAIL` ; `ADMIN_PASSWORD` ou mot de passe aléatoire affiché une fois), paramètres, 11 rubriques ; comptes et contributions de démonstration **seulement avec `SEED_DEMO=1`**. Exécuté automatiquement par l'entrypoint Docker **seulement si la base est vide** (0 utilisateur).
 - `prisma/seed-config.ts` — copie les valeurs `.env` vers `system_configs` (n'écrase JAMAIS une valeur en base) + élève `ADMIN_EMAIL` au rôle DEVELOPER. À relancer après ajout d'une clé de config : `docker exec sgm-cem-api-1 sh -c 'cd /app/apps/api && pnpm exec ts-node prisma/seed-config.ts'`.
 
 ## Conventions de modèle
@@ -27,5 +30,5 @@ tout le workflow (et un plan pour les bases existantes).
 - `system_configs` : clés en SCREAMING_SNAKE_CASE, catégorie (`ConfigCategory`), `isSecret` pour les clés API.
 
 ## Sécurité données
-- Ne jamais exécuter `docker compose down -v` ni `prisma db push --force-reset` (destruction des données) sans accord explicite de l'utilisateur.
-- Sauvegarde avant opération risquée : `docker exec sgm-cem-postgres-1 pg_dump -U postgres sgm_cem > backup_$(date +%Y%m%d).sql`.
+- Ne jamais exécuter `docker compose down -v`, `prisma db push --force-reset`, `prisma migrate reset` ni `--accept-data-loss` (destruction des données) sans accord explicite de l'utilisateur.
+- Sauvegarde avant opération risquée : `sgm-cem/scripts/backup-db.ps1` (ou `.sh`) — l'API en prend aussi une automatiquement à chaque démarrage.

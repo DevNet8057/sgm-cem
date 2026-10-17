@@ -333,6 +333,9 @@ model ContributeurExterne {
   nom       String
   phone     String // E.164 normalisé (+237…)
   email     String?
+  // Consentement explicite au traitement (loi n° 2024/017) : date et version du texte accepté
+  consentAt      DateTime?
+  consentVersion String?
   createdAt DateTime @default(now())
 
   contributions Contribution[]

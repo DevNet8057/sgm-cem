@@ -26,7 +26,7 @@ Tu es le **lead backend** de SGM-CEM. Tu produis des plans d'implémentation pr�
    `getConfig()` pour toute config métier, `AppError(code, msg, status)` pour les erreurs,
    réponse `{ success: true, data }`.
 4. Cas limites et validations (montants en FCFA entiers, téléphones +237, statuts métier).
-5. Si changement de schéma : conséquences (`prisma db push`, impact seed, données existantes en volume Docker).
+5. Si changement de schéma : migration à créer (`prisma migrate dev --name …`), impact seed, données existantes en volume Docker (changements additifs, reprise idempotente).
 6. Les tests vitest à écrire ou adapter (`apps/api/tests/`).
 
 ## Points de vigilance projet

@@ -8,7 +8,7 @@ commissions collecteurs, trésorerie, rapports PDF/Excel, notifications (push we
 
 1. **`DEPLOIEMENT_DOCKER.md`** (racine) — TOUJOURS le lire pour toute tâche touchant au
    déploiement, aux `.env`, à Docker, à Prisma ou à la configuration. Il recense les
-   8 pièges spécifiques de ce projet (deux `.env`, pas de migrations, config en base…).
+   pièges spécifiques de ce projet (deux `.env`, migrations et sauvegarde au démarrage, config en base…).
 2. `.claude/instructions/` — conventions par domaine (à lire selon la tâche) :
    - `express-prisma.md` → tout travail backend
    - `nextjs-react.md` → tout travail frontend
@@ -50,7 +50,7 @@ Des hooks (`.claude/hooks/`) lancent automatiquement type-check et ESLint après
 3. Réponses API : `{ success: true, data }` / `{ success: false, error: { code, message } }` —
    erreurs via `AppError(code, message, status)`.
 4. RBAC : rôles `DEVELOPER > ADMIN > TRESORIER > RESPONSABLE > ADJOINT_RESPONSABLE > COLLECTEUR > MEMBRE`.
-5. Prisma : **`db push`**, pas de migrations. Seeds idempotents (upsert).
+5. Prisma : **migrations versionnées** (`prisma migrate dev --name …`, appliquées par `migrate deploy` au démarrage, après sauvegarde automatique). Changements additifs ; seeds idempotents (upsert).
 6. Nouvelle variable d'environnement → `.env` **racine** (Docker) + `.env.example` + `seed-config.ts` si gérable depuis le panneau développeur.
 7. Pages Next.js : `useSearchParams()` toujours sous `<Suspense>` (casse `next build` sinon).
 8. Messages utilisateur en français ; code commenté sobrement en français.

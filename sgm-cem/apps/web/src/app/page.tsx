@@ -453,6 +453,9 @@ export default function LoginPage() {
           )}
 
           <p className="text-center text-xs text-gray-400 mt-6">SGM-CEM · Culte d&apos;Enfants de Melen · EEC Yaoundé</p>
+          <p className="text-center text-xs mt-2">
+            <a href="/confidentialite" className="text-[#1A6B1A] hover:underline">Politique de confidentialité</a>
+          </p>
         </Card>
         </motion.div>
       </section>

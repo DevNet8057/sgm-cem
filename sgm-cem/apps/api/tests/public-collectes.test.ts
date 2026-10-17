@@ -259,7 +259,7 @@ describe('4. POST initiate — conversion en Contribution + paiement Yelii (mock
       .send({
         nom: 'Jean Testeur', phone: PHONE_RAW, montant: 2000,
         valeursChamps: { nombrePersonnes: 3 }, // lienParente manquant
-        modePaiement: 'YELII', channel: 'mtn_money',
+        modePaiement: 'YELII', channel: 'mtn_money', consentement: true,
       })
     expect(res.status).toBe(400)
     expect(res.body.error.code).toBe('VALIDATION_ERROR')
@@ -274,7 +274,7 @@ describe('4. POST initiate — conversion en Contribution + paiement Yelii (mock
       .send({
         nom: 'Jean Testeur', phone: PHONE_RAW, montant: 500, // < montantMin (1000)
         valeursChamps: { lienParente: 'Ami' },
-        modePaiement: 'YELII', channel: 'mtn_money',
+        modePaiement: 'YELII', channel: 'mtn_money', consentement: true,
       })
     expect(res.status).toBe(400)
   })
@@ -291,7 +291,7 @@ describe('4. POST initiate — conversion en Contribution + paiement Yelii (mock
       .send({
         nom: 'Jean Testeur', phone: PHONE_RAW, montant: 2000,
         valeursChamps: { lienParente: 'Ami', nombrePersonnes: 2 },
-        modePaiement: 'YELII', channel: 'mtn_money',
+        modePaiement: 'YELII', channel: 'mtn_money', consentement: true,
       })
 
     expect(res.status).toBe(200)
@@ -334,7 +334,7 @@ describe('5. Idempotence — anti double-clic', () => {
       .send({
         nom: 'Jean Testeur', phone: PHONE_RAW, montant: 2000,
         valeursChamps: { lienParente: 'Ami', nombrePersonnes: 2 },
-        modePaiement: 'YELII', channel: 'mtn_money',
+        modePaiement: 'YELII', channel: 'mtn_money', consentement: true,
       })
 
     expect(res.status).toBe(200)
@@ -344,6 +344,19 @@ describe('5. Idempotence — anti double-clic', () => {
     const countAfter = await prisma.contribution.count({ where: { contributeurExterneId: contributeurId } })
     expect(countAfter).toBe(countBefore)
     expect(initiateYeliiMock.mock.calls.length).toBe(callsBefore) // Yelii pas ré-appelé
+  })
+})
+
+describe('4 bis. Consentement du donateur (loi n° 2024/017)', () => {
+  it('initiate sans accord explicite → 400', async () => {
+    const res = await request(app)
+      .post(`/api/public/collectes/${SLUG}/initiate`)
+      .set('X-Draft-Token', draftToken)
+      .set('Cookie', csrf.cookie)
+      .set('x-csrf-token', csrf.token)
+      .send({ nom: 'Jean Testeur', phone: PHONE_RAW, montant: 2000, valeursChamps: { lienParente: 'Ami' }, modePaiement: 'YELII', channel: 'mtn_money' })
+    expect(res.status).toBe(400)
+    expect(res.body.error.field).toBe('consentement')
   })
 })
 
@@ -361,7 +374,7 @@ describe('5 bis. Double soumission simultanée — réservation atomique', () =>
       .set('X-Draft-Token', token)
       .set('Cookie', csrf.cookie)
       .set('x-csrf-token', csrf.token)
-      .send({ nom: 'Jean Concurrent', phone: PHONE_RAW, montant: 2500, valeursChamps: { lienParente: 'Ami' }, modePaiement: 'YELII', channel: 'mtn_money' })
+      .send({ nom: 'Jean Concurrent', phone: PHONE_RAW, montant: 2500, valeursChamps: { lienParente: 'Ami' }, modePaiement: 'YELII', channel: 'mtn_money', consentement: true })
 
     const [a, b] = await Promise.all([submit(), submit()])
     expect([a.status, b.status]).toEqual([200, 200])
