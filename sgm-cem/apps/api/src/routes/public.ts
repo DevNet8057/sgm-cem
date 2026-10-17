@@ -20,6 +20,7 @@ import { audit } from '../services/audit.service'
 import { getConfigBool, getConfigNumber } from '../services/config.service'
 import { initiateYeliiPayment } from '../services/yelii.service'
 import { initiateCinetpayPayment, isCinetpayConfigured } from '../services/cinetpay.service'
+import { initiateTrackedYeliiPayment, isUncertainYeliiResult } from '../services/payment-attempt.service'
 import { syncYeliiContributionStatus, CONTRIBUTION_SYNC_SELECT } from '../services/payment-status.service'
 import {
   buildDynamicSchema,
@@ -264,6 +265,16 @@ async function markDraftConverted(draftId: string, contributionId: string): Prom
   })
 }
 
+class DraftAlreadyReserved extends Error {}
+
+/** Échec certain du paiement : la contribution est annulée et le brouillon libéré pour réessayer. */
+async function releaseDraft(draftId: string, contributionId: string): Promise<void> {
+  await prisma.$transaction([
+    prisma.contribution.update({ where: { id: contributionId }, data: { paymentStatus: 'FAILED', statut: 'ANNULE' } }),
+    prisma.collecteDraft.updateMany({ where: { id: draftId, contributionId }, data: { contributionId: null } }),
+  ])
+}
+
 /**
  * POST /api/public/collectes/:slug/initiate
  * Convertit un brouillon en Contribution et initie le paiement. Le draft
@@ -324,20 +335,38 @@ router.post('/collectes/:slug/initiate', publicLimiter, async (req, res) => {
     ? (data.channel === 'orange_money' ? 'ORANGE_MONEY' : 'MTN_MOMO')
     : 'CARTE_VISA'
 
-  const contribution = await prisma.contribution.create({
-    data: {
-      membreId: null,
-      contributeurExterneId: contributeur.id,
-      rubriqueId: collecte.rubriqueId,
-      montant: data.montant,
-      valeursChamps: valeursChamps as Prisma.InputJsonValue,
-      modePaiement: storedMode,
-      statut: 'EN_ATTENTE_CONFIRMATION',
-      paymentStatus: 'PENDING',
-      localisationFonds: 'EN_TRANSIT',
-      mobileMoneyPhone: data.modePaiement === 'YELII' ? phone : null,
-    },
+  // Réservation atomique du brouillon : deux soumissions simultanées ne créent
+  // jamais deux contributions ni deux demandes de paiement.
+  const reserved = await prisma.$transaction(async tx => {
+    const created = await tx.contribution.create({
+      data: {
+        membreId: null,
+        contributeurExterneId: contributeur.id,
+        rubriqueId: collecte.rubriqueId,
+        montant: data.montant,
+        valeursChamps: valeursChamps as Prisma.InputJsonValue,
+        modePaiement: storedMode,
+        statut: 'EN_ATTENTE_CONFIRMATION',
+        paymentStatus: 'PENDING',
+        localisationFonds: 'EN_TRANSIT',
+        mobileMoneyPhone: data.modePaiement === 'YELII' ? phone : null,
+      },
+    })
+    const claimed = await tx.collecteDraft.updateMany({
+      where: { id: draft.id, contributionId: null },
+      data: { contributionId: created.id },
+    })
+    if (claimed.count !== 1) throw new DraftAlreadyReserved()
+    return created
+  }).catch(async (error: unknown) => {
+    if (!(error instanceof DraftAlreadyReserved)) throw error
+    return null
   })
+  if (!reserved) {
+    const current = await prisma.collecteDraft.findUnique({ where: { id: draft.id }, select: { contributionId: true } })
+    return res.json({ success: true, data: { contributionId: current?.contributionId, alreadyInitiated: true } })
+  }
+  const contribution = reserved
 
   await audit({
     req, userId: await getPublicAuditUserId(), userName: `Public: ${data.nom}`,
@@ -348,7 +377,7 @@ router.post('/collectes/:slug/initiate', publicLimiter, async (req, res) => {
   // ── MODE MOBILE MONEY (Yelii) — même flux que payments.ts ────────────────
   if (data.modePaiement === 'YELII') {
     if (!getConfigBool('MOBILE_MONEY_ENABLED', true)) {
-      await prisma.contribution.update({ where: { id: contribution.id }, data: { paymentStatus: 'FAILED' } })
+      await releaseDraft(draft.id, contribution.id)
       return res.status(403).json({ success: false, error: 'Le paiement Mobile Money est temporairement désactivé' })
     }
 
@@ -359,10 +388,12 @@ router.post('/collectes/:slug/initiate', publicLimiter, async (req, res) => {
       getConfigNumber('YELII_COMMISSION_RATE', YELII_COMMISSION_RATE)
     )
 
-    const payment = await initiateYeliiPayment({
+    const payment = await initiateTrackedYeliiPayment({
       amount: totalToPay,
       senderPhone: phone,
       channel: data.channel === 'orange_money' ? 'orange_money' : 'mtn_money',
+      contributionIds: [contribution.id],
+      source: 'public_collecte',
     })
 
     if (payment.success && payment.transactionId) {
@@ -387,8 +418,21 @@ router.post('/collectes/:slug/initiate', publicLimiter, async (req, res) => {
           totalToPay,
         },
       })
+    } else if (isUncertainYeliiResult(payment)) {
+      // Réponse perdue : le donateur a peut-être reçu la demande sur son téléphone.
+      // La contribution reste en attente ; le webhook sera rattaché à la tentative.
+      await prisma.contribution.update({
+        where: { id: contribution.id },
+        data: { paymentStatus: 'PROCESSING', amountChargedToPayer: totalToPay, commissionPaidByPayer: commissionAmount },
+      })
+      await markDraftConverted(draft.id, contribution.id)
+      return res.json({
+        success: true,
+        data: { contributionId: contribution.id, transactionId: null, status: 'PROCESSING', uncertain: true, dueAmount: contribution.montant, commissionAmount, totalToPay },
+        message: 'Vérification en cours auprès de l’opérateur. Si vous avez validé sur votre téléphone, ne payez pas une seconde fois.',
+      })
     } else {
-      await prisma.contribution.update({ where: { id: contribution.id }, data: { paymentStatus: 'FAILED' } })
+      await releaseDraft(draft.id, contribution.id)
       return res.json({ success: false, error: payment.message ?? 'Échec du paiement Mobile Money' })
     }
   }
@@ -427,7 +471,7 @@ router.post('/collectes/:slug/initiate', publicLimiter, async (req, res) => {
       data: { contributionId: contribution.id, paymentUrl: result.paymentUrl, status: 'PROCESSING' },
     })
   } catch {
-    await prisma.contribution.update({ where: { id: contribution.id }, data: { paymentStatus: 'FAILED' } })
+    await releaseDraft(draft.id, contribution.id)
     throw new AppError(
       'CINETPAY_ERROR',
       'Le paiement par carte n’a pas pu être initialisé. Veuillez réessayer.',

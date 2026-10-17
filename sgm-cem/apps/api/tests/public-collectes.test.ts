@@ -15,7 +15,8 @@ import { calculateAmountWithCommission, YELII_COMMISSION_RATE } from '@sgm-cem/s
 const { initiateYeliiMock } = vi.hoisted(() => ({
   initiateYeliiMock: vi.fn(async () => ({
     success: true,
-    transactionId: 'TEST-YELII-TX-PUBLIC-E2E',
+    // Identifiant distinct à chaque appel, comme le vrai prestataire
+    transactionId: `TEST-YELII-TX-PUBLIC-E2E-${Math.random().toString(36).slice(2)}`,
     status: 'processing' as const,
   })),
 }))
@@ -343,6 +344,30 @@ describe('5. Idempotence — anti double-clic', () => {
     const countAfter = await prisma.contribution.count({ where: { contributeurExterneId: contributeurId } })
     expect(countAfter).toBe(countBefore)
     expect(initiateYeliiMock.mock.calls.length).toBe(callsBefore) // Yelii pas ré-appelé
+  })
+})
+
+describe('5 bis. Double soumission simultanée — réservation atomique', () => {
+  it('deux initiate en parallèle sur un même brouillon : une seule contribution, un seul appel Yelii', async () => {
+    const draft = await request(app)
+      .post(`/api/public/collectes/${SLUG}/drafts`)
+      .set('Cookie', csrf.cookie)
+      .set('x-csrf-token', csrf.token)
+      .send({ nom: 'Jean Concurrent', phone: PHONE_RAW, montant: 2500, valeursChamps: { lienParente: 'Ami' } })
+    const token = draft.body.data.draftToken as string
+    const callsBefore = initiateYeliiMock.mock.calls.length
+    const submit = () => request(app)
+      .post(`/api/public/collectes/${SLUG}/initiate`)
+      .set('X-Draft-Token', token)
+      .set('Cookie', csrf.cookie)
+      .set('x-csrf-token', csrf.token)
+      .send({ nom: 'Jean Concurrent', phone: PHONE_RAW, montant: 2500, valeursChamps: { lienParente: 'Ami' }, modePaiement: 'YELII', channel: 'mtn_money' })
+
+    const [a, b] = await Promise.all([submit(), submit()])
+    expect([a.status, b.status]).toEqual([200, 200])
+    const ids = new Set([a.body.data.contributionId, b.body.data.contributionId])
+    expect(ids.size).toBe(1)
+    expect(initiateYeliiMock.mock.calls.length - callsBefore).toBe(1)
   })
 })
 

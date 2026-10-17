@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client'
 import { alertTresoriers } from '../services/notification'
 import { getConfigNumber } from '../services/config.service'
 import { CONTRIBUTION_SYNC_SELECT, syncPaymentContributionStatus } from '../services/payment-status.service'
+import { reportStaleUncertainAttempts } from '../services/payment-attempt.service'
 
 const prisma = new PrismaClient()
 
@@ -92,6 +93,8 @@ export async function runPaymentReconciliation(): Promise<{ checked: number; con
       veryStale.length === 1 ? { view: 'contributions', id: veryStale[0].id } : undefined
     )
   }
+
+  await reportStaleUncertainAttempts().catch(e => console.error('[Cron] Contrôle des initiations incertaines échoué', e))
 
   return { checked: stuck.length, confirmed, failed }
 }

@@ -48,7 +48,7 @@ function isAllowedYeliiBaseUrl(value: string | undefined): value is string {
   return url.hostname.toLowerCase() === 'api.yelii.xyz' && (url.port === '' || url.port === '443')
 }
 
-function normalizeCameroonMobilePhone(phone: string): string | undefined {
+export function normalizeCameroonMobilePhone(phone: string): string | undefined {
   let normalized = phone.replace(/\D/g, '')
   if (normalized.startsWith('00237')) normalized = normalized.slice(5)
   else if (normalized.startsWith('237')) normalized = normalized.slice(3)

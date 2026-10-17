@@ -468,6 +468,39 @@ model PaymentBatch {
   @@map("payment_batches")
 }
 
+// ─── TENTATIVES DE PAIEMENT ─────────────────────────────────────────────────
+// Journal de chaque demande envoyée à un prestataire. Yelii n'accepte pas de
+// référence marchande : après un délai dépassé à l'initiation, seul ce journal
+// (montant + numéro + date) permet de rattacher le webhook qui arrive ensuite.
+enum PaymentAttemptStatus {
+  INITIATING // demande en cours d'envoi
+  PROCESSING // identifiant fournisseur reçu
+  UNCERTAIN  // réponse perdue (délai, réponse illisible) : le payeur a peut-être été débité
+  FAILED     // refus certain du prestataire
+  LINKED     // webhook orphelin rattaché après coup
+}
+
+model PaymentAttempt {
+  id                    String               @id @default(cuid())
+  provider              String // YELII | CINETPAY
+  status                PaymentAttemptStatus @default(INITIATING)
+  amount                Int // montant demandé au prestataire (majoré de la commission)
+  phone                 String? // numéro normalisé 6XXXXXXXX
+  channel               String?
+  contributionIds       String[]
+  paymentBatchId        String?
+  providerTransactionId String?              @unique
+  errorCode             String?
+  source                String // payments_initiate | payment_batch | public_collecte
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  resolvedAt            DateTime?
+
+  @@index([status, createdAt])
+  @@index([provider, amount, phone])
+  @@map("payment_attempts")
+}
+
 // ─── WEB PUSH — abonnements navigateur ────────────────────────────────────────
 // Un utilisateur peut avoir plusieurs abonnements (PC + téléphone).
 // endpoint est unique : re-souscrire depuis le même navigateur = upsert.

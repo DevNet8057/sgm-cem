@@ -12,6 +12,7 @@ import { getPrisma } from '../lib/prisma'
 import { getConfigBool, getConfigNumber } from '../services/config.service'
 import { audit } from '../services/audit.service'
 import { syncYeliiContributionStatus, CONTRIBUTION_SYNC_SELECT } from '../services/payment-status.service'
+import { initiateTrackedYeliiPayment } from '../services/payment-attempt.service'
 import { createPaymentBatch, PaymentBatchError } from '../services/payment-batch.service'
 import { notifyCollecteurNewContribution } from '../services/notification'
 
@@ -322,10 +323,12 @@ router.post('/initiate', authenticate, requireLevel(1), async (req, res) => {
       getConfigNumber('YELII_COMMISSION_RATE', YELII_COMMISSION_RATE)
     )
 
-    const payment = await initiateYeliiPayment({
+    const payment = await initiateTrackedYeliiPayment({
       amount: totalToPay, // ← montant majoré, PAS contribution.montant
       senderPhone: data.mobileMoneyPhone!,
       channel: data.paymentChannel === 'ORANGE' ? 'orange_money' : 'mtn_money',
+      contributionIds: [contribution.id],
+      source: 'payments_initiate',
     })
 
     if (payment.success && payment.transactionId) {
@@ -351,9 +354,10 @@ router.post('/initiate', authenticate, requireLevel(1), async (req, res) => {
       })
     } else {
       if (isUncertainYeliiInitialization(payment.code)) {
+        // Montant majoré conservé : nécessaire au contrôle si le webhook est rattaché ensuite
         await prisma.contribution.update({
           where: { id: contribution.id },
-          data: { paymentStatus: 'PROCESSING', statut: 'EN_ATTENTE_CONFIRMATION' },
+          data: { paymentStatus: 'PROCESSING', statut: 'EN_ATTENTE_CONFIRMATION', amountChargedToPayer: totalToPay, commissionPaidByPayer: commissionAmount },
         })
       } else {
         await prisma.contribution.update({ where: { id: contribution.id }, data: { paymentStatus: 'FAILED' } })
@@ -543,10 +547,13 @@ router.post('/batches/initiate', authenticate, requireLevel(1), async (req, res)
           }
         }
       } else if (data.modePaiement === 'YELII') {
-        const payment = await initiateYeliiPayment({
+        const payment = await initiateTrackedYeliiPayment({
           amount: result.totalToPay,
           senderPhone: data.mobileMoneyPhone!,
           channel: data.paymentChannel === 'ORANGE' ? 'orange_money' : 'mtn_money',
+          contributionIds: result.contributions.map(child => child.id),
+          paymentBatchId: result.batchId,
+          source: 'payment_batch',
         })
 
         if (!payment.success || !payment.transactionId) {

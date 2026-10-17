@@ -2,6 +2,7 @@ import { Router } from 'express'
 import express from 'express'
 import { verifyYeliiSignature } from '../services/yelii.service'
 import { applyProviderOutcome } from '../services/payment-status.service'
+import { linkOrphanYeliiTransaction } from '../services/payment-attempt.service'
 
 const router = Router()
 
@@ -69,9 +70,16 @@ async function processYeliiWebhook(envelope: YeliiEnvelope) {
   // Moteur commun (sondage, webhooks, réconciliation) : toutes les lignes de la
   // transaction (paiement réparti) sont traitées ensemble, une seule fois.
   try {
-    const result = await applyProviderOutcome(transactionId, {
+    let result = await applyProviderOutcome(transactionId, {
       provider: 'yelii', status: outcome, amount, netCredited, source: 'webhook',
     })
+    // Identifiant inconnu : initiation dont la réponse s'était perdue ?
+    if (result === 'unknown_transaction' && outcome === 'success'
+      && await linkOrphanYeliiTransaction(transactionId, { amount, senderPhone: envelope.data.senderPhone })) {
+      result = await applyProviderOutcome(transactionId, {
+        provider: 'yelii', status: outcome, amount, netCredited, source: 'webhook',
+      })
+    }
     console.info(`[Yelii] ${transactionId} — ${result}`)
   } catch (e) {
     console.error(`[Yelii] Échec du traitement de ${transactionId}`, e)
