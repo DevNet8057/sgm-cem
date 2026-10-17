@@ -7,6 +7,7 @@ import { cn, formatAmount, formatDateTime, TRANSFER_TYPE_EMOJI, TRANSFER_TYPE_LA
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useFocusHighlight } from '@/hooks/useFocusHighlight'
+import { useFinancialConfirm } from '@/hooks/useFinancialConfirm'
 import type { FundsTransfer } from '@/types'
 
 // getBaseURL() garantit le suffixe /api quel que soit l'environnement
@@ -22,6 +23,7 @@ export function TransferValidations() {
     refetchInterval: 30000,
   })
 
+  const confirmFinancial = useFinancialConfirm()
   const confirmMutation = useMutation({
     mutationFn: (id: string) => api.patch(`/funds/transfers/${id}/confirm`),
     onSuccess: (_res, id) => {
@@ -68,7 +70,13 @@ export function TransferValidations() {
       ) : transfers.length === 0 ? (
         <EmptyState icon={CheckCircle} title="Aucune validation en attente" description="Tous les transferts ont été traités" />
       ) : (
-        <div className="space-y-4">{transfers.map(t => <TransferCard key={t.id} transfer={t} expanded={expandedId === t.id} highlighted={highlightedId === t.id} onToggle={() => setExpandedId(expandedId === t.id ? null : t.id)} onConfirm={() => confirmMutation.mutate(t.id)} onRefuse={() => setRefuseModal({ open: true, transferId: t.id, reason: '' })} confirming={confirmMutation.isPending} />)}</div>
+        <div className="space-y-4">{transfers.map(t => <TransferCard key={t.id} transfer={t} expanded={expandedId === t.id} highlighted={highlightedId === t.id} onToggle={() => setExpandedId(expandedId === t.id ? null : t.id)} onConfirm={() => confirmFinancial({
+          title: 'Confirmer la réception de ces fonds ?',
+          amount: t.totalAmount,
+          lines: [['Remis par', t.senderName], ['Mode', TRANSFER_TYPE_LABELS[t.transferType]], ['Contributions', String(t.contributions?.length ?? '')]],
+          okText: 'Oui, je les ai reçus',
+          onOk: () => confirmMutation.mutate(t.id),
+        })} onRefuse={() => setRefuseModal({ open: true, transferId: t.id, reason: '' })} confirming={confirmMutation.isPending} />)}</div>
       )}
 
       {refuseModal.open && (

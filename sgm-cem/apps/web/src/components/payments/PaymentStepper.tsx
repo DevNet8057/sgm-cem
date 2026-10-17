@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button as AntButton, Form, Input, Modal, Progress, Result, Steps } from 'antd'
 import { motion } from 'framer-motion'
 import {
-  AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, CreditCard, ExternalLink,
+  AlertCircle, ArrowLeft, ArrowRight, Check, CheckCircle2, CreditCard, ExternalLink,
   Heart, Loader2, RefreshCw, X,
 } from 'lucide-react'
 import api from '@/lib/api'
@@ -17,7 +17,7 @@ import { calculateAmountWithCommission, YELII_COMMISSION_RATE } from '@sgm-cem/s
 import { PaymentMethodSelector, OperatorSelector, type PayMode, type MobileOperator } from './PaymentMethodSelector'
 import { PendingScreen, USSD_TIMEOUT } from './PendingScreen'
 import { AllocationEditor, type PaymentAllocation } from './AllocationEditor'
-import type { Membre, Rubrique } from '@/types'
+import type { Membre, RemainingBalance, Rubrique } from '@/types'
 
 type PayStatus = 'idle' | 'submitting' | 'waiting' | 'redirected' | 'confirmed' | 'declared' | 'failed' | 'timeout'
 
@@ -143,6 +143,40 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
   const isCard = mode === 'CARTE_VISA'
   const isCashDeclaration = Boolean(!selfService && mode === 'ESPECES')
   const modeDisabled = disabledModes.includes(mode)
+
+  // Mode choisi devenu indisponible (configuration) : basculer sur le premier mode proposé
+  useEffect(() => {
+    if (!modeDisabled) return
+    const fallback = (['MOBILE_MONEY', 'CARTE_VISA', 'ESPECES'] as PayMode[])
+      .find(candidate => !disabledModes.includes(candidate) && !(selfService && candidate === 'ESPECES'))
+    if (fallback) setMode(fallback)
+  }, [modeDisabled, disabledModes, selfService])
+
+  // Membre : parcours simple par défaut (une rubrique, reste dû prérempli) ;
+  // la répartition sur plusieurs rubriques est une option (UX-11)
+  const [splitPayment, setSplitPayment] = useState(false)
+  const { data: balances } = useQuery<RemainingBalance[]>({
+    queryKey: ['mes-soldes'],
+    queryFn: async () => (await api.get('/contributions/me/balance')).data.data,
+    enabled: !!selfService,
+  })
+  const balanceFor = (id: string) => balances?.find(b => b.rubrique.id === id)
+  function chooseSingleRubrique(id: string, amount?: number) {
+    const due = balanceFor(id)?.remainingAmount
+    const value = amount ?? (due != null && due > 0 ? due : undefined)
+    setRubriqueId(id)
+    setMontant(value != null ? String(value) : '')
+    setAllocations(value ? [{ rubriqueId: id, montant: value }] : [])
+    setAllocationBudget(value ?? '')
+    setError('')
+  }
+  function setSingleAmount(raw: string) {
+    const value = Number(raw)
+    setMontant(raw)
+    setAllocations(rubriqueId && value > 0 ? [{ rubriqueId, montant: value }] : [])
+    setAllocationBudget(value > 0 ? value : '')
+    setError('')
+  }
 
   const {
     data: eligibleCollectors = [],
@@ -430,7 +464,7 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
               {step === 0 ? 'Annuler' : 'Retour'}
             </AntButton>
           ) : <span />}
-          {step < 2 && !(selfService && step === 0) && (
+          {step < 2 && !(selfService && step === 0 && splitPayment) && (
             <AntButton
               type="primary"
               icon={<ArrowRight size={14} />}
@@ -537,15 +571,33 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
                     <span className="ml-auto text-xs text-gray-500">{selectedMembre.profilFinancier}</span>
                   </div>
                 )}
-                <AllocationEditor
-                  budget={allocationBudget}
-                  allocations={allocations}
-                  rubriques={rubriques.filter(r => r.status === 'OUVERTE').map(r => ({ id: r.id, title: r.title, code: r.code }))}
-                  onBudgetChange={value => { setAllocationBudget(value); setError('') }}
-                  onAllocationsChange={value => { setAllocations(value); setError('') }}
-                  onNext={() => { setError(''); goNext() }}
-                  nextLabel="Choisir le moyen de paiement"
-                />
+                {splitPayment ? (
+                  <>
+                    <AllocationEditor
+                      budget={allocationBudget}
+                      allocations={allocations}
+                      rubriques={rubriques.filter(r => r.status === 'OUVERTE').map(r => ({ id: r.id, title: r.title, code: r.code }))}
+                      onBudgetChange={value => { setAllocationBudget(value); setError('') }}
+                      onAllocationsChange={value => { setAllocations(value); setError('') }}
+                      onNext={() => { setError(''); goNext() }}
+                      nextLabel="Choisir le moyen de paiement"
+                    />
+                    <button type="button" onClick={() => { setSplitPayment(false); setAllocations([]); setAllocationBudget(''); setRubriqueId(''); setMontant('') }}
+                      className="min-h-[44px] text-sm font-semibold text-[#1A6B1A] underline">
+                      Payer une seule rubrique
+                    </button>
+                  </>
+                ) : (
+                  <SingleRubriquePicker
+                    rubriques={rubriques.filter(r => r.status === 'OUVERTE')}
+                    balanceFor={balanceFor}
+                    rubriqueId={rubriqueId}
+                    montant={montant}
+                    onChoose={chooseSingleRubrique}
+                    onAmountChange={setSingleAmount}
+                    onSplit={() => { setSplitPayment(true); setError('') }}
+                  />
+                )}
               </div>
             ) : (
             <Form layout="vertical" className="space-y-4">
@@ -640,6 +692,7 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
               <PaymentMethodSelector
                 value={mode}
                 disabledModes={disabledModes}
+                hideEspeces={selfService}
                 onChange={m => { setMode(m); setError('') }}
               />
 
@@ -982,6 +1035,63 @@ function RecapRow({ label, value, highlight }: { label: string; value: string; h
       <span className={cn('font-semibold text-right', highlight ? 'font-mono text-[#1A6B1A] text-base' : 'text-gray-800')}>
         {value}
       </span>
+    </div>
+  )
+}
+
+/** Parcours membre par défaut : une rubrique, montant dû prérempli, montants rapides. */
+function SingleRubriquePicker({ rubriques, balanceFor, rubriqueId, montant, onChoose, onAmountChange, onSplit }: {
+  rubriques: Rubrique[]
+  balanceFor: (id: string) => RemainingBalance | undefined
+  rubriqueId: string
+  montant: string
+  onChoose: (id: string, amount?: number) => void
+  onAmountChange: (raw: string) => void
+  onSplit: () => void
+}) {
+  const sorted = [...rubriques].sort((a, b) => (balanceFor(b.id)?.remainingAmount ?? 0) - (balanceFor(a.id)?.remainingAmount ?? 0))
+  const quickAmounts = [1000, 2000, 5000, 10000]
+  return (
+    <div className="space-y-4">
+      <fieldset>
+        <legend className="mb-2 text-sm font-semibold text-gray-700">Pour quelle rubrique ?</legend>
+        <div className="space-y-2">
+          {sorted.map(rubrique => {
+            const due = balanceFor(rubrique.id)?.remainingAmount
+            const selected = rubrique.id === rubriqueId
+            return (
+              <button key={rubrique.id} type="button" onClick={() => onChoose(rubrique.id)} aria-pressed={selected}
+                className={cn('flex min-h-[52px] w-full items-center justify-between gap-3 rounded-[12px] border-2 px-3 py-2 text-left transition-colors',
+                  selected ? 'border-[#1A6B1A] bg-[#F0FDF4]' : 'border-gray-200 bg-white hover:border-gray-300')}>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-gray-800">{rubrique.title}</span>
+                  <span className="block text-xs text-gray-500">{due != null && due > 0 ? `Reste à payer : ${formatAmount(due)}` : due === 0 ? 'À jour' : 'Montant libre'}</span>
+                </span>
+                {selected && <Check size={16} className="shrink-0 text-[#1A6B1A]" />}
+              </button>
+            )
+          })}
+        </div>
+      </fieldset>
+
+      {rubriqueId && (
+        <div>
+          <label htmlFor="montant-simple" className="mb-1.5 block text-sm font-semibold text-gray-700">Montant (FCFA)</label>
+          <Input id="montant-simple" type="number" inputMode="numeric" min={1} value={montant} onChange={e => onAmountChange(e.target.value)} placeholder="0" className="!text-base" />
+          <div className="mt-2 flex flex-wrap gap-2">
+            {quickAmounts.map(amount => (
+              <button key={amount} type="button" onClick={() => onAmountChange(String(amount))}
+                className="min-h-[40px] rounded-full border border-gray-200 px-3 text-sm font-semibold text-gray-700 hover:border-[#1A6B1A]">
+                {formatAmount(amount)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <button type="button" onClick={onSplit} className="min-h-[44px] text-sm font-semibold text-[#1A6B1A] underline">
+        Payer plusieurs rubriques en une fois
+      </button>
     </div>
   )
 }

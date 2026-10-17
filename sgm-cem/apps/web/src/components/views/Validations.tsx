@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Modal } from '@/components/ui/Modal'
 import { ReceiptSuccessModal } from '@/components/contributions/ReceiptSuccessModal'
 import { useFocusHighlight } from '@/hooks/useFocusHighlight'
+import { useFinancialConfirm } from '@/hooks/useFinancialConfirm'
 import { cn } from '@/lib/utils'
 import type { Contribution } from '@/types'
 
@@ -89,9 +90,17 @@ export function Validations() {
     setMotifError('')
   }
 
+  const confirmFinancial = useFinancialConfirm()
   function confirmContribution(id: string) {
     setConfirmError('')
-    confirm.mutate(id)
+    const c = data?.find(item => item.id === id)
+    confirmFinancial({
+      title: 'Confirmer la réception de cet argent ?',
+      amount: c?.montant ?? 0,
+      lines: [['Membre', c?.membre?.user.fullName], ['Rubrique', c?.rubrique?.title], ['Mode', c ? MODE_PAIEMENT_LABELS[c.modePaiement] : undefined]],
+      okText: 'Oui, je l’ai reçu',
+      onOk: () => confirm.mutate(id),
+    })
   }
 
   function submitDispute() {

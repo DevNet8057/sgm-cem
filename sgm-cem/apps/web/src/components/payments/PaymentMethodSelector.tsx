@@ -59,7 +59,11 @@ const OPTIONS: Array<{
 ]
 
 export function PaymentMethodSelector({ value, onChange, disabledModes = [], hideEspeces }: Props) {
-  const options = hideEspeces ? OPTIONS.filter(opt => opt.id !== 'ESPECES') : OPTIONS
+  // Un mode indisponible n'est pas proposé du tout (UX-11) : pas de carte grisée qui fait hésiter
+  const options = OPTIONS.filter(opt => !disabledModes.includes(opt.id) && !(hideEspeces && opt.id === 'ESPECES'))
+  if (options.length === 0) {
+    return <p role="alert" className="rounded-[12px] bg-amber-50 p-3 text-sm text-amber-800">Aucun moyen de paiement n&apos;est disponible pour le moment. Réessayez plus tard.</p>
+  }
   return (
     <div className={cn('grid grid-cols-1 gap-3', options.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3')}>
       {options.map(opt => {
