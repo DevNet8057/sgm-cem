@@ -108,6 +108,16 @@ export interface Contribution {
   // Détenteur courant de l'argent (grand livre des fonds)
   detenteurId?: string | null
   fundsTransfer?: FundsTransfer
+  // Autorisation de substitution accordée par un administrateur (EF-M06-06)
+  confirmationAuthorization?: {
+    treasurerId: string
+    grantedById: string
+    grantedAt: string
+    expiresAt: string
+    motif: string
+    consumedAt?: string
+    revokedAt?: string
+  } | null
   // Capacités calculées par l'API pour l'utilisateur courant (seule source de vérité)
   actions?: {
     canConfirm: boolean

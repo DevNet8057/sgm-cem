@@ -8,15 +8,19 @@ import { syncPaymentContributionStatus } from '../services/payment-status.servic
 import { generateReceiptPDF, generateReceiptPdf } from '../services/receipt'
 import { getFileStream } from '../services/storage'
 import { getConfig } from '../services/config.service'
-import { notifyCollecteurNewContribution } from '../services/notification'
+import { notifyCollecteurNewContribution, notifyInApp } from '../services/notification'
 import { calculateRemainingBalance } from '@sgm-cem/shared'
 import { getPrisma } from '../lib/prisma'
 import { confirmIntoLedger, recordDirectEntry } from '../services/fund-ledger.service'
+import { authorizationActorsValid, consumeAuthorization, revokeAuthorization, validAuthorizationIds } from '../services/confirmation-authorization.service'
+import { audit } from '../services/audit.service'
+import { formatAmount } from '../lib/utils'
 import {
   assertContributionAction,
   assertContributionReadable,
   assertResolutionAllowed,
   getContributionScope,
+  isManualContribution,
   withActions,
   type ContributionActor,
 } from '../services/contribution-access.service'
@@ -26,6 +30,12 @@ const prisma = getPrisma()
 
 function actorOf(req: { user?: { userId: string; role: string } }): ContributionActor {
   return { userId: req.user!.userId, role: req.user!.role }
+}
+
+// Seul un trésorier peut bénéficier d'une autorisation de substitution (RG-15)
+async function actionsFor<T extends { id: string; confirmationAuthorization?: unknown; collecteurId: string | null; statut: string; modePaiement: string }>(actor: ContributionActor, records: T[]) {
+  const valid = actor.role === 'TRESORIER' ? await validAuthorizationIds(records) : undefined
+  return withActions(actor, records, valid)
 }
 
 // Saisie manuelle par le staff : espèces et virements seulement. Mobile Money et
@@ -124,7 +134,7 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
 
   res.json({
     success: true,
-    data: withActions(actorOf(req), contributions),
+    data: await actionsFor(actorOf(req), contributions),
     pagination: { page: currentPage, limit: pageSize, total, totalPages: Math.ceil(total / pageSize), totalAmount }
   })
 })
@@ -145,7 +155,7 @@ router.get('/validations', authenticate, requireLevel(2), async (req, res) => {
     take: 100,
   })
 
-  res.json({ success: true, data: withActions(actorOf(req), contributions) })
+  res.json({ success: true, data: await actionsFor(actorOf(req), contributions) })
 })
 
 /**
@@ -159,7 +169,7 @@ router.get('/todo', authenticate, requireLevel(2), async (req, res) => {
   const [pending, transfersToReceive, openDisputes] = await Promise.all([
     prisma.contribution.findMany({
       where: { ...getContributionScope(actor), statut: 'EN_ATTENTE_CONFIRMATION' },
-      select: { id: true, collecteurId: true, statut: true, modePaiement: true, externalTransactionId: true, momoTransactionId: true, transferId: true, bankDepositId: true, localisationFonds: true, montant: true },
+      select: { id: true, collecteurId: true, statut: true, modePaiement: true, externalTransactionId: true, momoTransactionId: true, transferId: true, bankDepositId: true, localisationFonds: true, montant: true, confirmationAuthorization: true },
       take: 500,
     }),
     prisma.fundsTransfer.count({ where: { receiverId: actor.userId, status: 'PENDING_APPROVAL' } }),
@@ -167,7 +177,7 @@ router.get('/todo', authenticate, requireLevel(2), async (req, res) => {
       ? prisma.contribution.count({ where: { statut: 'LITIGE' } })
       : Promise.resolve(0),
   ])
-  const toConfirm = withActions(actor, pending).filter(c => c.actions.canConfirm)
+  const toConfirm = (await actionsFor(actor, pending)).filter(c => c.actions.canConfirm)
   res.json({
     success: true,
     data: {
@@ -192,7 +202,7 @@ router.get('/litiges', authenticate, requireLevel(3), async (req, res) => {
     take: 100,
   })
 
-  res.json({ success: true, data: withActions(actorOf(req), contributions) })
+  res.json({ success: true, data: await actionsFor(actorOf(req), contributions) })
 })
 
 /**
@@ -563,14 +573,21 @@ router.patch('/:id/confirm', authenticate, requireLevel(2), async (req, res) => 
   if (contribution.statut !== 'EN_ATTENTE_CONFIRMATION') {
     throw new AppError('BUSINESS_RULE', 'Cette contribution ne peut pas être confirmée')
   }
-  // Espèces et virements seulement, par le collecteur désigné ou un administrateur
-  assertContributionAction(actorOf(req), contribution, 'canConfirm')
+  // Espèces et virements seulement, par le collecteur désigné, un administrateur
+  // ou un trésorier muni d'une autorisation nominative (RG-15)
+  const actor = actorOf(req)
+  const viaAuthorization = actor.role === 'TRESORIER' && contribution.collecteurId !== actor.userId
+  assertContributionAction(actor, contribution, 'canConfirm', new Date(), viaAuthorization && await authorizationActorsValid(contribution))
 
   // Transition conditionnelle (deux confirmations simultanées n'en font qu'une) et
   // entrée de l'argent dans le grand livre : espèces chez le collecteur, virement
-  // chez le trésorier
-  const confirmed = await prisma.$transaction(tx => confirmIntoLedger(tx, contribution, { confirmedById: req.user!.userId }))
-  if (!confirmed) throw new AppError('BUSINESS_RULE', 'Cette contribution a déjà été traitée')
+  // chez le trésorier ; l'autorisation est consommée dans la même transaction
+  const { authorization } = await prisma.$transaction(async tx => {
+    const authorization = viaAuthorization ? await consumeAuthorization(tx, id, actor.userId) : null
+    const confirmed = await confirmIntoLedger(tx, contribution, { confirmedById: actor.userId })
+    if (!confirmed) throw new AppError('BUSINESS_RULE', 'Cette contribution a déjà été traitée')
+    return { confirmed, authorization }
+  })
   const updated = await prisma.contribution.findUniqueOrThrow({ where: { id } })
 
   const override = contribution.collecteurId !== req.user!.userId
@@ -581,7 +598,11 @@ router.patch('/:id/confirm', authenticate, requireLevel(2), async (req, res) => 
       action: override ? 'CONFIRM_OVERRIDE' : 'CONFIRM',
       entityType: 'Contribution',
       entityId: updated.id,
-      details: { montant: updated.montant, modePaiement: updated.modePaiement, ...(override && { designatedCollecteurId: contribution.collecteurId }) },
+      details: {
+        montant: updated.montant, modePaiement: updated.modePaiement,
+        ...(override && { designatedCollecteurId: contribution.collecteurId }),
+        ...(authorization && { autorisation: { grantedById: authorization.grantedById, motif: authorization.motif, grantedAt: authorization.grantedAt } }),
+      },
     }
   })
 
@@ -617,6 +638,69 @@ router.patch('/:id/refuse', authenticate, requireLevel(2), async (req, res) => {
   })
 
   res.json({ success: true, data: updated })
+})
+
+// ── Autorisation de substitution (EF-M06-06, RG-15) ───────────────────
+// Un administrateur autorise nominativement un trésorier à confirmer cette
+// contribution (collecteur absent) : motif, échéance, usage unique, révocable.
+const authorizationSchema = z.object({
+  treasurerId: z.string().min(1),
+  motif: z.string().trim().min(10, 'Motif de 10 caractères minimum').max(500),
+  dureeHeures: z.number().int().min(1).max(168).default(48),
+})
+
+const dateFr = (iso: string) => new Date(iso).toLocaleString('fr-FR', { timeZone: 'Africa/Douala', dateStyle: 'short', timeStyle: 'short' })
+
+router.post('/:id/confirmation-authorization', authenticate, requireLevel(5), async (req, res) => {
+  const { treasurerId, motif, dureeHeures } = authorizationSchema.parse(req.body)
+  const id = String(req.params.id)
+  const contribution = await prisma.contribution.findUnique({
+    where: { id },
+    include: { membre: { include: { user: { select: { fullName: true } } } }, contributeurExterne: { select: { nom: true } } },
+  })
+  if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
+  assertContributionAction(actorOf(req), contribution, 'canGrantConfirmation')
+  const treasurer = await prisma.user.findUnique({ where: { id: treasurerId }, select: { id: true, fullName: true, role: true, isActive: true } })
+  if (!treasurer?.isActive || treasurer.role !== 'TRESORIER') throw new AppError('VALIDATION', 'Le bénéficiaire doit être un trésorier actif.', 400, 'treasurerId')
+
+  const now = new Date()
+  const authorization = {
+    treasurerId, grantedById: req.user!.userId, grantedAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + dureeHeures * 60 * 60 * 1000).toISOString(), motif,
+  }
+  // Remplace une éventuelle autorisation précédente (gardée dans le journal d'audit)
+  const result = await prisma.contribution.updateMany({
+    where: { id, statut: { in: ['EN_ATTENTE_CONFIRMATION', 'LITIGE'] } },
+    data: { confirmationAuthorization: authorization },
+  })
+  if (result.count !== 1) throw new AppError('BUSINESS_RULE', 'Cette contribution a déjà été traitée')
+
+  await audit({
+    req, userId: req.user!.userId, userName: req.user!.email, action: 'APPROVE',
+    entityType: 'AutorisationConfirmation', entityId: id,
+    details: { ...authorization, treasurerName: treasurer.fullName, montant: contribution.montant, precedente: contribution.confirmationAuthorization ?? null },
+  })
+  const contributor = contribution.membre?.user.fullName ?? contribution.contributeurExterne?.nom ?? 'un contributeur'
+  await notifyInApp(treasurerId, 'Confirmation autorisée',
+    `Vous pouvez confirmer le paiement de ${contributor} (${formatAmount(contribution.montant)}) jusqu'au ${dateFr(authorization.expiresAt)}. Motif : ${motif}`,
+    'INFO', { kind: 'autorisation-confirmation', contributionId: id }, { view: 'validations', id })
+
+  res.status(201).json({ success: true, data: { id, confirmationAuthorization: authorization } })
+})
+
+router.delete('/:id/confirmation-authorization', authenticate, requireLevel(5), async (req, res) => {
+  const id = String(req.params.id)
+  const contribution = await prisma.contribution.findUnique({ where: { id } })
+  if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
+  const revoked = await prisma.$transaction(tx => revokeAuthorization(tx, id))
+  await audit({
+    req, userId: req.user!.userId, userName: req.user!.email, action: 'REJECT',
+    entityType: 'AutorisationConfirmation', entityId: id, details: { action: 'revocation', ...revoked },
+  })
+  await notifyInApp(revoked.treasurerId, 'Autorisation retirée',
+    `L'autorisation de confirmer le paiement de ${formatAmount(contribution.montant)} a été retirée.`,
+    'INFO', { kind: 'autorisation-revoquee', contributionId: id }, { view: 'validations', id })
+  res.json({ success: true, data: { id, confirmationAuthorization: revoked } })
 })
 
 router.patch('/:id/litige', authenticate, requireLevel(3), async (req, res) => {
@@ -658,9 +742,12 @@ router.patch('/:id/resolve-litige', authenticate, requireLevel(3), async (req, r
   const contribution = await prisma.contribution.findUnique({ where: { id } })
   if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
   if (contribution.statut !== 'LITIGE') throw new AppError('BUSINESS_RULE', 'Cette contribution n\'est pas en litige')
-  assertResolutionAllowed(actorOf(req), contribution, resolution)
+  const actor = actorOf(req)
+  const viaAuthorization = resolution === 'CONFIRME' && actor.role === 'TRESORIER' && contribution.collecteurId !== actor.userId && isManualContribution(contribution)
+  assertResolutionAllowed(actor, contribution, resolution, new Date(), viaAuthorization && await authorizationActorsValid(contribution))
 
   const result = await prisma.$transaction(async tx => {
+    if (viaAuthorization) await consumeAuthorization(tx, id, actor.userId)
     const updatedRows = await tx.contribution.updateMany({
       where: { id, statut: 'LITIGE' },
       data: {

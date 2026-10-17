@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, CheckCircle2, Clock, CreditCard, MessageSquare, Paperclip, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Clock, CreditCard, KeyRound, MessageSquare, Paperclip, XCircle } from 'lucide-react'
 import api from '@/lib/api'
 import { formatAmount, formatDateTime, MODE_PAIEMENT_LABELS, contributorName } from '@/lib/utils'
 import { Avatar } from '@/components/ui/Avatar'
@@ -36,6 +36,44 @@ export function Validations() {
     queryFn: async () => (await api.get('/contributions/validations')).data.data,
     refetchInterval: 30000,
   })
+
+  // Autorisation de substitution (EF-M06-06) : un administrateur désigne un
+  // trésorier pour confirmer UN paiement d'un collecteur absent
+  const [grantFor, setGrantFor] = useState<Contribution | null>(null)
+  const [grantForm, setGrantForm] = useState({ treasurerId: '', motif: '', dureeHeures: '48' })
+  const [grantError, setGrantError] = useState('')
+  const canGrantAny = (data ?? []).some(c => c.actions?.canGrantConfirmation)
+  const { data: treasurers = [] } = useQuery<Array<{ id: string; fullName: string; role: string }>>({
+    queryKey: ['funds-eligible-receivers'],
+    queryFn: async () => (await api.get('/funds/eligible-receivers')).data.data,
+    enabled: canGrantAny,
+    select: users => users.filter(u => u.role === 'TRESORIER'),
+  })
+  const treasurerName = (id: string) => treasurers.find(t => t.id === id)?.fullName ?? 'le trésorier désigné'
+
+  const grantMutation = useMutation({
+    mutationFn: () => api.post(`/contributions/${grantFor!.id}/confirmation-authorization`, {
+      treasurerId: grantForm.treasurerId, motif: grantForm.motif.trim(), dureeHeures: Number(grantForm.dureeHeures),
+    }),
+    onSuccess: () => { setGrantFor(null); setGrantError(''); void refreshCore() },
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { error?: { message?: string } } } }
+      setGrantError(e.response?.data?.error?.message ?? 'Autorisation impossible')
+    },
+  })
+  const revokeMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/contributions/${id}/confirmation-authorization`),
+    onSuccess: () => { void refreshCore() },
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { error?: { message?: string } } } }
+      setConfirmError(e.response?.data?.error?.message ?? 'Retrait impossible')
+    },
+  })
+
+  function activeAuthorization(c: Contribution) {
+    const a = c.confirmationAuthorization
+    return a && !a.consumedAt && !a.revokedAt && new Date(a.expiresAt) > new Date() ? a : null
+  }
 
   const confirm = useMutation({
     mutationFn: async (id: string) => api.patch(`/contributions/${id}/confirm`),
@@ -241,7 +279,27 @@ export function Validations() {
                             Litige
                           </Button>
                         )}
-                        {c.actions && !c.actions.canConfirm && !c.actions.canRefuse && !c.actions.canDispute && (
+                        {c.actions?.canGrantConfirmation && (() => {
+                          const active = activeAuthorization(c)
+                          return active ? (
+                            <span className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
+                              <KeyRound size={12} className="text-[#1A6B1A]" aria-hidden />
+                              Autorisé : {treasurerName(active.treasurerId)} jusqu&apos;au {formatDateTime(active.expiresAt)}
+                              <button type="button" onClick={() => revokeMutation.mutate(c.id)} disabled={revokeMutation.isPending}
+                                className="min-h-9 px-2 font-semibold text-red-600 underline">Retirer</button>
+                            </span>
+                          ) : (
+                            <Button size="sm" variant="outline" onClick={() => {
+                              setGrantError('')
+                              setGrantForm({ treasurerId: treasurers[0]?.id ?? '', motif: '', dureeHeures: '48' })
+                              setGrantFor(c)
+                            }}>
+                              <KeyRound size={13} />
+                              Autoriser un trésorier
+                            </Button>
+                          )
+                        })()}
+                        {c.actions && !c.actions.canConfirm && !c.actions.canRefuse && !c.actions.canDispute && !c.actions.canGrantConfirmation && (
                           <span className="text-xs text-gray-400">
                             {c.modePaiement === 'ESPECES' || c.modePaiement === 'VIREMENT'
                               ? 'À confirmer par le collecteur désigné'
@@ -301,6 +359,45 @@ export function Validations() {
             >
               <MessageSquare size={14} />
               {motifKind === 'refuse' ? 'Confirmer le refus' : 'Confirmer le litige'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={!!grantFor} onClose={() => setGrantFor(null)} size="sm"
+        title="Autoriser un trésorier"
+        description={grantFor ? `Paiement de ${contributorName(grantFor)} (${formatAmount(grantFor.montant)}), attribué à ${grantFor.collecteur?.fullName ?? 'un collecteur'}. L'autorisation sert une seule fois.` : ''}>
+        <div className="space-y-3">
+          <label className="block text-xs font-semibold text-gray-600">
+            Trésorier
+            <select value={grantForm.treasurerId} onChange={e => setGrantForm({ ...grantForm, treasurerId: e.target.value })}
+              className="mt-1 block min-h-11 w-full rounded-[10px] border border-gray-200 px-3 text-base">
+              {treasurers.length === 0 && <option value="">Aucun trésorier actif</option>}
+              {treasurers.map(t => <option key={t.id} value={t.id}>{t.fullName}</option>)}
+            </select>
+          </label>
+          <label className="block text-xs font-semibold text-gray-600">
+            Valable pendant
+            <select value={grantForm.dureeHeures} onChange={e => setGrantForm({ ...grantForm, dureeHeures: e.target.value })}
+              className="mt-1 block min-h-11 w-full rounded-[10px] border border-gray-200 px-3 text-base">
+              <option value="24">24 heures</option>
+              <option value="48">48 heures</option>
+              <option value="72">3 jours</option>
+              <option value="168">7 jours</option>
+            </select>
+          </label>
+          <label className="block text-xs font-semibold text-gray-600">
+            Motif <span className="text-red-500">*</span>
+            <textarea value={grantForm.motif} onChange={e => setGrantForm({ ...grantForm, motif: e.target.value })} rows={3} maxLength={500}
+              placeholder="Ex. : collecteur absent pour raison familiale"
+              className="mt-1 w-full rounded-[10px] border border-gray-200 px-3 py-2 text-base" />
+          </label>
+          {grantError && <p role="alert" className="text-sm text-red-600">{grantError}</p>}
+          <div className="flex justify-end gap-2 border-t border-gray-100 pt-3">
+            <Button variant="ghost" onClick={() => setGrantFor(null)}>Annuler</Button>
+            <Button loading={grantMutation.isPending} disabled={!grantForm.treasurerId || grantForm.motif.trim().length < 10}
+              onClick={() => grantMutation.mutate()}>
+              <KeyRound size={14} /> Autoriser
             </Button>
           </div>
         </div>

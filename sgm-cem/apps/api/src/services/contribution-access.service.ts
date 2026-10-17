@@ -228,9 +228,15 @@ export function assertResolutionAllowed(
 }
 
 /** Ajoute les capacités calculées à chaque contribution renvoyée au client. */
-export function withActions<T extends ContributionAccessRecord>(
+export function withActions<T extends ContributionAccessRecord & { id?: string }>(
   actor: ContributionActor,
   records: T[],
+  // Contributions dont l'autorisation de substitution est portée par des comptes valides
+  validAuthorizations: Set<string> = new Set(),
 ): Array<T & { actions: ContributionActions }> {
-  return records.map(record => ({ ...record, actions: getContributionActions(actor, record) }))
+  const now = new Date()
+  return records.map(record => ({
+    ...record,
+    actions: getContributionActions(actor, record, now, Boolean(record.id && validAuthorizations.has(record.id))),
+  }))
 }
