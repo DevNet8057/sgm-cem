@@ -1,12 +1,12 @@
-import { PrismaClient } from '@prisma/client'
 import { verifyPassword } from '../src/lib/password'
+import { createPrismaClient } from '../src/lib/prisma'
 
 // Repère les comptes qui utilisent encore un ancien mot de passe commun
 // (décision du Bureau : rien n'est forcé, l'administrateur prévient les titulaires).
 // Les mots de passe à tester sont fournis par l'opérateur, jamais écrits ici :
 //   CANDIDATE_PASSWORDS='motdepasse1|motdepasse2' pnpm exec ts-node prisma/audit-default-passwords.ts
 // Ajouter FORCE_CHANGE=1 pour imposer le changement aux comptes trouvés (sur décision explicite).
-const prisma = new PrismaClient()
+const prisma = createPrismaClient()
 
 async function main() {
   const candidates = (process.env.CANDIDATE_PASSWORDS ?? '').split('|').filter(Boolean)

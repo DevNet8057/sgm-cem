@@ -123,7 +123,7 @@ jobs:
 
       - name: Schéma et migrations alignés (aucune modification sans migration)
         working-directory: sgm-cem/apps/api
-        run: pnpm prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+        run: pnpm prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
 
       - name: Seed (base jetable)
         working-directory: sgm-cem/apps/api

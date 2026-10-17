@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { LocalisationFonds, ModePaiement, Prisma, PrismaClient } from '@prisma/client'
+import { LocalisationFonds, ModePaiement, Prisma } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
@@ -10,6 +10,7 @@ import { getFileStream } from '../services/storage'
 import { getConfig } from '../services/config.service'
 import { notifyCollecteurNewContribution } from '../services/notification'
 import { calculateRemainingBalance } from '@sgm-cem/shared'
+import { getPrisma } from '../lib/prisma'
 import {
   assertContributionAction,
   assertContributionReadable,
@@ -20,7 +21,7 @@ import {
 } from '../services/contribution-access.service'
 
 const router = Router()
-const prisma = new PrismaClient()
+const prisma = getPrisma()
 
 function actorOf(req: { user?: { userId: string; role: string } }): ContributionActor {
   return { userId: req.user!.userId, role: req.user!.role }

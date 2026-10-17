@@ -1,11 +1,11 @@
 import axios from 'axios'
 import twilio from 'twilio'
-import { PrismaClient } from '@prisma/client'
 import { sendEmail, sendEmailWithPdfAttachment, textToHtml } from './email'
 import { getConfig, getConfigBool } from './config.service'
 import { sendPushToUser } from './push.service'
+import { getPrisma } from '../lib/prisma'
 
-const prisma = new PrismaClient()
+const prisma = getPrisma()
 
 // Client Twilio reconstruit si les identifiants changent depuis le panneau
 // développeur (lecture au moment de l'appel, pas au chargement du module).

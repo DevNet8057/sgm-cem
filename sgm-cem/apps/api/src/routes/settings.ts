@@ -1,11 +1,11 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { PrismaClient } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
+import { getPrisma } from '../lib/prisma'
 
 const router = Router()
-const prisma = new PrismaClient()
+const prisma = getPrisma()
 
 const settingsSchema = z.object({
   defaultIncreaseRate: z.number().min(0).max(100).optional(),

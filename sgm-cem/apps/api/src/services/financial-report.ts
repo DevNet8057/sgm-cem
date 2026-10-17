@@ -1,9 +1,9 @@
 import { renderPdf } from './pdf-render'
-import { PrismaClient } from '@prisma/client'
 import { computeDashboardStats } from '../routes/stats'
 import { formatXAF, formatDateTime, getLogoDataUri, renderDocFooter, escapeHtml as e } from './pdf-branding'
+import { getPrisma } from '../lib/prisma'
 
-const prisma = new PrismaClient()
+const prisma = getPrisma()
 
 const MODE_LABELS: Record<string, string> = {
   ESPECES: 'Espèces', MTN_MOMO: 'MTN MoMo', ORANGE_MONEY: 'Orange Money',

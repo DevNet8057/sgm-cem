@@ -1,7 +1,8 @@
-import { PrismaClient, type AuditAction, type Prisma } from '@prisma/client'
+import { type AuditAction, type Prisma } from '@prisma/client'
 import type { Request } from 'express'
+import { getPrisma } from '../lib/prisma'
 
-const prisma = new PrismaClient()
+const prisma = getPrisma()
 
 // Métadonnées de traçabilité extraites de la requête HTTP. req.ip tient compte
 // de « trust proxy » : x-forwarded-for brut serait falsifiable par le client.

@@ -1,14 +1,14 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { PrismaClient } from '@prisma/client'
 import multer from 'multer'
 import { authenticate } from '../middleware/auth'
 import { phoneVariants } from '../lib/otp'
 import { AppError } from '../middleware/errorHandler'
 import { storeFile, deleteStoredFile, getManagedStorageKey } from '../services/storage'
+import { getPrisma } from '../lib/prisma'
 
 const router = Router()
-const prisma = new PrismaClient()
+const prisma = getPrisma()
 
 // Memory storage: we upload to S3/local via the storage service after receiving
 // Extension dérivée du type MIME accepté, jamais du nom fourni par le client

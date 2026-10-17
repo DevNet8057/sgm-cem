@@ -85,7 +85,7 @@ HAS_MIGRATIONS=$(psql "$PG_URL" -tAc "select to_regclass('public._prisma_migrati
 if [ "$HAS_DATA" = "t" ] && [ "$HAS_MIGRATIONS" != "t" ]; then
   echo ">>> [API] Base existante sans historique de migrations — adoption de la ligne de base..."
   ADOPT_SQL=$(mktemp)
-  pnpm exec prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script > "$ADOPT_SQL"
+  pnpm exec prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script > "$ADOPT_SQL"
   if grep -Eiq 'DROP (TABLE|COLUMN|TYPE|SCHEMA)|TRUNCATE|DELETE FROM' "$ADOPT_SQL"; then
     echo ">>> [API] ❌ L'alignement du schéma supprimerait des données — démarrage interrompu, base inchangée."
     grep -Ei 'DROP (TABLE|COLUMN|TYPE|SCHEMA)|TRUNCATE|DELETE FROM' "$ADOPT_SQL"
@@ -100,7 +100,7 @@ pnpm exec prisma migrate deploy
 
 # Seed uniquement si la base est vide (aucun utilisateur) : sans lui, aucun
 # compte admin n'existe et la connexion est impossible au premier démarrage.
-USERS=$(node -e "const{PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.user.count().then(c=>console.log(c)).catch(()=>console.log('ERR')).finally(()=>p.\$disconnect())")
+USERS=$(node -e "const{PrismaClient}=require('@prisma/client');const{PrismaPg}=require('@prisma/adapter-pg');const p=new PrismaClient({adapter:new PrismaPg({connectionString:process.env.DATABASE_URL})});p.user.count().then(c=>console.log(c)).catch(()=>console.log('ERR')).finally(()=>p.\$disconnect())")
 if [ "$USERS" = "0" ]; then
   # Seed de BASE (admin, paramètres, rubriques, config) — jamais de données de
   # démonstration sauf SEED_DEMO=1 explicite.

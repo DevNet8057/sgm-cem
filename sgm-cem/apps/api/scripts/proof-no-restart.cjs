@@ -14,11 +14,12 @@ require('dotenv').config()
 const http = require('http')
 const jwt = require('jsonwebtoken')
 const { PrismaClient } = require('@prisma/client')
+const { PrismaPg } = require('@prisma/adapter-pg')
 
 const API = 'http://localhost:3001'
 const MOCK_PORT = 4999
 const NEW_BASE = 'https://preuve-sans-redemarrage.example.com'
-const prisma = new PrismaClient()
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) })
 
 const received = [] // corps reçus par le mock Yelii
 

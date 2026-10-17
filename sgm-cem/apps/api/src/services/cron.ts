@@ -1,8 +1,8 @@
 import cron from 'node-cron'
-import { PrismaClient } from '@prisma/client'
 import { sendMonthlyStatement } from './notification'
+import { getPrisma } from '../lib/prisma'
 
-const prisma = new PrismaClient()
+const prisma = getPrisma()
 
 /**
  * H4 — Relevé mensuel automatique.

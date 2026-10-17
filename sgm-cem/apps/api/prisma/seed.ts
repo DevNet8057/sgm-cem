@@ -1,8 +1,8 @@
 import 'dotenv/config'
-import { PrismaClient } from '@prisma/client'
 import { generateTemporaryPassword, hashPassword } from '../src/lib/password'
+import { createPrismaClient } from '../src/lib/prisma'
 
-const prisma = new PrismaClient()
+const prisma = createPrismaClient()
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 let seq = 1

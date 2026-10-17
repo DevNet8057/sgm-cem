@@ -1,7 +1,7 @@
-import { PrismaClient } from '@prisma/client'
 import { hashPassword, verifyPassword } from '../src/lib/password'
+import { createPrismaClient } from '../src/lib/prisma'
 
-const prisma = new PrismaClient()
+const prisma = createPrismaClient()
 
 async function main() {
   const email = process.env.TARGET_DEVELOPER_EMAIL?.toLowerCase().trim()

@@ -1,30 +1,21 @@
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 
-// Singleton pattern pour Prisma
+// Prisma 7 : connexion via l'adaptateur PostgreSQL (pool `pg`). Un seul client
+// pour toute l'API — chaque client ouvre sa propre réserve de connexions.
+export function createPrismaClient(): PrismaClient {
+  return new PrismaClient({
+    adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+    log: process.env.NODE_ENV === "development"
+      ? [{ emit: "stdout", level: "error" }, { emit: "stdout", level: "warn" }]
+      : [{ emit: "stdout", level: "error" }],
+  });
+}
+
 let prisma: PrismaClient | undefined;
 
 export function getPrisma(): PrismaClient {
-  if (!prisma) {
-    prisma = new PrismaClient({
-      log:
-        process.env.NODE_ENV === "development"
-          ? [
-              { emit: "event", level: "query" },
-              { emit: "stdout", level: "error" },
-              { emit: "stdout", level: "warn" },
-            ]
-          : [{ emit: "stdout", level: "error" }],
-    });
-
-    // Log queries in development
-    if (process.env.NODE_ENV === "development") {
-      // prisma.$on('query', (e) => {
-      //   console.log(`Query: ${e.query}`)
-      //   console.log(`Params: ${e.params}`)
-      //   console.log(`Duration: ${e.duration}ms`)
-      // })
-    }
-  }
+  if (!prisma) prisma = createPrismaClient();
   return prisma;
 }
 

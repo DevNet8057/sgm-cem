@@ -1,12 +1,12 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { PrismaClient } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
+import { getPrisma } from '../lib/prisma'
 
 const router = Router()
-const prisma = new PrismaClient()
+const prisma = getPrisma()
 
 const createSchema = z.object({
   titre: z.string().min(3).max(160),

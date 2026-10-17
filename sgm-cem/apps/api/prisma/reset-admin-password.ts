@@ -1,11 +1,11 @@
-import { PrismaClient } from '@prisma/client'
 import { generateTemporaryPassword, hashPassword } from '../src/lib/password'
+import { createPrismaClient } from '../src/lib/prisma'
 
 // Réinitialisation de secours d'un compte (ADMIN perdu, etc.) depuis le serveur :
 //   TARGET_EMAIL=admin@exemple.cm pnpm exec ts-node prisma/reset-admin-password.ts
 // Un mot de passe temporaire aléatoire est affiché une seule fois ; il doit être
 // changé à la connexion suivante et toutes les sessions du compte sont fermées.
-const prisma = new PrismaClient()
+const prisma = createPrismaClient()
 
 async function main() {
   const email = process.env.TARGET_EMAIL?.toLowerCase().trim()

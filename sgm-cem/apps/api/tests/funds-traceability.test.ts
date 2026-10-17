@@ -84,11 +84,11 @@ describe('2. Dépôt banque — la référence de bordereau est une preuve consu
 
 describe('3. Remise collecteur → trésorier : PENDING tant que non validée par le récepteur', () => {
   it('le statut par défaut d\'un FundsTransfer est PENDING_APPROVAL (schéma)', async () => {
-    // Vérifié structurellement : la valeur par défaut Prisma
-    const dmmf = (prisma as unknown as { _runtimeDataModel: { models: Record<string, { fields: Array<{ name: string; default?: { name?: string } | string }> }> } })._runtimeDataModel
-    const statusField = dmmf.models.FundsTransfer.fields.find(f => f.name === 'status')
-    const def = typeof statusField?.default === 'object' ? undefined : statusField?.default
-    expect(def).toBe('PENDING_APPROVAL')
+    // Vérifié sur la base elle-même : valeur par défaut de la colonne
+    const rows = await prisma.$queryRaw<Array<{ column_default: string | null }>>`
+      SELECT column_default FROM information_schema.columns
+      WHERE table_name = 'funds_transfers' AND column_name = 'status'`
+    expect(rows[0]?.column_default).toMatch(/^'PENDING_APPROVAL'/)
   })
 
   it('seul le RÉCEPTEUR peut confirmer (RB-23) — un tiers reçoit 403', async () => {

@@ -1,13 +1,14 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { Prisma, PrismaClient } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { getVapidPublicKey, sendPushToUser } from '../services/push.service'
+import { getPrisma } from '../lib/prisma'
 
 const router = Router()
-const prisma = new PrismaClient()
+const prisma = getPrisma()
 
 // ── WEB PUSH — abonnement navigateur ───────────────────────────────────
 

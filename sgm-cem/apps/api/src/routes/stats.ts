@@ -1,11 +1,11 @@
 import { Router } from 'express'
-import { PrismaClient } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { generateFinancialReportPdf } from '../services/financial-report'
+import { getPrisma } from '../lib/prisma'
 
 const router = Router()
-const prisma = new PrismaClient()
+const prisma = getPrisma()
 
 export async function computeDashboardStats(requestedYear?: number, requestedMonth?: number) {
   const now = new Date()

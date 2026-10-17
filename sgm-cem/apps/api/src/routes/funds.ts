@@ -1,16 +1,17 @@
 import { getConfig } from '../services/config.service'
 import { Router } from 'express'
 import { z } from 'zod'
-import { PrismaClient, FundsTransferStatus } from '@prisma/client'
+import { FundsTransferStatus } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { formatAmount } from '../lib/utils'
 import { generateBorderauPdf, generateAndStoreBorderau } from '../services/borderau'
 import { getFileStream, getManagedStorageKey } from '../services/storage'
+import { getPrisma } from '../lib/prisma'
 
 const router = Router()
-const prisma = new PrismaClient()
+const prisma = getPrisma()
 
 const initiateTransferSchema = z.object({
   receiverId: z.string().min(1),

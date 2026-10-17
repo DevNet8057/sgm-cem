@@ -1,11 +1,12 @@
 import { Router } from 'express'
-import { PrismaClient, type Prisma, AuditAction } from '@prisma/client'
+import { type Prisma, AuditAction } from '@prisma/client'
 import { z } from 'zod'
 import { authenticate } from '../middleware/auth'
 import { ROLE_LEVELS } from '../middleware/rbac'
+import { getPrisma } from '../lib/prisma'
 
 const router = Router()
-const prisma = new PrismaClient()
+const prisma = getPrisma()
 
 // Entités « financières » visibles par la chaîne de supervision
 // (TRESORIER, RESPONSABLE, ADJOINT_RESPONSABLE) en plus de leur propre activité.

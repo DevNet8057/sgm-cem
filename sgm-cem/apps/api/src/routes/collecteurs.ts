@@ -1,11 +1,11 @@
 import { Router } from 'express'
-import { PrismaClient } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
+import { getPrisma } from '../lib/prisma'
 
 const router = Router()
-const prisma = new PrismaClient()
+const prisma = getPrisma()
 
 router.get('/', authenticate, requireLevel(2), async (req, res) => {
   const settings = await prisma.systemSettings.findUnique({ where: { id: 'singleton' } })

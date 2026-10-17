@@ -12,9 +12,10 @@ import { sendSMS, sendWhatsApp } from '../services/notification'
 import { getConfig } from '../services/config.service'
 import { audit } from '../services/audit.service'
 import { closeActivitySessionForLogout } from '../services/activity-write.service'
+import { getPrisma } from '../lib/prisma'
 
 const router = Router()
-const prisma = new PrismaClient()
+const prisma = getPrisma()
 
 // Client Google reconstruit si le Client ID change depuis le panneau
 // développeur (lecture au moment de l'appel, pas au chargement du module).

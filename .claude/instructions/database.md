@@ -1,4 +1,4 @@
-# Conventions base de données — PostgreSQL 15 + Prisma 5 (SGM-CEM)
+# Conventions base de données — PostgreSQL 15 + Prisma 7 (SGM-CEM)
 
 À lire avant tout changement de `apps/api/prisma/schema.prisma` ou des seeds.
 
@@ -11,6 +11,15 @@ une suppression, puis `migrate resolve --applied 0_baseline`). Conséquence : to
 nouvelle migration DDL s'écrit **idempotente** (`ADD COLUMN IF NOT EXISTS`,
 `CREATE [UNIQUE] INDEX IF NOT EXISTS`) car une base adoptée a déjà le schéma courant.
 La CI échoue si `schema.prisma` et les migrations divergent.
+
+## Prisma 7 (depuis le 17/10/2026)
+- L'URL de connexion est dans **`apps/api/prisma.config.ts`** (plus dans `schema.prisma`) ;
+  `prisma migrate dev` a besoin de `SHADOW_DATABASE_URL` (base jetable).
+- Tout client passe par **`getPrisma()`** (`src/lib/prisma.ts`, adaptateur `@prisma/adapter-pg`) ;
+  scripts : `createPrismaClient()`. Jamais `new PrismaClient()` ailleurs : chaque client ouvre
+  sa propre réserve de connexions PostgreSQL.
+- `migrate diff` : `--from-config-datasource` / `--to-schema prisma/schema.prisma`
+  (`--from-url` et `--to-schema-datamodel` n'existent plus).
 
 ## Workflow d'un changement de schéma
 1. Modifier `schema.prisma` — changements **additifs** de préférence (colonne nullable, nouvelle table).

@@ -7,15 +7,16 @@
 import crypto from 'crypto'
 import { Router } from 'express'
 import { z } from 'zod'
-import { PrismaClient, Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireRole, requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { generatePublicSlug } from '../services/collecte.service'
 import { notifyPublicCollecteCreated, notifyPublicCollecteUrgencyChanged } from '../services/notification'
+import { getPrisma } from '../lib/prisma'
 
 const router = Router()
-const prisma = new PrismaClient()
+const prisma = getPrisma()
 
 const champPersonnaliseSchema = z.object({
   key: z.string().regex(/^[a-z][a-zA-Z0-9_]{0,29}$/, 'Clé de champ invalide'),

@@ -1,13 +1,9 @@
-import { PrismaClient } from '@prisma/client'
 import { storeFile } from './storage'
 import { getLogoDataUri, formatXAF, formatDate, formatDateTime, escapeHtml as e } from './pdf-branding'
 import { renderPdf } from './pdf-render'
+import { getPrisma } from '../lib/prisma'
 
-const prisma = new PrismaClient()
-
-function getPrisma(): PrismaClient {
-  return prisma
-}
+const prisma = getPrisma()
 
 const MODE_LABELS: Record<string, string> = {
   ESPECES: 'Espèces', MTN_MOMO: 'MTN MoMo', ORANGE_MONEY: 'Orange Money',
@@ -202,7 +198,6 @@ export async function generateReceiptPDF(contributionId: string): Promise<string
     const key = `receipts/${contributionId.substring(0, 8)}/${contributionId}.pdf`
     const { url } = await storeFile(key, pdf, 'application/pdf')
 
-    const prisma = getPrisma()
     await prisma.contribution.update({
       where: { id: contributionId },
       data: { receiptUrl: url, receiptSentAt: new Date() },

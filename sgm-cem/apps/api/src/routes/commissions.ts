@@ -1,15 +1,15 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { PrismaClient } from '@prisma/client'
 import multer from 'multer'
 import path from 'path'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { storeFile, getFileStream, deleteStoredFile, storageMode } from '../services/storage'
+import { getPrisma } from '../lib/prisma'
 
 const router = Router()
-const prisma = new PrismaClient()
+const prisma = getPrisma()
 
 const ALLOWED_MIME = [
   'application/pdf',

@@ -1,14 +1,14 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { PrismaClient } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireLevel, requireRole } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { generateTemporaryPassword, hashPassword } from '../lib/password'
 import { forgetUserState, revokeUserSessions } from '../lib/session'
+import { getPrisma } from '../lib/prisma'
 
 const router = Router()
-const prisma = new PrismaClient()
+const prisma = getPrisma()
 
 // Hiérarchie DEVELOPER (niveau 6) > ADMIN (niveau 5) : un ADMIN ne peut pas
 // modifier/désactiver/réinitialiser un compte DEVELOPER — sinon il pourrait

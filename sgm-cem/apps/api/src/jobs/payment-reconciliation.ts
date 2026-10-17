@@ -1,11 +1,11 @@
 import cron from 'node-cron'
-import { PrismaClient } from '@prisma/client'
 import { alertTresoriers } from '../services/notification'
 import { getConfigNumber } from '../services/config.service'
 import { CONTRIBUTION_SYNC_SELECT, syncPaymentContributionStatus } from '../services/payment-status.service'
 import { reportStaleUncertainAttempts } from '../services/payment-attempt.service'
+import { getPrisma } from '../lib/prisma'
 
-const prisma = new PrismaClient()
+const prisma = getPrisma()
 
 const STALE_AFTER_MS = 15 * 60 * 1000 // 15 minutes
 // Une transaction bloquée n'est signalée qu'une fois par processus (le job tourne toutes les 10 min)

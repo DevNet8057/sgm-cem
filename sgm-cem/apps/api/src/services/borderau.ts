@@ -1,9 +1,9 @@
 import { renderPdf } from './pdf-render'
-import { PrismaClient } from '@prisma/client'
 import { storeFile } from './storage'
 import { formatXAF, formatDate, formatDateTime, PDF_BASE_STYLES, renderDocHeader, renderDocFooter, escapeHtml as e } from './pdf-branding'
+import { getPrisma } from '../lib/prisma'
 
-const prisma = new PrismaClient()
+const prisma = getPrisma()
 
 const TRANSFER_TYPE_LABELS: Record<string, string> = {
   ESPECES_EN_MAIN: 'Remise en main propre (espèces)',

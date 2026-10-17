@@ -1,14 +1,14 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import { PrismaClient } from '@prisma/client'
 import { hashPassword } from '../lib/password'
 import { forgetUserState, revokeUserSessions } from '../lib/session'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
+import { getPrisma } from '../lib/prisma'
 
 const router = Router()
-const prisma = new PrismaClient()
+const prisma = getPrisma()
 
 // ─── Schémas ─────────────────────────────────────────────────────────
 const createSchema = z.object({

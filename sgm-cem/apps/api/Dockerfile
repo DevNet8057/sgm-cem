@@ -18,7 +18,7 @@ LABEL org.opencontainers.image.source="https://github.com/DevNet8057/sgm-cem" \
 
 # ── Étape 1 : apt-get pour Puppeteer / Chromium + Prisma ───────────────
 # Puppeteer a besoin de bibliothèques système pour lancer Chromium.
-# openssl : requis par les moteurs Prisma sur Debian.
+# openssl : TLS vers PostgreSQL (Prisma 7 n'embarque plus de moteur natif).
 # postgresql-client : pg_isready dans l'entrypoint.
 RUN apt-get -o Acquire::Check-Valid-Until=false update && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -72,6 +72,7 @@ RUN corepack enable pnpm && pnpm install --filter api... --frozen-lockfile
 COPY apps/api/src ./apps/api/src
 COPY apps/api/prisma ./apps/api/prisma
 COPY apps/api/tsconfig.json ./apps/api/tsconfig.json
+COPY apps/api/prisma.config.ts ./apps/api/prisma.config.ts
 
 # ── Étape 7 : Générer le client Prisma (crée les types TypeScript) ─────
 RUN cd /app/apps/api && pnpm exec prisma generate

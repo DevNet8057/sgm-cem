@@ -14,9 +14,10 @@
 // (option « élever ton compte personnel » du doc §1).
 // ──────────────────────────────────────────────────────────────────────
 import 'dotenv/config'
-import { PrismaClient, ConfigCategory } from '@prisma/client'
+import { ConfigCategory } from '@prisma/client'
+import { createPrismaClient } from '../src/lib/prisma'
 
-const prisma = new PrismaClient()
+const prisma = createPrismaClient()
 
 interface SeedConf {
   key: string
