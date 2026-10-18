@@ -267,7 +267,7 @@ export async function notifyCollecteurNewContribution(p: {
   memberName: string; montant: number; rubriqueCode: string; contributionId: string
 }): Promise<void> {
   const msg = `CEM Melen - Nouveau paiement a confirmer\nMembre: ${p.memberName}\nMontant: ${p.montant.toLocaleString('fr-FR')} FCFA\nRubrique: ${p.rubriqueCode}\nConnectez-vous sur SGM-CEM pour valider.`
-  await notifyInApp(p.collecteurId, 'Paiement a confirmer',
+  await notifyInApp(p.collecteurId, 'Paiement à confirmer',
     `${p.memberName} - ${p.montant.toLocaleString('fr-FR')} FCFA (${p.rubriqueCode})`, 'CONTRIBUTION',
     undefined, { view: 'validations', id: p.contributionId })
   if (p.collecteurPhone) {
@@ -281,8 +281,8 @@ export async function notifyMemberConfirmed(p: {
   memberName: string; montant: number; rubriqueCode: string; receiptUrl?: string | null; contributionId?: string
 }): Promise<void> {
   const msg = `CEM Melen - Paiement confirme\nMembre: ${p.memberName}\nMontant: ${p.montant.toLocaleString('fr-FR')} FCFA\nRubrique: ${p.rubriqueCode}\nMerci pour votre contribution !`
-  await notifyInApp(p.userId, 'Paiement confirme',
-    `Votre contribution de ${p.montant.toLocaleString('fr-FR')} FCFA (${p.rubriqueCode}) a ete confirmee.`, 'CONTRIBUTION',
+  await notifyInApp(p.userId, 'Paiement confirmé',
+    `Votre contribution de ${p.montant.toLocaleString('fr-FR')} FCFA (${p.rubriqueCode}) a été confirmée.`, 'CONTRIBUTION',
     undefined, { view: 'mes-contributions', id: p.contributionId })
 
   // WhatsApp avec document PDF si disponible

@@ -9,6 +9,7 @@ import { generateReceiptPDF, generateReceiptPdf } from '../services/receipt'
 import { getFileStream } from '../services/storage'
 import { getConfig } from '../services/config.service'
 import { notifyCollecteurNewContribution, notifyInApp } from '../services/notification'
+import { notifyPayerDecision } from '../services/payer-notice.service'
 import { calculateRemainingBalance } from '@sgm-cem/shared'
 import { getPrisma } from '../lib/prisma'
 import { refundsByRubrique, refundsTotal } from '../services/refund.service'
@@ -453,6 +454,7 @@ router.post('/', authenticate, requireLevel(2), async (req, res) => {
   let receiptUrl: string | null = null
   if (isDirectCash) {
     receiptUrl = await generateReceiptPDF(contribution.id)
+    void notifyPayerDecision(contribution.id, 'CONFIRME')
   }
 
   await prisma.auditLog.create({
@@ -619,6 +621,7 @@ router.patch('/:id/confirm', authenticate, requireLevel(2), async (req, res) => 
   })
 
   const receiptUrl = await generateReceiptPDF(updated.id)
+  void notifyPayerDecision(updated.id, 'CONFIRME')
   res.json({ success: true, data: { ...updated, receiptUrl } })
 })
 
@@ -649,6 +652,7 @@ router.patch('/:id/refuse', authenticate, requireLevel(2), async (req, res) => {
     },
   })
 
+  void notifyPayerDecision(id, 'REFUSE', motif)
   res.json({ success: true, data: updated })
 })
 
@@ -745,6 +749,7 @@ router.patch('/:id/litige', authenticate, requireLevel(3), async (req, res) => {
     }
   })
 
+  void notifyPayerDecision(updated.id, 'LITIGE')
   res.json({ success: true, data: updated })
 })
 
@@ -797,6 +802,7 @@ router.patch('/:id/resolve-litige', authenticate, requireLevel(3), async (req, r
     }
   })
 
+  void notifyPayerDecision(updated.id, resolution === 'CONFIRME' ? 'CONFIRME' : 'LITIGE_ANNULE', note)
   res.json({ success: true, data: updated })
 })
 
