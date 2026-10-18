@@ -177,6 +177,20 @@ enum PrestationStatut {
   CLOTURE
 }
 
+// File des envois externes (WhatsApp/SMS, e-mail) : état et nouveaux essais
+enum EnvoiCanal {
+  MESSAGE // WhatsApp, puis SMS en secours
+  EMAIL
+}
+
+enum EnvoiStatut {
+  EN_ATTENTE // nouvel essai programmé
+  EN_COURS
+  ENVOYE
+  ECHEC // essais épuisés ou délai dépassé
+  NON_CONFIGURE // aucun canal réglé : pas de nouvel essai
+}
+
 enum NotificationStatut {
   PENDING
   SENT
@@ -1029,4 +1043,25 @@ model ClotureMensuelle {
 
   @@unique([annee, mois])
   @@map("clotures_mensuelles")
+}
+
+model Envoi {
+  id             String      @id @default(cuid())
+  canal          EnvoiCanal
+  objet          String // code de connexion, paiement confirmé, relevé…
+  destinataire   String // téléphone ou e-mail (purgé avec les journaux d'envoi, 1 an)
+  payload        Json
+  statut         EnvoiStatut @default(EN_ATTENTE)
+  essais         Int         @default(0)
+  voie           String? // WHATSAPP, SMS ou EMAIL : canal qui a abouti
+  derniereErreur String?
+  prochainEssai  DateTime?
+  expireLe       DateTime? // au-delà, plus de nouvel essai (code de connexion)
+  envoyeLe       DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([statut, prochainEssai])
+  @@index([createdAt])
+  @@map("envois")
 }

@@ -73,6 +73,7 @@ export function configCatalogue(API_URL = process.env.API_URL ?? 'http://localho
     { key: 'SMTP_HOST', category: 'INTEGRATION_KEYS', label: 'SMTP — Hôte' },
     { key: 'SMTP_PORT', category: 'INTEGRATION_KEYS', label: 'SMTP — Port' },
     { key: 'SMTP_SECURE', category: 'INTEGRATION_KEYS', label: 'SMTP — TLS implicite (true/false)' },
+    { key: 'SMTP_REQUIRE_TLS', category: 'INTEGRATION_KEYS', label: 'SMTP — STARTTLS exigé (true/false)', description: 'true (défaut) : sans TLS implicite, la connexion doit passer en STARTTLS ; false seulement pour un relais local de confiance.', defaultValue: 'true' },
     { key: 'SMTP_USER', category: 'INTEGRATION_KEYS', label: 'SMTP — Utilisateur' },
     { key: 'SMTP_PASS', category: 'INTEGRATION_KEYS', label: 'SMTP — Mot de passe', isSecret: true },
     { key: 'SMTP_FROM', category: 'INTEGRATION_KEYS', label: 'SMTP — Adresse d\'envoi' },

@@ -17,6 +17,7 @@ const months = (key: string, fallback: number) => Math.max(1, Math.trunc(getConf
 
 export interface RetentionResult {
   notifications: number
+  envois: number
   auditIp: number
   otpCodes: number
   sessions: number
@@ -31,8 +32,10 @@ export async function runDataRetention(now = new Date()): Promise<RetentionResul
   // Codes et sessions expirés : gardés un jour pour l'analyse d'un incident récent
   const expiredBefore = new Date(now.getTime() - DAY_MS)
 
-  const [notifications, auditIp, otpCodes, sessions, abandoned, converted] = await prisma.$transaction([
+  const [notifications, envois, auditIp, otpCodes, sessions, abandoned, converted] = await prisma.$transaction([
     prisma.notification.deleteMany({ where: { createdAt: { lt: notificationsBefore } } }),
+    // Journaux d'envoi (WhatsApp, SMS, e-mail) : même durée que les notifications
+    prisma.envoi.deleteMany({ where: { createdAt: { lt: notificationsBefore } } }),
     // Journal d'audit conservé (opérations financières : 10 ans), adresse IP et navigateur effacés à 1 an
     prisma.auditLog.updateMany({
       where: { createdAt: { lt: auditIpBefore }, OR: [{ ipAddress: { not: null } }, { userAgent: { not: null } }] },
@@ -50,7 +53,7 @@ export async function runDataRetention(now = new Date()): Promise<RetentionResul
   ])
 
   const donateurs = await anonymizeOldDonors(donateursBefore)
-  return { notifications: notifications.count, auditIp: auditIp.count, otpCodes: otpCodes.count, sessions: sessions.count, drafts: abandoned.count + converted.count, donateurs }
+  return { notifications: notifications.count, envois: envois.count, auditIp: auditIp.count, otpCodes: otpCodes.count, sessions: sessions.count, drafts: abandoned.count + converted.count, donateurs }
 }
 
 /**

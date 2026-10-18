@@ -1,7 +1,7 @@
 // Reste à faire n° 3 : WhatsApp par l'API Cloud de 360dialog, modèles approuvés
 // par Meta (obligatoires hors fenêtre de 24 h), délai d'expiration.
 // Le fournisseur est simulé : aucun message réel n'est envoyé.
-import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest'
 import axios from 'axios'
 import { sendWhatsApp, sendMonthlyStatement, templateMessage } from '../src/services/notification'
 
@@ -11,6 +11,11 @@ const posted = () => (vi.mocked(axios.post).mock.calls as unknown as Call[])
 beforeAll(() => {
   process.env.DIALOG360_API_KEY = 'cle-de-test'
   process.env.WHATSAPP_TEMPLATE_LANG = 'fr'
+})
+
+afterAll(() => {
+  delete process.env.DIALOG360_API_KEY
+  delete process.env.WHATSAPP_TEMPLATE_LANG
 })
 
 afterEach(() => {

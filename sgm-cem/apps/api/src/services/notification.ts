@@ -1,6 +1,6 @@
 import axios from 'axios'
 import twilio from 'twilio'
-import { sendEmail, sendEmailWithPdfAttachment, textToHtml } from './email'
+import { deliverEmail, deliverMessage } from './outbox.service'
 import { getConfig, getConfigBool } from './config.service'
 import { sendPushToUser } from './push.service'
 import { getPrisma } from '../lib/prisma'
@@ -271,8 +271,11 @@ export async function notifyCollecteurNewContribution(p: {
     `${p.memberName} - ${p.montant.toLocaleString('fr-FR')} FCFA (${p.rubriqueCode})`, 'CONTRIBUTION',
     undefined, { view: 'validations', id: p.contributionId })
   if (p.collecteurPhone) {
-    const ok = await sendWhatsApp(p.collecteurPhone, msg, { configKey: 'WHATSAPP_TEMPLATE_A_CONFIRMER', params: [p.memberName, `${p.montant.toLocaleString('fr-FR')} FCFA`, p.rubriqueCode] })
-    if (!ok) await sendSMS(p.collecteurPhone, msg.substring(0, 160))
+    await deliverMessage('paiement-a-confirmer', p.collecteurPhone, {
+      text: msg,
+      smsText: `CEM Melen - Paiement a confirmer : ${p.memberName}, ${p.montant.toLocaleString('fr-FR')} FCFA (${p.rubriqueCode}). Validez dans SGM-CEM.`,
+      template: { configKey: 'WHATSAPP_TEMPLATE_A_CONFIRMER', params: [p.memberName, `${p.montant.toLocaleString('fr-FR')} FCFA`, p.rubriqueCode] },
+    })
   }
 }
 
@@ -285,42 +288,21 @@ export async function notifyMemberConfirmed(p: {
     `Votre contribution de ${p.montant.toLocaleString('fr-FR')} FCFA (${p.rubriqueCode}) a été confirmée.`, 'CONTRIBUTION',
     undefined, { view: 'mes-contributions', id: p.contributionId })
 
-  // WhatsApp avec document PDF si disponible
+  // WhatsApp avec le reçu en document si l'envoi automatique est activé, sinon message
+  // (modèle « paiement confirmé ») ou SMS ; e-mail avec le reçu PDF. Nouveaux essais par la file.
   const confirmedTemplate: WhatsAppTemplate = { configKey: 'WHATSAPP_TEMPLATE_PAIEMENT_CONFIRME', params: [p.memberName, `${p.montant.toLocaleString('fr-FR')} FCFA`, p.rubriqueCode] }
   if (p.memberPhone) {
-    if (p.receiptUrl) {
-      const ok = await sendWhatsAppDocument(p.memberPhone, p.receiptUrl, msg)
-      if (!ok) await sendWhatsApp(p.memberPhone, msg, confirmedTemplate)
-    } else {
-      const ok = await sendWhatsApp(p.memberPhone, msg, confirmedTemplate)
-      if (!ok) await sendSMS(p.memberPhone, msg.substring(0, 160))
+    const documentSent = p.receiptUrl ? await sendWhatsAppDocument(p.memberPhone, p.receiptUrl, msg) : false
+    if (!documentSent) {
+      await deliverMessage('paiement-confirme', p.memberPhone, {
+        text: msg,
+        smsText: `CEM Melen - Paiement confirme : ${p.montant.toLocaleString('fr-FR')} FCFA (${p.rubriqueCode}). Merci !`,
+        template: confirmedTemplate,
+      })
     }
   }
-
-  // Email avec PDF si disponible
   if (p.memberEmail) {
-    try {
-      let pdfBuffer: Buffer | undefined
-      let filename = 'recu-cem.pdf'
-
-      if (p.contributionId) {
-        const { generateReceiptPdf } = await import('./receipt')
-        pdfBuffer = await generateReceiptPdf(p.contributionId)
-      }
-
-      if (pdfBuffer) {
-        const ok = await sendEmailWithPdfAttachment({
-          to: p.memberEmail,
-          subject: `Recu de contribution - ${p.rubriqueCode}`,
-          pdfBuffer,
-          filename,
-          body: msg,
-        })
-        if (!ok) await sendEmail({ to: p.memberEmail, subject: `Recu de contribution - ${p.rubriqueCode}`, html: textToHtml(msg) })
-      } else {
-        await sendEmail({ to: p.memberEmail, subject: `Recu de contribution - ${p.rubriqueCode}`, html: textToHtml(msg) })
-      }
-    } catch (e) { console.error('[Email recu]', e) }
+    await deliverEmail('recu', p.memberEmail, { subject: `Reçu de contribution - ${p.rubriqueCode}`, text: msg, receiptOf: p.contributionId })
   }
 }
 
@@ -331,7 +313,7 @@ export async function notifyMobilePaymentInitiated(p: {
   const msg = `CEM Melen - Demande ${label}\nValidez le paiement de ${p.montant.toLocaleString('fr-FR')} FCFA sur votre telephone.\nEntrez votre code PIN ${label} pour confirmer.`
   await notifyInApp(p.userId, `Demande ${label} envoyee`,
     `Validez ${p.montant.toLocaleString('fr-FR')} FCFA sur votre ${label}.`, 'CONTRIBUTION')
-  await sendWhatsApp(p.phone, msg, { configKey: 'WHATSAPP_TEMPLATE_PAIEMENT_INITIE', params: [label, `${p.montant.toLocaleString('fr-FR')} FCFA`] })
+  await deliverMessage('paiement-initie', p.phone, { text: msg, template: { configKey: 'WHATSAPP_TEMPLATE_PAIEMENT_INITIE', params: [label, `${p.montant.toLocaleString('fr-FR')} FCFA`] } })
 }
 
 export async function sendMonthlyStatement(p: {
@@ -345,7 +327,10 @@ export async function sendMonthlyStatement(p: {
   if (!p.phone) return false
   const confirmed = `${p.totalConfirmed.toLocaleString('fr-FR')} FCFA`
   const pending = `${p.totalPending.toLocaleString('fr-FR')} FCFA`
-  if (await sendWhatsApp(p.phone, msg, { configKey: 'WHATSAPP_TEMPLATE_RELEVE', params: [p.memberName, p.month, confirmed, pending] })) return true
   // Le détail ne tient pas dans un SMS : résumé seulement (le détail reste dans l'application)
-  return sendSMS(p.phone, `CEM Melen - Releve ${p.month} : confirme ${confirmed}, en attente ${pending}. Detail dans SGM-CEM.`)
+  return deliverMessage('releve', p.phone, {
+    text: msg,
+    smsText: `CEM Melen - Releve ${p.month} : confirme ${confirmed}, en attente ${pending}. Detail dans SGM-CEM.`,
+    template: { configKey: 'WHATSAPP_TEMPLATE_RELEVE', params: [p.memberName, p.month, confirmed, pending] },
+  })
 }

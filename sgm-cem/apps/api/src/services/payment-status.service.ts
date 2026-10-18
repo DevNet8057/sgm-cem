@@ -5,7 +5,8 @@ import { getYeliiTransaction } from './yelii.service'
 import { verifyCinetpayTransaction } from './cinetpay.service'
 import { generateReceiptPDF } from './receipt'
 import { broadcastToAll } from '../lib/socket'
-import { sendWhatsApp, sendWhatsAppDocument, alertTresoriers, notifyMemberConfirmed } from './notification'
+import { sendWhatsAppDocument, alertTresoriers, notifyMemberConfirmed } from './notification'
+import { deliverMessage } from './outbox.service'
 import { audit } from './audit.service'
 
 /**
@@ -411,9 +412,9 @@ async function notifyContributeur(
     const msg = `CEM Melen - Paiement confirmé\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${rubriqueLabel}\nMerci pour votre contribution !`
     let sent = false
     if (receiptUrl) sent = await sendWhatsAppDocument(phone, receiptUrl, msg)
-    if (!sent) await sendWhatsApp(phone, msg, { configKey: 'WHATSAPP_TEMPLATE_PAIEMENT_CONFIRME', params: [memberName, `${montantStr} FCFA`, rubriqueLabel] })
+    if (!sent) await deliverMessage('paiement-confirme', phone, { text: msg, template: { configKey: 'WHATSAPP_TEMPLATE_PAIEMENT_CONFIRME', params: [memberName, `${montantStr} FCFA`, rubriqueLabel] } })
   } else {
     const msg = `CEM Melen - Paiement échoué\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${rubriqueLabel}\nRéessayez ou contactez un collecteur.`
-    await sendWhatsApp(phone, msg, { configKey: 'WHATSAPP_TEMPLATE_PAIEMENT_ECHOUE', params: [memberName, `${montantStr} FCFA`, rubriqueLabel] })
+    await deliverMessage('paiement-echoue', phone, { text: msg, template: { configKey: 'WHATSAPP_TEMPLATE_PAIEMENT_ECHOUE', params: [memberName, `${montantStr} FCFA`, rubriqueLabel] } })
   }
 }

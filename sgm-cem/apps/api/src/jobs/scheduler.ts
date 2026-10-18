@@ -16,6 +16,7 @@ import { runDailyReminders, runTransferReminders } from '../services/reminders.s
 import { runInactiveMembersReport } from '../services/inactive-members.service'
 import { runGedRetention } from '../services/ged-retention.service'
 import { runDataRetention } from '../services/data-retention.service'
+import { runOutboxRetries } from '../services/outbox.service'
 
 const QUEUE = 'sgm-maintenance'
 const TZ = 'Africa/Douala'
@@ -37,6 +38,7 @@ async function reconciliationTick(ctx: JobContext): Promise<unknown> {
 
 export const SCHEDULED_JOBS: ScheduledJob[] = [
   { name: 'paiements-reconciliation', label: 'Réconciliation des paiements', repeat: { every: 60_000 }, run: reconciliationTick },
+  { name: 'envois-relance', label: 'Envois : nouveaux essais (WhatsApp, SMS, e-mail)', repeat: { every: 60_000 }, run: () => runOutboxRetries() },
   { name: 'grand-livre-controle', label: 'Contrôle quotidien du grand livre', repeat: { pattern: '10 6 * * *', tz: TZ }, run: () => runLedgerCheck() },
   { name: 'releves-mensuels', label: 'Relevés mensuels', repeat: { pattern: '0 8 1 * *', tz: TZ }, run: () => runMonthlyStatements() },
   { name: 'relances-quotidiennes', label: 'Relances : paiements à confirmer, fonds à remettre', repeat: { pattern: '0 9 * * *', tz: TZ }, run: () => runDailyReminders() },

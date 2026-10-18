@@ -12,6 +12,7 @@ const RUN = `ggl-${Date.now()}`
 const EMAIL = `${RUN}@test.local`
 let userId = ''
 let csrf = { cookie: '', token: '' }
+const googleClientIdBefore = process.env.GOOGLE_CLIENT_ID
 
 function fakeGoogle(payload: Record<string, unknown>) {
   vi.spyOn(OAuth2Client.prototype, 'verifyIdToken').mockResolvedValue({ getPayload: () => payload } as unknown as LoginTicket as never)
@@ -28,7 +29,10 @@ beforeAll(async () => {
   csrf = { cookie: (res.headers['set-cookie'] as unknown as string[]).find(c => c.startsWith('csrf_token='))!.split(';')[0], token: res.body.token }
 })
 
-afterAll(() => { vi.restoreAllMocks() })
+afterAll(() => {
+  vi.restoreAllMocks()
+  if (googleClientIdBefore === undefined) delete process.env.GOOGLE_CLIENT_ID
+})
 
 describe('POST /api/auth/google', () => {
   it('refuse une adresse non vérifiée par Google', async () => {

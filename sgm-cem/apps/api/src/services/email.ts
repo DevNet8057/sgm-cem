@@ -45,7 +45,12 @@ function getTransporter(): Transporter | null {
     host,
     port,
     secure,
+    // Sans TLS implicite (port 587) : STARTTLS exigé, jamais d'identifiants en clair
+    requireTLS: !secure && getConfig('SMTP_REQUIRE_TLS') !== 'false',
     auth: { user, pass },
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
   })
   transporterSignature = signature
 
@@ -72,7 +77,8 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
       attachments: options.attachments,
     })
 
-    console.log(`[Email] Envoye a ${options.to} : ${options.subject}`)
+    // Adresse du destinataire jamais écrite dans les journaux
+    console.log(`[Email] Envoyé : ${options.subject}`)
     return true
   } catch (e) {
     console.error('[Email]', e)

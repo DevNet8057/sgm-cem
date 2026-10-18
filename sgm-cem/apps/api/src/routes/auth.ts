@@ -8,7 +8,7 @@ import { authenticate } from '../middleware/auth'
 import { hashPassword, needsRehash, verifyPassword } from '../lib/password'
 import { generateOtpCode, hashOtpCode, OTP_MAX_PER_PHONE_PER_HOUR, OTP_TTL_MS, otpMatches, phoneVariants } from '../lib/otp'
 import { forgetUserState, openSession, refreshSession, revokeSessionByRefreshToken, revokeUserSessions, signAccessToken } from '../lib/session'
-import { sendSMS, sendWhatsApp } from '../services/notification'
+import { deliverMessage } from '../services/outbox.service'
 import { getConfig } from '../services/config.service'
 import { audit } from '../services/audit.service'
 import { closeActivitySessionForLogout } from '../services/activity-write.service'
@@ -203,8 +203,11 @@ router.post('/otp/request', otpLimiter, async (req, res) => {
 
   // Envoyer en priorité sur le numéro WhatsApp enregistré, fallback SMS
   const waTarget = user.whatsappPhone ?? user.phone ?? full
-  const waOk = await sendWhatsApp(waTarget, msg, { configKey: 'WHATSAPP_TEMPLATE_OTP', params: [code], otpCode: code })
-  if (!waOk && user.phone) await sendSMS(user.phone, `SGM-CEM - Code: ${code} - Valable 5 min`)
+  // Code de connexion : pas de nouvel essai au-delà de sa validité
+  await deliverMessage('code-connexion', waTarget, {
+    text: msg, smsText: `SGM-CEM - Code: ${code} - Valable 5 min`,
+    template: { configKey: 'WHATSAPP_TEMPLATE_OTP', params: [code], otpCode: code },
+  }, { expiresAt: new Date(Date.now() + OTP_TTL_MS) })
 
   // En développement, afficher le code dans les logs serveur si les services ne sont pas configurés
   if (process.env.NODE_ENV === 'development') {
