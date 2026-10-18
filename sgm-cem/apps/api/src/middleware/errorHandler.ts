@@ -74,6 +74,16 @@ export function errorHandler(
     return;
   }
 
+  // Valeur déjà utilisée (contrainte d'unicité Prisma P2002) : conflit, pas une panne
+  if ((err as { code?: string; name?: string }).code === "P2002" && (err as { name?: string }).name === "PrismaClientKnownRequestError") {
+    const target = JSON.stringify((err as { meta?: unknown }).meta ?? "");
+    const what = /phone/i.test(target) ? "Ce numéro de téléphone est déjà utilisé par un autre compte."
+      : /email/i.test(target) ? "Cette adresse email existe déjà."
+      : "Cette valeur est déjà utilisée.";
+    res.status(409).json({ success: false, error: { code: "DUPLICATE", message: what } });
+    return;
+  }
+
   // Erreur inattendue : journalisée avec l'identifiant de requête, transmise au suivi d'erreurs
   const requestId = (req as Request & { id?: string }).id
   logger.error({ err, requestId, method: req.method, path: req.path }, "Erreur inattendue")

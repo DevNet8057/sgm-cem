@@ -6,6 +6,7 @@ import { AppError } from '../middleware/errorHandler'
 import { generateTemporaryPassword, hashPassword } from '../lib/password'
 import { forgetUserState, revokeUserSessions } from '../lib/session'
 import { getPrisma } from '../lib/prisma'
+import { nextMatricule } from '../services/matricule.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -52,8 +53,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'DEVELOPER'), async (req, re
   const rawPassword = data.password ?? generateTemporaryPassword()
   const passwordHash = await hashPassword(rawPassword)
 
-  const count = await prisma.user.count()
-  const memberId = `CEM-${new Date().getFullYear()}-${String(count + 1).padStart(6, '0')}`
+  const memberId = await nextMatricule()
 
   const user = await prisma.user.create({
     data: {

@@ -7,6 +7,7 @@ import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { getPrisma } from '../lib/prisma'
 import { findInactiveMembers } from '../services/inactive-members.service'
+import { nextMatricule, nextMatricules } from '../services/matricule.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -25,6 +26,10 @@ const createSchema = z.object({
   nomConjoint:     z.string().optional(),
   coupleMembreId:  z.string().optional(),
   password:        z.string().min(8).max(128).optional(),
+  adresse:         z.string().max(300).optional(),
+  notes:           z.string().max(2000).optional(),
+  dateAdhesion:    z.string().datetime().optional(),
+  dateNaissance:   z.string().datetime().optional(),
 })
 
 const updateSchema = z.object({
@@ -49,19 +54,6 @@ const updateSchema = z.object({
 const importSchema = z.object({
   membres: z.array(createSchema.omit({ password: true, coupleMembreId: true })).min(1).max(500),
 })
-
-async function nextMemberId(): Promise<string> {
-  const count = await prisma.user.count()
-  return `CEM-${new Date().getFullYear()}-${String(count + 1).padStart(6, '0')}`
-}
-
-async function nextMemberIds(count: number): Promise<string[]> {
-  const start = await prisma.user.count()
-  const year  = new Date().getFullYear()
-  return Array.from({ length: count }, (_, i) =>
-    `CEM-${year}-${String(start + i + 1).padStart(6, '0')}`
-  )
-}
 
 // ─── Include helper ───────────────────────────────────────────────────
 const MEMBRE_INCLUDE = {
@@ -157,7 +149,7 @@ router.post('/', authenticate, requireLevel(3), async (req, res) => {
   const existing = await prisma.user.findUnique({ where: { email: data.email } })
   if (existing) throw new AppError('DUPLICATE', 'Cette adresse email existe déjà')
 
-  const memberId   = await nextMemberId()
+  const memberId   = await nextMatricule()
   const fullName   = `${data.firstName} ${data.lastName}`
   // Sans mot de passe fourni, le compte membre se connecte par code OTP (téléphone) :
   // aucun mot de passe commun n'est attribué ('disabled' ne correspond à aucun hash).
@@ -184,6 +176,9 @@ router.post('/', authenticate, requireLevel(3), async (req, res) => {
         categorie: data.categorie, groupe: data.groupe,
         statut: data.statut, profilFinancier: data.profilFinancier,
         phone: data.phone, email: data.email, profession: data.profession,
+        adresse: data.adresse, notes: data.notes,
+        ...(data.dateAdhesion && { dateAdhesion: new Date(data.dateAdhesion) }),
+        ...(data.dateNaissance && { dateNaissance: new Date(data.dateNaissance) }),
         nomConjoint: data.coupleMembreId ? undefined : data.nomConjoint,
         coupleId: data.coupleMembreId ?? undefined,
       },
@@ -338,7 +333,7 @@ router.post('/import', authenticate, requireLevel(3), async (req, res) => {
   const existing = await prisma.user.findMany({ where: { email: { in: emails } }, select: { email: true } })
   if (existing.length) throw new AppError('DUPLICATE', `Email déjà existant: ${existing[0].email}`)
 
-  const memberIds  = await nextMemberIds(membres.length)
+  const memberIds  = await nextMatricules(membres.length)
   // Membres importés : connexion par code OTP, aucun mot de passe commun
   const passwordHash = 'disabled'
 
@@ -361,6 +356,9 @@ router.post('/import', authenticate, requireLevel(3), async (req, res) => {
           categorie: item.categorie, groupe: item.groupe,
           statut: item.statut, profilFinancier: item.profilFinancier,
           phone: item.phone, email: item.email, profession: item.profession,
+          adresse: item.adresse, notes: item.notes,
+          ...(item.dateAdhesion && { dateAdhesion: new Date(item.dateAdhesion) }),
+          ...(item.dateNaissance && { dateNaissance: new Date(item.dateNaissance) }),
           nomConjoint: item.nomConjoint,
         },
         include: { user: { select: { fullName: true, email: true, role: true } } },
