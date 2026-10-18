@@ -98,8 +98,9 @@ describe('Panneau développeur — contrôle d\'accès strict', () => {
     const res = await request(app).get('/api/developer/config').set('Cookie', devCookie)
     expect(res.status).toBe(200)
     expect(Array.isArray(res.body.data)).toBe(true)
-    // Toutes les clés en base sont listées (le nombre dépend de l'environnement)
-    expect(res.body.data.length).toBe(await prisma.systemConfig.count())
+    // Toutes les clés en base sont listées (le nombre dépend de l'environnement),
+    // suivies des réglages du catalogue encore absents (isSet: false)
+    expect(res.body.data.filter((c: { isSet: boolean }) => c.isSet).length).toBe(await prisma.systemConfig.count())
   })
 })
 
@@ -112,7 +113,7 @@ describe('GET /api/developer/config — secrets masqués', () => {
     expect(yeliiKey.value).toBe(MASK)
     // Aucune valeur secrète en clair dans toute la réponse
     const secrets = res.body.data.filter((c: { isSecret: boolean }) => c.isSecret)
-    expect(secrets.every((c: { value: string }) => c.value === MASK)).toBe(true)
+    expect(secrets.every((c: { value: string; isSet: boolean }) => c.value === (c.isSet ? MASK : ''))).toBe(true)
   })
 
   it('JWT_SECRET / REFRESH_TOKEN_SECRET / DATABASE_URL ne sont PAS dans la liste', async () => {

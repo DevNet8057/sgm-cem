@@ -36,7 +36,7 @@ import { paymentsRouter } from './routes/payments'
 import { activityRouter } from './routes/activity'
 import { startScheduledJobs } from './jobs/scheduler'
 import { initSocketIO } from './lib/socket'
-import { loadConfigCache } from './services/config.service'
+import { loadConfigCache, startConfigRefresh } from './services/config.service'
 import { apiLimiter } from './middleware/rate-limit'
 import { randomUUID } from 'crypto'
 import pinoHttp from 'pino-http'
@@ -201,6 +201,7 @@ async function bootstrap(): Promise<void> {
   assertEncryptionKeyForProduction()
   await loadConfigCache()
   applyLogLevel(getConfig('LOG_LEVEL'))
+  startConfigRefresh()
   const server = http.createServer(app)
   initSocketIO(server)
   server.listen(Number(PORT), () => {

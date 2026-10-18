@@ -6,7 +6,7 @@ import './lib/zod-locale'
 import { logger, applyLogLevel } from './lib/logger'
 import { initErrorTracking } from './lib/error-tracking'
 import { assertEncryptionKeyForProduction } from './lib/secret-box'
-import { getConfig, loadConfigCache } from './services/config.service'
+import { getConfig, loadConfigCache, startConfigRefresh } from './services/config.service'
 import { startScheduledJobs } from './jobs/scheduler'
 import { disconnectPrisma } from './lib/prisma'
 
@@ -15,6 +15,7 @@ async function main(): Promise<void> {
   assertEncryptionKeyForProduction()
   await loadConfigCache()
   applyLogLevel(getConfig('LOG_LEVEL'))
+  startConfigRefresh()
   const scheduler = await startScheduledJobs()
   logger.info({ engine: scheduler.engine }, 'Worker SGM-CEM démarré')
 

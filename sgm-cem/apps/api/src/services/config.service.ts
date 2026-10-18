@@ -81,6 +81,39 @@ async function protectSecretHistory(secretKeys: string[]): Promise<void> {
   }
 }
 
+// Relecture périodique (API et worker sont des processus distincts) : un changement
+// fait dans le panneau, reçu par l'API, est vu par le worker au plus tard après un intervalle.
+const REFRESH_INTERVAL_MS = 30_000
+let refreshTimer: NodeJS.Timeout | null = null
+let lastSignature = ''
+
+async function configSignature(): Promise<string> {
+  const agg = await prisma.systemConfig.aggregate({ _count: true, _max: { updatedAt: true } })
+  return `${agg._count}|${agg._max.updatedAt?.toISOString() ?? ''}`
+}
+
+/** Recharge le cache si la table a changé depuis la dernière lecture. Renvoie true si rechargé. */
+export async function refreshConfigCacheIfChanged(): Promise<boolean> {
+  try {
+    const signature = await configSignature()
+    if (signature === lastSignature) return false
+    await loadConfigCache()
+    lastSignature = signature
+    return true
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, '[Config] Relecture impossible, cache conservé')
+    return false
+  }
+}
+
+/** Démarre la relecture périodique (appelée au démarrage de l'API et du worker). */
+export function startConfigRefresh(intervalMs = REFRESH_INTERVAL_MS): void {
+  if (refreshTimer) return
+  void configSignature().then(s => { lastSignature = s }).catch(() => undefined)
+  refreshTimer = setInterval(() => { void refreshConfigCacheIfChanged() }, intervalMs)
+  refreshTimer.unref()
+}
+
 export function isConfigCacheLoaded(): boolean {
   return cacheLoaded
 }

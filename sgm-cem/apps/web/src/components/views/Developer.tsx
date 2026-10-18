@@ -26,7 +26,9 @@ interface ConfigItem {
   description: string | null
   isSecret: boolean
   isEditable: boolean
-  updatedAt: string
+  updatedAt: string | null
+  // false : réglage du catalogue encore absent de la base (créé à la première saisie)
+  isSet?: boolean
 }
 
 interface HistoryEntry {
@@ -138,7 +140,7 @@ function ConfigRow({ config, onHistory }: { config: ConfigItem; onHistory: (key:
         <div className="min-w-0">
           <p className="text-sm font-semibold text-gray-800">{config.label}</p>
           {config.description && <p className="text-xs text-gray-400 mt-0.5">{config.description}</p>}
-          <p className="text-[10px] text-gray-300 mt-1 font-mono">{config.key} · maj {formatDateTime(config.updatedAt)}</p>
+          <p className="text-[10px] text-gray-300 mt-1 font-mono">{config.key} · {config.updatedAt ? `maj ${formatDateTime(config.updatedAt)}` : <span className="text-amber-600">non réglé</span>}</p>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           {config.key === 'YELII_COLLECT_API_KEY' && (
@@ -146,7 +148,7 @@ function ConfigRow({ config, onHistory }: { config: ConfigItem; onHistory: (key:
               <PlugZap size={12} /> Tester
             </Button>
           )}
-          {config.isSecret && (
+          {config.isSecret && config.isSet !== false && (
             revealed !== null ? (
               <button onClick={() => setRevealed(null)} className="text-gray-400 hover:text-gray-600 transition-colors" title="Masquer">
                 <EyeOff size={15} />
@@ -245,7 +247,7 @@ function WebhookRecalculateCard({ current, onHistory }: { current?: ConfigItem; 
       <div className="px-3 py-2 bg-white rounded-[8px] border border-gray-200 text-sm font-mono break-all mb-1">
         {current?.value ?? '—'}
       </div>
-      {current && (
+      {current?.updatedAt && (
         <p className="text-[10px] text-gray-400 mb-4">Dernière mise à jour : {formatDateTime(current.updatedAt)}</p>
       )}
 

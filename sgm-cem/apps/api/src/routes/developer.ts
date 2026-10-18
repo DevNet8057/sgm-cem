@@ -14,6 +14,7 @@ import { getPrisma } from '../lib/prisma'
 import { signAccessToken } from '../lib/session'
 import { applyLogLevel } from '../lib/logger'
 import { updateConfig, getConfigHistory, EXCLUDED_KEYS } from '../services/config.service'
+import { catalogueEntry, configCatalogue } from '../services/config-catalogue'
 import { getYeliiWalletBalance } from '../services/yelii.service'
 import { setAuthCookies } from './auth'
 import { decryptSecret } from '../lib/secret-box'
@@ -50,8 +51,16 @@ router.get('/config', async (_req, res) => {
     isEditable: c.isEditable,
     updatedAt: c.updatedAt,
     updatedBy: c.updatedBy,
+    isSet: true,
   }))
-  res.json({ success: true, data })
+  // Réglages du catalogue sans ligne en base (aucune valeur au premier démarrage) :
+  // affichés « non réglés », créés à la première saisie
+  const known = new Set(configs.map(c => c.key))
+  const missing = configCatalogue().filter(c => !known.has(c.key)).map(c => ({
+    key: c.key, value: '', category: c.category, label: c.label, description: c.description ?? null,
+    isSecret: c.isSecret ?? false, isEditable: true, updatedAt: null, updatedBy: null, isSet: false,
+  }))
+  res.json({ success: true, data: [...data, ...missing] })
 })
 
 // ── PUT /api/developer/config/:key — modifier une valeur ──────────────
@@ -67,17 +76,20 @@ router.put('/config/:key', async (req, res) => {
   }
 
   const existing = await prisma.systemConfig.findUnique({ where: { key } })
-  if (!existing) throw new AppError('NOT_FOUND', `Clé de configuration inconnue : ${key}`, 404)
-  if (!existing.isEditable) throw new AppError('FORBIDDEN', `${key} n'est pas éditable manuellement`, 403)
+  // Clé absente de la base : acceptée seulement si elle figure au catalogue
+  const entry = existing ? undefined : catalogueEntry(key)
+  if (!existing && !entry) throw new AppError('NOT_FOUND', `Clé de configuration inconnue : ${key}`, 404)
+  if (existing && !existing.isEditable) throw new AppError('FORBIDDEN', `${key} n'est pas éditable manuellement`, 403)
 
   const requester = await getRequester(req.user!.userId)
-  await updateConfig(key, value, requester, reason)
+  await updateConfig(key, value, requester, reason, entry)
   if (key === 'LOG_LEVEL') applyLogLevel(value) // effet immédiat sur les journaux
 
+  const isSecret = existing?.isSecret ?? entry?.isSecret ?? false
   res.json({
     success: true,
-    data: { key, value: existing.isSecret ? MASK : value },
-    message: `${existing.label} mis à jour — effet immédiat, sans redémarrage.`,
+    data: { key, value: isSecret ? MASK : value },
+    message: `${existing?.label ?? entry!.label} mis à jour — effet immédiat, sans redémarrage.`,
   })
 })
 
