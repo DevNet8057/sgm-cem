@@ -6,7 +6,7 @@ import { OAuth2Client } from 'google-auth-library'
 import { AppError } from '../middleware/errorHandler'
 import { authenticate } from '../middleware/auth'
 import { hashPassword, needsRehash, verifyPassword } from '../lib/password'
-import { generateOtpCode, hashOtpCode, OTP_MAX_PER_PHONE_PER_HOUR, OTP_TTL_MS, otpMatches, phoneVariants } from '../lib/otp'
+import { generateOtpCode, hashOtpCode, OTP_MAX_ATTEMPTS, OTP_MAX_PER_PHONE_PER_HOUR, OTP_TTL_MS, otpMatches, phoneVariants } from '../lib/otp'
 import { forgetUserState, openSession, refreshSession, revokeSessionByRefreshToken, revokeUserSessions, signAccessToken } from '../lib/session'
 import { deliverMessage } from '../services/outbox.service'
 import { getConfig } from '../services/config.service'
@@ -32,7 +32,13 @@ function getGoogleClient(): OAuth2Client | null {
 }
 
 const authLimiter = limiter(60 * 60 * 1000, 15, 'Trop de tentatives. Réessayez dans quelques minutes.')
-const otpLimiter  = limiter(10 * 60 * 1000, 5, 'Trop de tentatives. Attendez 10 minutes.')
+// Connexion par code : limites distinctes pour la demande et la vérification, par
+// numéro (beaucoup de membres partagent l'adresse IP de leur opérateur mobile),
+// avec une limite par IP plus large contre les balayages de numéros
+const otpPhoneKey = (req: Request) => `tel:${phoneVariants(String(req.body?.phone ?? '')).full}`
+const otpRequestByPhone = limiter(10 * 60 * 1000, 5, 'Trop de demandes de code pour ce numéro. Attendez 10 minutes.', { keyGenerator: otpPhoneKey })
+const otpVerifyByPhone  = limiter(10 * 60 * 1000, 10, 'Trop de codes essayés pour ce numéro. Attendez 10 minutes.', { keyGenerator: otpPhoneKey })
+const otpByIp           = limiter(10 * 60 * 1000, 60, 'Trop de tentatives depuis ce réseau. Attendez 10 minutes.')
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -159,7 +165,7 @@ router.post('/forgot-password', authLimiter, async (req, res) => {
 })
 
 // ── OTP : demande de code (téléphone doit être en BD) ────────────────
-router.post('/otp/request', otpLimiter, async (req, res) => {
+router.post('/otp/request', otpByIp, otpRequestByPhone, async (req, res) => {
   const { phone } = z.object({ phone: z.string().min(8).max(20) }).parse(req.body)
   const { full, all } = phoneVariants(phone)
   // Réponse identique dans tous les cas (numéro inconnu, partagé, limité…) : anti-énumération
@@ -218,7 +224,7 @@ router.post('/otp/request', otpLimiter, async (req, res) => {
 })
 
 // ── OTP : vérification du code ────────────────────────────────────────
-router.post('/otp/verify', otpLimiter, async (req, res) => {
+router.post('/otp/verify', otpByIp, otpVerifyByPhone, async (req, res) => {
   const { phone, code } = z.object({ phone: z.string().max(20), code: z.string().regex(/^\d{6}$/) }).parse(req.body)
   const { full, all } = phoneVariants(phone)
 
@@ -238,16 +244,21 @@ router.post('/otp/verify', otpLimiter, async (req, res) => {
     throw new AppError('ACCESS_DENIED', 'Code OTP invalide ou expiré. Demandez un nouveau code.', 401)
   }
 
-  // Incrémenter les tentatives
-  await prisma.otpCode.update({ where: { id: otpRecord.id }, data: { attempts: { increment: 1 } } })
-
-  if (otpRecord.attempts >= 3) {
-    await prisma.otpCode.update({ where: { id: otpRecord.id }, data: { used: true } })
+  // Essai compté de façon atomique : des essais simultanés ne dépassent jamais 3
+  const counted = await prisma.otpCode.updateMany({
+    where: { id: otpRecord.id, used: false, attempts: { lt: OTP_MAX_ATTEMPTS } },
+    data: { attempts: { increment: 1 } },
+  })
+  if (counted.count !== 1) {
+    await prisma.otpCode.updateMany({ where: { id: otpRecord.id }, data: { used: true } })
     throw new AppError('ACCESS_DENIED', 'Trop de tentatives. Demandez un nouveau code.', 401)
   }
+  const attempts = (await prisma.otpCode.findUniqueOrThrow({ where: { id: otpRecord.id }, select: { attempts: true } })).attempts
 
   if (!otpMatches(otpRecord.code, full, 'LOGIN', code)) {
-    throw new AppError('ACCESS_DENIED', `Code incorrect. ${2 - otpRecord.attempts} tentative(s) restante(s).`, 401)
+    const left = OTP_MAX_ATTEMPTS - attempts
+    if (left <= 0) await prisma.otpCode.updateMany({ where: { id: otpRecord.id }, data: { used: true } })
+    throw new AppError('ACCESS_DENIED', left > 0 ? `Code incorrect. ${left} tentative(s) restante(s).` : 'Code incorrect. Demandez un nouveau code.', 401)
   }
 
   // Marquer le code comme utilisé (conditionnel : un même code ne sert qu'une fois)

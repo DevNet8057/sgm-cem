@@ -12,6 +12,7 @@
 // ──────────────────────────────────────────────────────────────────────
 import crypto from 'crypto'
 import { z } from 'zod'
+import { toE164 } from '../lib/phone'
 
 export interface ChampPersonnalise {
   key: string
@@ -65,13 +66,9 @@ export function hashDraftToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex')
 }
 
-/**
- * Normalise un téléphone camerounais vers E.164 (+237XXXXXXXXX).
- * Même logique que le flux OTP (routes/auth.ts) : chiffres seuls, préfixe 237.
- */
+/** Téléphone au format E.164 (+237…, diaspora comprise) : même règle que la connexion par code. */
 export function normalizePhone(phone: string): string {
-  const digits = phone.replace(/\D/g, '')
-  return digits.startsWith('237') ? `+${digits}` : `+237${digits}`
+  return toE164(phone)
 }
 
 /**

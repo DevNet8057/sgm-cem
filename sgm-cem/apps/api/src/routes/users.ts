@@ -7,6 +7,7 @@ import { generateTemporaryPassword, hashPassword } from '../lib/password'
 import { forgetUserState, revokeUserSessions } from '../lib/session'
 import { getPrisma } from '../lib/prisma'
 import { nextMatricule } from '../services/matricule.service'
+import { normalizeInputPhone } from '../lib/phone'
 
 const router = Router()
 const prisma = getPrisma()
@@ -45,6 +46,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'DEVELOPER'), async (req, re
     password:  z.string().min(8).max(128).optional(),
   })
   const data = schema.parse(req.body)
+  data.phone = normalizeInputPhone(data.phone) ?? undefined
   const fullName = `${data.firstName} ${data.lastName}`
 
   const existing = await prisma.user.findUnique({ where: { email: data.email } })

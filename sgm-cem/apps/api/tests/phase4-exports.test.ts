@@ -84,7 +84,8 @@ describe('Exports Excel côté serveur', () => {
   it('membres et rubriques : nombres sans « FCFA » pour les comptages', async () => {
     const membres = await download(responsable, `/api/exports/membres.xlsx?search=${encodeURIComponent('=HYPERLINK')}`)
     expect(membres.status).toBe(200)
-    expect((await sheetOf(membres.body)).getRow(4).getCell(4).value).toBe('690000000')
+    // Téléphone en texte (les anciennes fiches ont été normalisées au format +237)
+    expect(String((await sheetOf(membres.body)).getRow(4).getCell(4).value)).toMatch(/^(\+237)?690000000$/)
     const rub = await sheetOf((await download(tresorier, '/api/exports/rubriques.xlsx')).body)
     const header = rub.getRow(3)
     const nbCol = (header.values as unknown[]).indexOf('Contributions confirmées')

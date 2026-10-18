@@ -19,11 +19,11 @@ let collecteurCookie = ''
 
 beforeAll(async () => {
   // N'importe quel compte réel sert de porteur : le RBAC lit le rôle du JWT
-  const anyUser = await prisma.user.findFirst()
+  const anyUser = await prisma.user.findFirst({ where: { isActive: true, mustChangePassword: false } })
   if (!anyUser) throw new Error('Seed requis')
   adminCookie = await cookieFor(anyUser.id, 'ADMIN', anyUser.email)
 
-  const collecteur = await prisma.user.findFirst({ where: { role: 'COLLECTEUR', isActive: true } })
+  const collecteur = await prisma.user.findFirst({ where: { role: 'COLLECTEUR', isActive: true, mustChangePassword: false } })
   if (!collecteur) throw new Error('Seed requis : collecteur')
   collecteurCookie = await cookieFor(collecteur.id, 'COLLECTEUR', collecteur.email)
 })
@@ -44,7 +44,7 @@ describe('1. ADMIN — visibilité complète des transferts (qui → qui, par qu
     const res = await request(app).get('/api/funds/transfers').set('Cookie', collecteurCookie)
     expect(res.status).toBe(200)
     // Chaque transfert visible doit impliquer le collecteur (envoyeur ou receveur)
-    const collecteur = await prisma.user.findFirst({ where: { role: 'COLLECTEUR', isActive: true } })
+    const collecteur = await prisma.user.findFirst({ where: { role: 'COLLECTEUR', isActive: true, mustChangePassword: false } })
     for (const t of res.body.data as Array<{ senderId: string; receiverId: string }>) {
       expect([t.senderId, t.receiverId]).toContain(collecteur!.id)
     }
@@ -96,7 +96,7 @@ describe('3. Remise collecteur → trésorier : PENDING tant que non validée pa
     const pending = await prisma.fundsTransfer.findFirst({ where: { status: 'PENDING_APPROVAL' } })
     if (!pending) return // aucun transfert en attente en base — règle couverte par le code (RB-23)
 
-    const outsider = await prisma.user.findFirst({ where: { id: { notIn: [pending.receiverId] } } })
+    const outsider = await prisma.user.findFirst({ where: { id: { notIn: [pending.receiverId] }, isActive: true, mustChangePassword: false } })
     const outsiderCookie = await cookieFor(outsider!.id, 'TRESORIER', outsider!.email)
     const csrf = await request(app).get('/api/csrf-token').set('Cookie', outsiderCookie)
     const csrfCookie = (Array.isArray(csrf.headers['set-cookie']) ? csrf.headers['set-cookie'] : [])

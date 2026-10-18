@@ -8,6 +8,7 @@ import { AppError } from '../middleware/errorHandler'
 import { getPrisma } from '../lib/prisma'
 import { findInactiveMembers } from '../services/inactive-members.service'
 import { nextMatricule, nextMatricules } from '../services/matricule.service'
+import { normalizeInputPhone } from '../lib/phone'
 
 const router = Router()
 const prisma = getPrisma()
@@ -146,6 +147,7 @@ router.get('/:id', authenticate, requireLevel(2), async (req, res) => {
 // ─── POST /membres ────────────────────────────────────────────────────
 router.post('/', authenticate, requireLevel(3), async (req, res) => {
   const data = createSchema.parse(req.body)
+  data.phone = normalizeInputPhone(data.phone) ?? undefined
   const existing = await prisma.user.findUnique({ where: { email: data.email } })
   if (existing) throw new AppError('DUPLICATE', 'Cette adresse email existe déjà')
 
@@ -212,6 +214,7 @@ router.post('/', authenticate, requireLevel(3), async (req, res) => {
 router.patch('/:id', authenticate, requireLevel(3), async (req, res) => {
   const id      = String(req.params.id)
   const data    = updateSchema.parse(req.body)
+  data.phone = normalizeInputPhone(data.phone) ?? undefined
   const current = await prisma.membre.findUnique({ where: { id }, include: { user: true } })
   if (!current) throw new AppError('NOT_FOUND', 'Membre introuvable', 404)
 
@@ -326,6 +329,7 @@ router.patch('/:id/status', authenticate, requireLevel(3), async (req, res) => {
 // ─── POST /membres/import ─────────────────────────────────────────────
 router.post('/import', authenticate, requireLevel(3), async (req, res) => {
   const { membres } = importSchema.parse(req.body)
+  for (const item of membres) item.phone = normalizeInputPhone(item.phone) ?? undefined
   const emails = membres.map(m => m.email)
   const dupInput = emails.find((e, i) => emails.indexOf(e) !== i)
   if (dupInput) throw new AppError('DUPLICATE', `Email en double: ${dupInput}`)

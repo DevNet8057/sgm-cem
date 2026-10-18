@@ -6,6 +6,7 @@ import { phoneVariants } from '../lib/otp'
 import { AppError } from '../middleware/errorHandler'
 import { storeFile, deleteStoredFile, getManagedStorageKey } from '../services/storage'
 import { getPrisma } from '../lib/prisma'
+import { normalizeInputPhone } from '../lib/phone'
 
 const router = Router()
 const prisma = getPrisma()
@@ -60,6 +61,8 @@ router.patch('/', authenticate, async (req, res) => {
     whatsappPhone: z.string().optional().nullable(),
   })
   const data = schema.parse(req.body)
+  data.phone = normalizeInputPhone(data.phone)
+  data.whatsappPhone = normalizeInputPhone(data.whatsappPhone)
 
   if (data.email) {
     const existing = await prisma.user.findFirst({

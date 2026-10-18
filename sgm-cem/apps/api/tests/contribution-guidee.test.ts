@@ -27,7 +27,7 @@ describe('Contribution Guidée — MEMBRE', () => {
 
   beforeAll(async () => {
     const membre = await prisma.membre.findFirst({
-      where: { isActive: true, user: { isActive: true } },
+      where: { isActive: true, user: { isActive: true, mustChangePassword: false } },
       include: { user: true },
     })
     if (!membre) throw new Error('Seed requis : membre actif')
@@ -35,7 +35,7 @@ describe('Contribution Guidée — MEMBRE', () => {
     userId = membre.userId
     membreCookie = await cookieFor(userId, 'MEMBRE', membre.user.email)
 
-    const collecteur = await prisma.user.findFirst({ where: { role: 'COLLECTEUR', isActive: true } })
+    const collecteur = await prisma.user.findFirst({ where: { role: 'COLLECTEUR', isActive: true, mustChangePassword: false } })
     if (!collecteur) throw new Error('Seed requis : collecteur')
     collecteurId = collecteur.id
 
@@ -92,7 +92,7 @@ describe('Contribution Guidée — MEMBRE', () => {
 
 describe('Contribution Guidée — comportement STAFF inchangé (régression)', () => {
   it('POST /api/contributions/declare par un COLLECTEUR ne définit toujours pas membreId', async () => {
-    const collecteur = await prisma.user.findFirst({ where: { role: 'COLLECTEUR', isActive: true } })
+    const collecteur = await prisma.user.findFirst({ where: { role: 'COLLECTEUR', isActive: true, mustChangePassword: false } })
     const rubrique = await prisma.rubrique.findFirst({ where: { status: 'OUVERTE' } })
     if (!collecteur || !rubrique) return
     const cookie = await cookieFor(collecteur.id, 'COLLECTEUR', collecteur.email)

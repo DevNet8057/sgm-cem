@@ -44,6 +44,7 @@
     "pino": "^10.4.0",
     "pino-http": "^11.0.0",
     "puppeteer": "^25.14.0",
+    "rate-limit-redis": "4.2.0",
     "socket.io": "^4.8.4",
     "twilio": "^6.0.2",
     "uuid": "^14.0.0",

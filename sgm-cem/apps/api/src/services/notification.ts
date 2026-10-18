@@ -4,6 +4,7 @@ import { deliverEmail, deliverMessage } from './outbox.service'
 import { getConfig, getConfigBool } from './config.service'
 import { sendPushToUser } from './push.service'
 import { getPrisma } from '../lib/prisma'
+import { toE164 } from '../lib/phone'
 
 const prisma = getPrisma()
 
@@ -23,17 +24,9 @@ function getTwilioClient() {
   return twilioClient
 }
 
-/**
- * Normalise un numéro camerounais/diaspora vers un format E.164 sans le "+".
- * - "+237677123456" ou "237677123456" (déjà préfixé) -> renvoyé tel quel (pas de double préfixe).
- * - "677123456" (9 chiffres, format local CM) -> préfixé "237".
- * - Tout autre numéro international déjà complet (diaspora, ex "33612345678") -> renvoyé tel quel.
- */
+/** Numéro E.164 sans le « + » (format attendu par WhatsApp), diaspora comprise. */
 export function normalizePhoneDigits(phone: string): string {
-  const digits = phone.replace(/\D/g, '')
-  if (phone.trim().startsWith('+')) return digits
-  if (digits.length === 9) return `237${digits}`
-  return digits
+  return toE164(phone).slice(1)
 }
 
 /** Vrai si l'URL pointe vers une machine locale (inaccessible depuis les serveurs WhatsApp/Meta). */

@@ -241,7 +241,7 @@ model User {
   memberId           String    @unique
   email              String    @unique
   phone              String?   @unique
-  whatsappPhone      String?
+  whatsappPhone      String?   @unique // E.164 ; sert à la connexion par code
   googleSub          String?   @unique // identifiant Google rattaché à la première connexion Google
   firstName          String
   lastName           String
