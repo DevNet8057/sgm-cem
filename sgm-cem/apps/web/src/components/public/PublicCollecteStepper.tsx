@@ -33,6 +33,7 @@ interface DraftPayload {
   email?: string
   montant?: number
   valeursChamps?: ValeursChamps
+  consentement?: boolean
 }
 
 interface LocalDraft {
@@ -152,6 +153,7 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
         email: email || undefined,
         montant: montant ? Number(montant) : undefined,
         valeursChamps,
+        consentement,
       }
       try {
         if (!draftTokenRef.current) {
@@ -167,7 +169,7 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
     }, 800)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [touched, nom, phone, email, montant, valeursChamps, step])
+  }, [touched, nom, phone, email, montant, valeursChamps, step, consentement])
 
   function markTouched() {
     if (!touched) setTouched(true)
@@ -278,6 +280,7 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
           email: email || undefined,
           montant: montant ? Number(montant) : undefined,
           valeursChamps,
+          consentement,
         })
         token = res.data.data.draftToken
         draftTokenRef.current = token

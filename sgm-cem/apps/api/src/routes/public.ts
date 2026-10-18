@@ -121,7 +121,15 @@ const draftBodySchema = z.object({
   email: z.string().email().optional(),
   montant: z.number().int().positive().optional(),
   valeursChamps: z.unknown().optional(),
+  // Case d'accord cochée : sans elle, nom, téléphone et e-mail ne sont pas enregistrés
+  consentement: z.boolean().optional(),
 })
+
+/** Identité du brouillon : enregistrée seulement après l'accord explicite (loi n° 2024/017). */
+function draftIdentity(data: z.infer<typeof draftBodySchema>) {
+  if (data.consentement !== true) return { nom: null, phone: null, email: null }
+  return { nom: data.nom, phone: data.phone ? normalizePhone(data.phone) : undefined, email: data.email }
+}
 
 /**
  * GET /api/public/collectes/:slug
@@ -159,9 +167,7 @@ router.post('/collectes/:slug/drafts', publicLimiter, async (req, res) => {
     data: {
       collecteId: collecte.id,
       tokenHash: hashDraftToken(token),
-      nom: data.nom,
-      phone: data.phone ? normalizePhone(data.phone) : undefined,
-      email: data.email,
+      ...draftIdentity(data),
       montant: data.montant,
       valeursChamps: data.valeursChamps as Prisma.InputJsonValue | undefined,
       expiresAt,
@@ -202,9 +208,7 @@ router.patch('/drafts', publicLimiter, async (req, res) => {
   const updated = await prisma.collecteDraft.update({
     where: { id: draft.id },
     data: {
-      nom: data.nom,
-      phone: data.phone ? normalizePhone(data.phone) : undefined,
-      email: data.email,
+      ...draftIdentity(data),
       montant: data.montant,
       valeursChamps: data.valeursChamps as Prisma.InputJsonValue | undefined,
       expiresAt: new Date(Date.now() + DRAFT_TTL_MS),
@@ -270,7 +274,7 @@ async function markDraftConverted(draftId: string, contributionId: string): Prom
 class DraftAlreadyReserved extends Error {}
 
 // Version de la politique de confidentialité acceptée (page /confidentialite)
-const CONSENT_VERSION = '2026-10-17'
+const CONSENT_VERSION = '2026-10-18'
 
 /** Échec certain du paiement : la contribution est annulée et le brouillon libéré pour réessayer. */
 async function releaseDraft(draftId: string, contributionId: string): Promise<void> {

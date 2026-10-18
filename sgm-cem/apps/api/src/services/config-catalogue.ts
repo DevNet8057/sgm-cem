@@ -116,6 +116,18 @@ export function configCatalogue(API_URL = process.env.API_URL ?? 'http://localho
       key: 'ANONYMISATION_DELAI_MOIS', category: 'SYSTEM_BEHAVIOR', label: 'Délai avant anonymisation (mois)',
       description: "Durée de conservation de l'identité d'un ancien compte après sa dernière activité ; l'anonymisation n'est possible qu'au-delà (0 : immédiate). Proposition : 36 mois, à confirmer par l'avis juridique (loi 2024/017).", defaultValue: '36',
     },
+    {
+      key: 'RETENTION_NOTIFICATIONS_MOIS', category: 'SYSTEM_BEHAVIOR', label: 'Conservation des notifications (mois)',
+      description: 'Au-delà, les notifications sont supprimées (page de confidentialité : 1 an).', defaultValue: '12',
+    },
+    {
+      key: 'RETENTION_AUDIT_IP_MOIS', category: 'SYSTEM_BEHAVIOR', label: 'Conservation des adresses IP du journal (mois)',
+      description: "Au-delà, l'adresse IP et le navigateur sont effacés du journal d'audit ; l'action reste (page de confidentialité : 1 an).", defaultValue: '12',
+    },
+    {
+      key: 'RETENTION_DONATEURS_MOIS', category: 'SYSTEM_BEHAVIOR', label: 'Identité des donateurs non-membres (mois)',
+      description: "Sans nouveau don pendant ce délai, l'identité du donateur est anonymisée ; les dons sont conservés (page de confidentialité : 3 ans).", defaultValue: '36',
+    },
     { key: 'MOBILE_MONEY_ENABLED', category: 'SYSTEM_BEHAVIOR', label: 'Mobile Money activé', defaultValue: 'true' },
     { key: 'CARD_ENABLED', category: 'SYSTEM_BEHAVIOR', label: 'Carte bancaire activée', defaultValue: 'true' },
     { key: 'CASH_ENABLED', category: 'SYSTEM_BEHAVIOR', label: 'Espèces activées', defaultValue: 'true' },

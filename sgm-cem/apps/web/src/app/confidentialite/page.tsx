@@ -8,12 +8,12 @@ export const metadata: Metadata = {
 
 // Contenu aligné sur le registre des traitements (docs/securite/04 § 3.2).
 // Toute évolution d'un traitement ou d'un prestataire met à jour cette page.
-const TRAITEMENTS: Array<{ finalite: string; donnees: string; duree: string }> = [
-  { finalite: 'Gestion des membres et vie de la communauté', donnees: 'Identité, coordonnées, catégorie, groupe, profil de contribution', duree: 'Durée de l’adhésion, puis 3 ans' },
-  { finalite: 'Contributions, reçus et comptabilité', donnees: 'Identité, téléphone, montants, moyens de paiement, dates', duree: '10 ans (pièces comptables)' },
-  { finalite: 'Dons des collectes publiques (non-membres)', donnees: 'Nom, téléphone, e-mail facultatif, informations demandées par la collecte', duree: 'Pièce comptable 10 ans ; identité anonymisée après 3 ans' },
-  { finalite: 'Notifications (WhatsApp, SMS, e-mail, application)', donnees: 'Téléphone, e-mail, contenu des messages', duree: 'Journaux d’envoi : 1 an' },
-  { finalite: 'Sécurité et traçabilité des opérations', donnees: 'Actions réalisées, date, adresse IP, navigateur', duree: '10 ans pour les opérations financières ; adresses IP : 1 an' },
+const TRAITEMENTS: Array<{ finalite: string; donnees: string; base: string; duree: string }> = [
+  { finalite: 'Gestion des membres et vie de la communauté', donnees: 'Identité, coordonnées, catégorie, groupe, profil de contribution', base: 'Adhésion à la communauté', duree: 'Durée de l’adhésion, puis 3 ans' },
+  { finalite: 'Contributions, reçus et comptabilité', donnees: 'Identité, téléphone, montants, moyens de paiement, dates', base: 'Obligation légale de tenue des comptes', duree: '10 ans (pièces comptables)' },
+  { finalite: 'Dons des collectes publiques (non-membres)', donnees: 'Nom, téléphone, e-mail facultatif, informations demandées par la collecte', base: 'Consentement (case cochée avant le paiement) ; obligation comptable pour le don', duree: 'Pièce comptable 10 ans ; identité anonymisée après 3 ans' },
+  { finalite: 'Notifications (WhatsApp, SMS, e-mail, application)', donnees: 'Téléphone, e-mail, contenu des messages', base: 'Service demandé (reçus, codes de connexion) ; intérêt légitime (rappels)', duree: 'Journaux d’envoi : 1 an' },
+  { finalite: 'Sécurité et traçabilité des opérations', donnees: 'Actions réalisées, date, adresse IP, navigateur', base: 'Intérêt légitime (sécurité) ; obligation comptable', duree: '10 ans pour les opérations financières ; adresses IP : 1 an' },
 ]
 
 const DESTINATAIRES: Array<{ nom: string; role: string }> = [
@@ -32,7 +32,7 @@ export default function PolitiqueConfidentialitePage() {
       <article className="mx-auto max-w-3xl rounded-2xl bg-white p-6 shadow-sm sm:p-10">
         <Link href="/" className="text-sm font-medium text-[#1A6B1A] hover:underline">← Retour à la connexion</Link>
         <h1 className="mt-6 text-3xl font-bold text-[#0F4A0F]">Politique de confidentialité</h1>
-        <p className="mt-2 text-sm text-slate-500">Dernière mise à jour : 17 octobre 2026</p>
+        <p className="mt-2 text-sm text-slate-500">Dernière mise à jour : 18 octobre 2026</p>
 
         <div className="mt-8 space-y-6 text-sm leading-7 text-slate-700">
           <section>
@@ -48,11 +48,12 @@ export default function PolitiqueConfidentialitePage() {
           <section>
             <h2 className="text-lg font-semibold text-slate-900">2. Ce que nous traitons, pourquoi et combien de temps</h2>
             <div className="mt-2 overflow-x-auto" tabIndex={0} role="region" aria-label="Tableau des traitements (défilement horizontal)">
-              <table className="w-full min-w-[480px] text-left text-xs">
+              <table className="w-full min-w-[640px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-200 text-slate-500">
                     <th className="py-2 pr-3 font-semibold">Finalité</th>
                     <th className="py-2 pr-3 font-semibold">Données</th>
+                    <th className="py-2 pr-3 font-semibold">Base légale</th>
                     <th className="py-2 font-semibold">Conservation</th>
                   </tr>
                 </thead>
@@ -61,13 +62,14 @@ export default function PolitiqueConfidentialitePage() {
                     <tr key={t.finalite} className="border-b border-slate-100 align-top">
                       <td className="py-2 pr-3 font-medium text-slate-800">{t.finalite}</td>
                       <td className="py-2 pr-3">{t.donnees}</td>
+                      <td className="py-2 pr-3">{t.base}</td>
                       <td className="py-2">{t.duree}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <p className="mt-2">Les montants et pièces comptables sont conservés pour la durée légale, même après une demande d&apos;effacement : l&apos;identité est alors anonymisée.</p>
+            <p className="mt-2">Les montants et pièces comptables sont conservés pour la durée légale, même après une demande d&apos;effacement : l&apos;identité est alors anonymisée. Ces durées sont appliquées automatiquement chaque nuit.</p>
           </section>
 
           <section>

@@ -15,6 +15,7 @@ import { pruneExpiredActivity } from '../services/activity-write.service'
 import { runDailyReminders, runTransferReminders } from '../services/reminders.service'
 import { runInactiveMembersReport } from '../services/inactive-members.service'
 import { runGedRetention } from '../services/ged-retention.service'
+import { runDataRetention } from '../services/data-retention.service'
 
 const QUEUE = 'sgm-maintenance'
 const TZ = 'Africa/Douala'
@@ -43,6 +44,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
   { name: 'membres-inactifs', label: 'Signalement mensuel des membres inactifs', repeat: { pattern: '30 8 1 * *', tz: TZ }, run: () => runInactiveMembersReport() },
   { name: 'ged-conservation', label: 'GED : avertissement et archivage à échéance', repeat: { pattern: '0 7 * * *', tz: TZ }, run: () => runGedRetention() },
   { name: 'activite-retention', label: "Purge des données d'activité", repeat: { pattern: '30 3 * * *', tz: TZ }, run: () => pruneExpiredActivity() },
+  { name: 'donnees-conservation', label: 'Durées de conservation (notifications, IP, codes, sessions, brouillons, donateurs)', repeat: { pattern: '45 3 * * *', tz: TZ }, run: () => runDataRetention() },
 ]
 
 export interface SchedulerHandle { engine: 'bullmq' | 'local'; stop: () => Promise<void> }
