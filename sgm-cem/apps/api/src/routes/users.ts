@@ -115,6 +115,8 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'DEVELOPER'), async (req
     const last  = data.lastName  ?? user.lastName
     update.fullName = `${first} ${last}`
   }
+  // Nouvelle adresse : le rattachement Google se refera à la prochaine connexion Google
+  if (data.email && data.email !== user.email) update.googleSub = null
 
   const updated = await prisma.user.update({
     where: { id },

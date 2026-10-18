@@ -290,7 +290,11 @@ router.post('/google', authLimiter, async (req, res) => {
   }
 
   const payload = ticket.getPayload()
-  if (!payload?.email) throw new AppError('ACCESS_DENIED', "Impossible de récupérer l'email Google", 401)
+  if (!payload?.email || !payload.sub) throw new AppError('ACCESS_DENIED', "Impossible de récupérer l'email Google", 401)
+  // Adresse non confirmée par Google : n'importe qui pourrait la déclarer
+  if (payload.email_verified !== true) {
+    throw new AppError('ACCESS_DENIED', 'Adresse Google non vérifiée : confirmez-la auprès de Google ou connectez-vous avec votre mot de passe.', 403)
+  }
 
   // RESTRICTION : l'email doit déjà exister (créé par un admin)
   const user = await prisma.user.findUnique({ where: { email: payload.email.toLowerCase() } })
@@ -303,6 +307,15 @@ router.post('/google', authLimiter, async (req, res) => {
   }
   if (!user.isActive) {
     throw new AppError('ACCESS_DENIED', 'Compte désactivé. Contactez l\'administrateur.', 403)
+  }
+  // Compte rattaché à un identifiant Google : une autre identité Google portant la même adresse est refusée
+  if (user.googleSub && user.googleSub !== payload.sub) {
+    await audit({ req, userId: user.id, userName: user.fullName, action: 'LOGIN', entityType: 'Session', details: { method: 'google', success: false, reason: 'identifiant Google différent' } })
+    throw new AppError('ACCESS_DENIED', 'Ce compte est rattaché à un autre compte Google. Contactez l\'administrateur.', 403)
+  }
+  if (!user.googleSub) {
+    const linked = await prisma.user.updateMany({ where: { id: user.id, googleSub: null }, data: { googleSub: payload.sub } })
+    if (linked.count !== 1) throw new AppError('ACCESS_DENIED', 'Ce compte vient d\'être rattaché à un compte Google, réessayez.', 409)
   }
 
   const { accessToken, refreshToken } = await createSessionTokens(user, prisma)

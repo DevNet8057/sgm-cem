@@ -125,7 +125,7 @@ export async function anonymizeUser(userId: string): Promise<{ memberId: string 
       data: {
         firstName: 'Personne', lastName: 'anonymisée', fullName: `Personne anonymisée (${user.memberId})`,
         email: `anonyme-${userId}@${ANONYMOUS_DOMAIN}`, phone: null, whatsappPhone: null, photoUrl: null,
-        notificationToken: null, isActive: false, mustChangePassword: true,
+        notificationToken: null, googleSub: null, isActive: false, mustChangePassword: true,
         // Mot de passe inutilisable (aucune empreinte ne correspond)
         passwordHash: `anonymise:${randomBytes(16).toString('hex')}`,
       },

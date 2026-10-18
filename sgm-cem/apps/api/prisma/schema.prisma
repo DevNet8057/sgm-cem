@@ -228,6 +228,7 @@ model User {
   email              String    @unique
   phone              String?   @unique
   whatsappPhone      String?
+  googleSub          String?   @unique // identifiant Google rattaché à la première connexion Google
   firstName          String
   lastName           String
   fullName           String
