@@ -181,7 +181,7 @@ Légende : ● = autorisé · ◐ = autorisé sur son propre périmètre · ○ 
 |---|---|---|---|
 | EF-M01-01 | Connexion par e-mail et mot de passe. | M | ✅ |
 | EF-M01-02 | Connexion par code à usage unique (OTP) à 6 chiffres envoyé par WhatsApp, avec repli SMS, valable 5 minutes et limité à 3 essais. Le numéro DOIT être unique et normalisé E.164 (+237…) sur l'ensemble des comptes. | M | 🟡 (code complet : 6 chiffres aléatoires, haché, 5 min, 3 essais, 5 codes/h ; manque l'unicité et le format E.164 de `whatsappPhone` en base, et un **modèle WhatsApp** Meta — non testé en réel) |
-| EF-M01-03 | Connexion Google réservée aux comptes existants dont l'e-mail Google est **vérifié**. | S | ⚠️ (`email_verified` toujours non contrôlé, `auth.ts`) |
+| EF-M01-03 | Connexion Google réservée aux comptes existants dont l'e-mail Google est **vérifié**. | S | ✅ (`email_verified` exigé et compte rattaché à l'identifiant Google, 18/10/2026 ; à valider avec un vrai compte Google) |
 | EF-M01-04 | À la première connexion ou après une réinitialisation, l'utilisateur DOIT changer son mot de passe avant toute autre action. Contrôle **côté serveur**. | M | ✅ (contrôle serveur, `PASSWORD_CHANGE_REQUIRED`) |
 | EF-M01-05 | Politique de mot de passe : 10 caractères minimum, au moins une majuscule et un chiffre ; refus des mots de passe connus compromis et du mot de passe par défaut. | M | 🟡 (8 caractères au lieu de 10, pas de liste noire ; mot de passe imposé par l'admin sans règle) |
 | EF-M01-06 | Session : jeton d'accès de 15 min et de rafraîchissement de 7 jours, **renouvelé à chaque usage** (rotation). Révocation immédiate à la déconnexion, à la désactivation du compte, au changement ou à la réinitialisation du mot de passe et au changement de rôle. | M | ✅ (15 min / 7 j, rotation avec détection de rejeu, révocation à la désactivation) |
@@ -201,13 +201,13 @@ Légende : ● = autorisé · ◐ = autorisé sur son propre périmètre · ○ 
 | EF-M02-03 | Désactiver ou réactiver un compte, avec motif obligatoire, audit, et révocation immédiate des sessions (EF-M01-06). | M | 🟡 (audit et révocation faits ; motif non demandé) |
 | EF-M02-04 | Réinitialiser un mot de passe (aléatoire, changement forcé, sessions révoquées). | M | ✅ |
 | EF-M02-05 | Changer la photo d'un utilisateur. | C | 🟡 (route admin présente, aucun écran ne l'utilise) |
-| EF-M02-06 | Le numéro d'identification (`memberId`, format `CEM-AAAA-NNNNNN`) est attribué de façon séquentielle et sans collision, y compris en cas de créations simultanées. | M | ⚠️ (`count()+1` dans `users.ts` et `membres.ts` : erreur en cas de créations simultanées) |
+| EF-M02-06 | Le numéro d'identification (`memberId`, format `CEM-AAAA-NNNNNN`) est attribué de façon séquentielle et sans collision, y compris en cas de créations simultanées. | M | ✅ (séquence `matricule_seq`, numéro déjà pris sauté, 18/10/2026) |
 
 ### M03 — Membres
 
 | ID | Exigence | Prio. | Statut |
 |---|---|---|---|
-| EF-M03-01 | Créer une fiche membre : identité, contacts, catégorie, groupe, statut de suivi, profil financier, profession, adresse, date d'adhésion, date de naissance, notes. Le compte associé est créé au rôle MEMBRE. | M | ⚠️ (adresse, dates d'adhésion et de naissance, notes **perdues à la création** : absentes du schéma de validation) |
+| EF-M03-01 | Créer une fiche membre : identité, contacts, catégorie, groupe, statut de suivi, profil financier, profession, adresse, date d'adhésion, date de naissance, notes. Le compte associé est créé au rôle MEMBRE. | M | ✅ (adresse, dates et notes enregistrées à la création et à l'import, 18/10/2026) |
 | EF-M03-02 | Lier ou délier un couple. La liaison passe les deux fiches au profil `COUPLE` et rompt d'éventuels liens précédents, **en une seule transaction**. | M | 🟡 (liaison hors transaction en modification et en déliaison) |
 | EF-M03-03 | Changer le statut de suivi, avec audit. | M | 🟡 (la route `PATCH /membres/:id/status` n'est pas auditée) |
 | EF-M03-04 | Importer des membres depuis un modèle tableur (CSV/XLSX → JSON) avec rapport ligne à ligne (créé / rejeté / motif). L'import est atomique ou rejouable sans doublon. | S | 🟡 (CSV collé seulement, pas de XLSX ni de rapport ligne à ligne ; refus en bloc au premier doublon) |
@@ -225,7 +225,7 @@ Légende : ● = autorisé · ◐ = autorisé sur son propre périmètre · ○ 
 | EF-M04-03 | Reconduction annuelle d'une rubrique (N → N+1) avec revalorisation de `defaultIncreaseRate` %. | C | ✅ (lot 4.5) |
 | EF-M04-04 | Ouvrir, fermer ou archiver une rubrique. Une rubrique fermée n'accepte plus de paiement ; une rubrique archivée disparaît des listes courantes. Confirmation exigée. | M | 🟡 (paiement refusé hors rubrique ouverte ; pas de confirmation avant Fermer/Archiver) |
 | EF-M04-05 | Suivi d'une rubrique : total confirmé, en attente, nombre de payeurs, taux de recouvrement (payeurs à jour / membres concernés), progression vers l'objectif. | S | 🟡 (total net et objectif ; manquent en attente, payeurs distincts, taux de recouvrement) |
-| EF-M04-06 | Un collecteur ne voit sur une rubrique que **ses propres** totaux ; le global est réservé au niveau 3 et plus. | S | ❌ (totaux globaux renvoyés à tous les rôles) |
+| EF-M04-06 | Un collecteur ne voit sur une rubrique que **ses propres** totaux ; le global est réservé au niveau 3 et plus. | S | ✅ (liste des rubriques : collecteur et membre voient leurs propres totaux, 18/10/2026) |
 
 ### M05 — Contributions et paiements
 
@@ -269,7 +269,7 @@ Légende : ● = autorisé · ◐ = autorisé sur son propre périmètre · ○ 
 | EF-M06-02 | **Confirmer** une déclaration : action explicite, avec récapitulatif « Je confirme avoir reçu X FCFA de Y pour Z ». Elle est **atomique** (une seule confirmation même en cas de double clic). Un reçu est produit et le payeur notifié. | M | 🟡 (récapitulatif et transition conditionnelle ; payeur non notifié) |
 | EF-M06-03 | **Refuser** une déclaration (« je n'ai pas reçu cet argent ») avec motif de 10 à 500 caractères ; la déclaration passe à `ANNULE`. Le refus est distinct du litige. | M | ✅ |
 | EF-M06-04 | **Litige** : ouvert par un superviseur (niveau ≥ 3) sur une contribution en attente ou confirmée **dont les fonds n'ont pas encore été transférés ni déposés**, avec motif. Les fonds sont bloqués. | M | ✅ |
-| EF-M06-05 | **Résolution** : « Confirmer » (réapplique les droits de confirmation, RG-15) ou « Annuler ». Si un paiement électronique est annulé, une **procédure de remboursement** est ouverte (M16). | M | ⚠️ (une contribution **confirmée** annulée par litige ne sort pas du grand livre, et ne peut plus être remboursée) |
+| EF-M06-05 | **Résolution** : « Confirmer » (réapplique les droits de confirmation, RG-15) ou « Annuler ». Si un paiement électronique est annulé, une **procédure de remboursement** est ouverte (M16). | M | 🟡 (annulation : l'argent sort du grand livre et le contrôle quotidien le vérifie, litige refusé si un remboursement existe, 18/10/2026 ; pas d'ouverture automatique d'un remboursement pour un paiement électronique annulé) |
 | EF-M06-06 | **Autorisation de substitution** : un ADMIN peut autoriser nominativement un trésorier à confirmer **une** contribution précise attribuée à un autre collecteur, avec date d'expiration et motif. L'autorisation est consommée à l'usage, révocable et auditée (`CONFIRM_OVERRIDE`). | S | ✅ (lot 4.4) |
 | EF-M06-07 | Relance automatique du collecteur pour toute déclaration en attente depuis plus de `reminderDelayDays` jours, et alerte du trésorier au-delà du double de ce délai. | S | ✅ (lot 4.3) |
 
@@ -311,9 +311,9 @@ Voir la matrice détaillée au §8.
 |---|---|---|---|
 | EF-M09-01 | Centre de notifications in-app (non lues, tout marquer comme lu, clic qui ouvre l'écran ciblé grâce à une **URL**). | M | ✅ |
 | EF-M09-02 | Notifications push web (PWA) avec permission demandée **en contexte** (après un premier paiement ou une première déclaration), jamais par un bandeau permanent. | S | 🟡 (bandeau sur l'accueil et Mon profil ; pas de demande en contexte) |
-| EF-M09-03 | WhatsApp (360dialog) pour les confirmations, reçus et OTP, avec **modèles validés par Meta** ; repli SMS (Twilio) pour l'OTP ; e-mail en complément. Interrupteurs par canal (`WHATSAPP_ENABLED`…). | M | 🟡 (code présent ; **aucun modèle Meta**, adresse 360dialog « v1 » à vérifier ; non testé en réel) |
+| EF-M09-03 | WhatsApp (360dialog) pour les confirmations, reçus et OTP, avec **modèles validés par Meta** ; repli SMS (Twilio) pour l'OTP ; e-mail en complément. Interrupteurs par canal (`WHATSAPP_ENABLED`…). | M | 🟡 (API Cloud 360dialog `waba-v2` et envoi par modèle dont le nom est réglable, 18/10/2026 ; modèles à créer et faire valider par Meta ; pas de file d'attente ; non testé en réel) |
 | EF-M09-04 | Diffusion (broadcast) par un responsable : titre, message, cible (rôle ou liste), avec push. | S | 🟡 (API présente, aucun écran) |
-| EF-M09-05 | Relevé mensuel automatique de chaque membre actif ayant contribué, le 1er du mois à 08:00 (heure de Douala). | S | ✅ (code ; relevé tronqué à 160 caractères par SMS) |
+| EF-M09-05 | Relevé mensuel automatique de chaque membre actif ayant contribué, le 1er du mois à 08:00 (heure de Douala). | S | ✅ (code ; SMS de secours résumé, compté « envoyé » seulement si un canal a abouti, 18/10/2026) |
 | EF-M09-06 | Préférences de notification par utilisateur (canaux, sons, heures calmes). | C | 🟡 (son seulement) |
 
 ### M10 — Tableaux de bord, statistiques, rapports, exports
@@ -376,7 +376,7 @@ Voir la matrice détaillée au §8.
 
 | ID | Exigence | Prio. | Statut |
 |---|---|---|---|
-| EF-M16-01 | Toute annulation d'une contribution **confirmée** passe par une demande de remboursement : motif, montant, moyen (espèces, Mobile Money sortant, virement), validée par le trésorier **et** un second rôle (ADMIN ou RESPONSABLE). | S | 🟡 (circuit de remboursement conforme, lot 4.1 ; contournable par litige puis annulation, voir EF-M06-05) |
+| EF-M16-01 | Toute annulation d'une contribution **confirmée** passe par une demande de remboursement : motif, montant, moyen (espèces, Mobile Money sortant, virement), validée par le trésorier **et** un second rôle (ADMIN ou RESPONSABLE). | S | 🟡 (circuit de remboursement conforme, lot 4.1 ; le litige annulé fait désormais sortir l'argent du grand livre — EF-M06-05) |
 | EF-M16-02 | Le remboursement est une **écriture compensatoire** (montant négatif lié) ; la contribution d'origine n'est jamais modifiée silencieusement. | S | ✅ (lot 4.1) |
 | EF-M16-03 | Trop-perçu : lorsqu'un prestataire confirme un montant supérieur au montant attendu, la différence est enregistrée comme don, comme avoir ou comme remboursement, selon la décision du trésorier. | C | ❌ |
 
@@ -386,8 +386,8 @@ Contexte réglementaire : **loi camerounaise n° 2024/017 du 23 décembre 2024 r
 
 | ID | Exigence | Prio. | Statut |
 |---|---|---|---|
-| EF-M17-01 | Mentions d'information (page de confidentialité) : finalités, bases, destinataires (Yelii, CinetPay, Meta/360dialog, Twilio, hébergeur), durées, droits, contact. | M | 🟡 (page présente ; manquent les bases légales et le lien depuis les reçus ; contact non institutionnel) |
-| EF-M17-02 | Consentement explicite des contributeurs externes (case à cocher) avant l'enregistrement de leur téléphone. | M | 🟡 (case obligatoire et horodatée ; les brouillons de don enregistrent le téléphone avant la case et ne sont jamais purgés) |
+| EF-M17-01 | Mentions d'information (page de confidentialité) : finalités, bases, destinataires (Yelii, CinetPay, Meta/360dialog, Twilio, hébergeur), durées, droits, contact. | M | 🟡 (page présente, bases légales ajoutées le 18/10/2026 ; manquent le lien depuis les reçus et un contact institutionnel ; bases à valider par l'avis juridique) |
+| EF-M17-02 | Consentement explicite des contributeurs externes (case à cocher) avant l'enregistrement de leur téléphone. | M | ✅ (case obligatoire et horodatée ; brouillon de don sans identité avant l'accord, brouillons expirés purgés, 18/10/2026) |
 | EF-M17-03 | Droit d'accès et de portabilité : le membre télécharge ses données (profil + contributions) depuis « Mon profil ». | S | ✅ (lot 4.6) |
 | EF-M17-04 | Droit de rectification (profil) et d'effacement **compatible avec les obligations comptables** : anonymisation de l'identité après la durée légale, montants conservés. | S | ✅ (lot 4.6 ; durée à confirmer) |
 | EF-M17-05 | Registre des traitements et des sous-traitants tenu par l'ADMIN (document `04_POLITIQUE_SECURITE_CONFORMITE.md`). | M | ✅ (registre rédigé : `docs/securite/` ; responsable et localisations des sous-traitants à compléter) |
@@ -642,11 +642,13 @@ Chaque exigence du §5 a été revérifiée dans le code après les phases 0 à 
 
 | Priorité | ✅ conforme | 🟡 partiel | ⚠️ non conforme | ❌ absent | Total |
 |---|---|---|---|---|---|
-| M | 30 | 26 | 3 | 0 | 59 |
-| S | 24 | 14 | 3 | 1 | 42 |
+| M | 33 | 26 | 0 | 0 | 59 |
+| S | 26 | 14 | 2 | 0 | 42 |
 | C | 4 | 3 | 0 | 3 | 10 |
 
-**Exigences obligatoires non conformes** : EF-M02-06 (matricule `count()+1`), EF-M03-01 (champs perdus à la création d'un membre), EF-M06-05 (contribution confirmée annulée par litige sans sortie du grand livre — touche aussi EF-M16-01 et ENF-06).
+Comptes mis à jour après les corrections du 18/10/2026 (8 points bloquants de [`08_RESTE_A_FAIRE.md`](../pilotage/08_RESTE_A_FAIRE.md) §3). Revue initiale du même jour : M 30/26/3/0, S 24/14/3/1.
+
+**Exigences obligatoires non conformes** : aucune depuis les corrections du 18/10/2026. Les trois relevées par la revue (EF-M02-06 matricule, EF-M03-01 champs perdus, EF-M06-05 litige annulé) sont corrigées ; EF-M06-05 reste partielle (pas d'ouverture automatique d'un remboursement pour un paiement électronique annulé).
 
 ### 14.1 Exigences non fonctionnelles (§10)
 
@@ -657,7 +659,7 @@ Chaque exigence du §5 a été revérifiée dans le code après les phases 0 à 
 | ENF-03 | 🟡 | Sondes de santé ; pas de suivi de disponibilité |
 | ENF-04 | 🟡 | Sauvegarde restic quotidienne et test de restauration écrits ; jamais exécutés sur un serveur ; pas d'archivage WAL |
 | ENF-05 | 🟡 | Audit des dépendances et gitleaks en CI (CI arrêtée depuis le 30/09/2026) ; test d'intrusion à faire |
-| ENF-06 | 🟡 | Contrôle quotidien du grand livre ; ne voit pas le cas EF-M06-05 |
+| ENF-06 | ✅ | Contrôle quotidien du grand livre, qui vérifie aussi les contributions annulées après litige (18/10/2026) |
 | ENF-07 | 🟡 | Couverture d'audit incomplète (EF-M13-01) ; IP jamais purgées |
 | ENF-08 | ✅ | axe : 0 violation sérieuse sur 24 écrans |
 | ENF-09 | 🟡 | Pas de validation sur appareils réels |
@@ -673,11 +675,11 @@ Chaque exigence du §5 a été revérifiée dans le code après les phases 0 à 
 |---|---|---|
 | Observabilité 90 j | ✅ | Purge quotidienne |
 | Identité d'un membre parti | 🟡 | Anonymisation manuelle (délai 36 mois vérifié), pas automatique |
-| Contributeurs externes : identité à 3 ans | ❌ | Rien ne l'applique, alors que la page de confidentialité l'annonce |
-| Journal d'audit : IP à 1 an | ❌ | Aucune purge, annoncée sur la page de confidentialité |
-| OTP 24 h, sessions 7 j | ❌ | Expirés mais jamais supprimés |
-| Brouillons de don expirés | ❌ | Jamais supprimés |
-| Journaux de notification 1 an | ❌ | Aucune purge (annoncée sur la page de confidentialité) |
+| Contributeurs externes : identité à 3 ans | ✅ | Anonymisation automatique chaque nuit, dons conservés (18/10/2026) |
+| Journal d'audit : IP à 1 an | ✅ | IP et navigateur effacés à 1 an, l'action reste (18/10/2026) |
+| OTP 24 h, sessions 7 j | ✅ | Supprimés un jour après expiration (18/10/2026) |
+| Brouillons de don expirés | ✅ | Supprimés, ou vidés de l'identité s'ils ont été payés (18/10/2026) |
+| Journaux de notification 1 an | ✅ | Notifications de plus d'un an supprimées (18/10/2026) |
 
 La liste des travaux qui en découle, classée par priorité et accompagnée de l'inventaire des intégrations externes, est dans [`../pilotage/08_RESTE_A_FAIRE.md`](../pilotage/08_RESTE_A_FAIRE.md).
 

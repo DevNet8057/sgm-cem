@@ -6,6 +6,23 @@ Ce document liste ce qui manque encore, par ordre de priorité. Le détail exige
 
 **Ce que veut dire « prêt »** : le code existe et passe les tests automatiques. Mais **aucun service externe n'a encore été appelé avec un vrai compte** : WhatsApp, SMS, e-mail, Google, Yelii et CinetPay. Un service « prêt » reste donc à valider en réel par l'association (§4).
 
+## 0. Avancement (mis à jour à chaque commit)
+
+**Bloquants : 8 sur 8 faits** (18/10/2026, branche `claude/ecstatic-gates-g8pt2c`). Chaque correction a ses tests automatiques ; la suite complète de l'API passe (445 tests). Les services externes y sont **simulés** : rien n'a été envoyé ni payé pour de vrai.
+
+| N° | Point | État | Commit | Reste à faire |
+|---|---|---|---|---|
+| 1 | Argent d'un litige annulé | ✅ | `ab5713a` | Ouvrir automatiquement un remboursement quand un paiement électronique est annulé (EF-M06-05) |
+| 2 | Google : adresse vérifiée | ✅ | `3f271b5` | Essai avec un vrai compte Google ; déclarer le domaine dans Google Cloud |
+| 3 | WhatsApp : API Cloud et modèles | ✅ code | `45dc9bf` | **Créer les modèles chez 360dialog et les faire valider par Meta**, puis saisir leurs noms dans le panneau développeur (`WHATSAPP_TEMPLATE_*`) ; essai réel |
+| 4 | Configuration : cache API/worker, clés absentes | ✅ | `2ec5398` | — |
+| 5 | Stockage public / privé | ✅ | `59734ec` | Créer un bucket privé (`S3_PRIVATE_BUCKET_NAME`) si S3 est utilisé ; lien de reçu signé et temporaire (EF-M05-22) |
+| 6 | Membres : champs perdus, matricule | ✅ | `3a354c6` | — |
+| 7 | Durées de conservation | ✅ | `cd347d1` | Faire valider les durées et les bases légales par l'avis juridique |
+| 8 | Totaux globaux | ✅ | `faae6ba` | — |
+
+Les points « Important » et « Confort » (§3) sont la suite.
+
 ---
 
 ## 1. Démarrage de la branche dans Docker (vérifié le 18/10/2026)
@@ -101,14 +118,14 @@ L'image API officielle (`apps/api/Dockerfile`, avec `apt` et Chromium) reste don
 ## 3. Travaux classés par priorité
 
 ### Bloquant (avant toute mise en production)
-1. **Argent** : une contribution **confirmée** mise en litige puis « annulée » ne sort pas du grand livre et ne peut plus être remboursée. Il faut soit l'interdire, soit passer par un remboursement, soit écrire une sortie. Le contrôle quotidien doit aussi détecter ce cas (EF-M06-05, EF-M16-01, ENF-06).
-2. **Google** : vérifier `email_verified` (2.1).
-3. **WhatsApp** : API Cloud v2 et modèles approuvés, dont dépendent la connexion par téléphone et les reçus (2.4).
-4. **Configuration** : rafraîchir le cache entre l'API et le worker ; rendre réglables les clés absentes (2.6).
-5. **Stockage** : séparer le public du privé si S3 est utilisé (2.6).
-6. **Membres** : adresse, dates et notes perdues à la création (EF-M03-01) ; matricule `count()+1` (EF-M02-06).
-7. **Conformité** : appliquer les durées annoncées sur la page de confidentialité (contributeurs externes à 3 ans, IP d'audit à 1 an, codes, sessions, brouillons et notifications expirés) ; ajouter les bases légales ; ne plus enregistrer le téléphone d'un brouillon avant le consentement.
-8. **Totaux globaux** : ils sont renvoyés à tous les rôles, y compris membres et collecteurs (EF-M04-06).
+1. ✅ *(fait, voir §0)* **Argent** : une contribution **confirmée** mise en litige puis « annulée » ne sort pas du grand livre et ne peut plus être remboursée. Il faut soit l'interdire, soit passer par un remboursement, soit écrire une sortie. Le contrôle quotidien doit aussi détecter ce cas (EF-M06-05, EF-M16-01, ENF-06).
+2. ✅ *(fait)* **Google** : vérifier `email_verified` (2.1).
+3. ✅ *(code fait ; modèles Meta à créer)* **WhatsApp** : API Cloud v2 et modèles approuvés, dont dépendent la connexion par téléphone et les reçus (2.4).
+4. ✅ *(fait)* **Configuration** : rafraîchir le cache entre l'API et le worker ; rendre réglables les clés absentes (2.6).
+5. ✅ *(fait)* **Stockage** : séparer le public du privé si S3 est utilisé (2.6).
+6. ✅ *(fait)* **Membres** : adresse, dates et notes perdues à la création (EF-M03-01) ; matricule `count()+1` (EF-M02-06).
+7. ✅ *(fait ; avis juridique à obtenir)* **Conformité** : appliquer les durées annoncées sur la page de confidentialité (contributeurs externes à 3 ans, IP d'audit à 1 an, codes, sessions, brouillons et notifications expirés) ; ajouter les bases légales ; ne plus enregistrer le téléphone d'un brouillon avant le consentement.
+8. ✅ *(fait)* **Totaux globaux** : ils sont renvoyés à tous les rôles, y compris membres et collecteurs (EF-M04-06).
 
 ### Important
 9. Avertir le membre et lui envoyer son reçu après une confirmation manuelle (EF-M05-10, EF-M05-21, EF-M06-02).

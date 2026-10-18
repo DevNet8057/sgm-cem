@@ -114,6 +114,7 @@ Reporté (avec raison) :
 - **Démarrage Docker de la branche** sur base neuve : 5 services en bonne santé, parcours navigateur sans erreur serveur, PDF et Excel produits. Un défaut corrigé : le seed de démonstration n'inscrivait pas la position de départ au grand livre (66 écarts → 0).
 - **Statuts du cahier des charges** revus exigence par exigence d'après le code (§5 et nouveau §14) : obligatoires 30 conformes, 26 partiels, 3 non conformes (EF-M02-06, EF-M03-01, EF-M06-05).
 - **Reste à faire** (intégrations Google, téléphone, notifications, paiements ; priorités ; validations à faire avec de vrais comptes) : [`08_RESTE_A_FAIRE.md`](08_RESTE_A_FAIRE.md).
+- **Les 8 points bloquants sont corrigés** (litige annulé, Google, WhatsApp, configuration, stockage, membres, conservation, totaux), un commit et des tests par point ; 445 tests API. Les obligatoires non conformes passent de 3 à 0. Suivi détaillé : [`08_RESTE_A_FAIRE.md`](08_RESTE_A_FAIRE.md) §0.
 
 ## ⚠️ Avant de déployer cette version
 1. **Sauvegarder** la base (`scripts/backup-db.ps1`) — l'API le fait aussi automatiquement au démarrage.
