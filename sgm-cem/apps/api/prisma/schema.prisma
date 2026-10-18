@@ -145,6 +145,8 @@ enum LocalisationFonds {
   // Paiement électronique confirmé par le prestataire (Yelii, CinetPay) :
   // l'argent est sur le compte marchand, aucune personne ne le détient (décision du 17/10/2026)
   PORTEFEUILLE_ELECTRONIQUE
+  // Litige résolu « annulée » : l'argent n'est plus compté dans aucun emplacement
+  HORS_CIRCUIT
 }
 
 // Motif d'un mouvement du grand livre des fonds (fund_movements)
@@ -156,6 +158,7 @@ enum FundMovementReason {
   TRANSFERT_ANNULATION
   DEPOT_BANCAIRE
   REPRISE_INITIALE // position constatée à la mise en service du grand livre
+  ANNULATION_LITIGE // contribution confirmée puis annulée après litige : sortie du circuit
 }
 
 enum DocumentStatut {

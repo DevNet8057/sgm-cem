@@ -10,7 +10,7 @@ const prisma = getPrisma()
 
 const LOCATION_LABELS: Record<string, string> = {
   CHEZ_COLLECTEUR: 'Chez les collecteurs', EN_TRANSIT: 'En transit', CHEZ_RESPONSABLE: 'Chez les responsables',
-  REMIS_TRESORIER: 'Remis au trésorier', EN_CAISSE: 'En caisse', EN_BANQUE: 'En banque', PORTEFEUILLE_ELECTRONIQUE: 'Portefeuille électronique',
+  REMIS_TRESORIER: 'Remis au trésorier', EN_CAISSE: 'En caisse', EN_BANQUE: 'En banque', PORTEFEUILLE_ELECTRONIQUE: 'Portefeuille électronique', HORS_CIRCUIT: 'Hors circuit (litige annulé)',
 }
 
 const STATUT_LABELS = { PRESENTEE: 'Présentée — en attente de visa', VALIDEE: 'Visée — mois clos', REJETEE: 'Refusée' } as const

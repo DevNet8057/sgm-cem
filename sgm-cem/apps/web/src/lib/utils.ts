@@ -96,6 +96,7 @@ export const LOCALISATION_FONDS_LABELS: Record<string, string> = {
   EN_CAISSE: 'En caisse',
   EN_BANQUE: 'En banque',
   PORTEFEUILLE_ELECTRONIQUE: 'Portefeuille électronique',
+  HORS_CIRCUIT: 'Hors circuit (litige annulé)',
 }
 
 export const TRANSFER_TYPE_LABELS: Record<string, string> = {

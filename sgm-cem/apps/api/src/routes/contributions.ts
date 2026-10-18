@@ -12,7 +12,7 @@ import { notifyCollecteurNewContribution, notifyInApp } from '../services/notifi
 import { calculateRemainingBalance } from '@sgm-cem/shared'
 import { getPrisma } from '../lib/prisma'
 import { refundsByRubrique, refundsTotal } from '../services/refund.service'
-import { confirmIntoLedger, recordDirectEntry } from '../services/fund-ledger.service'
+import { confirmIntoLedger, recordDirectEntry, recordDisputeExit } from '../services/fund-ledger.service'
 import { authorizationActorsValid, consumeAuthorization, revokeAuthorization, validAuthorizationIds } from '../services/confirmation-authorization.service'
 import { audit } from '../services/audit.service'
 import { formatAmount } from '../lib/utils'
@@ -722,6 +722,10 @@ router.patch('/:id/litige', authenticate, requireLevel(3), async (req, res) => {
   if (!contribution) throw new AppError('NOT_FOUND', 'Contribution introuvable', 404)
   // Superviseurs uniquement, et tant que les fonds n'ont pas quitté le collecteur
   assertContributionAction(actorOf(req), contribution, 'canDispute')
+  // Un remboursement demandé, visé ou exécuté porte déjà sur cet argent
+  if (await prisma.remboursement.count({ where: { contributionId: id, statut: { in: ['DEMANDE', 'VALIDE', 'EXECUTE'] } } })) {
+    throw new AppError('BUSINESS_RULE', 'Un remboursement existe pour cette contribution : traitez-le avant d\'ouvrir un litige')
+  }
 
   const result = await prisma.contribution.updateMany({
     where: { id, statut: contribution.statut },
@@ -773,6 +777,10 @@ router.patch('/:id/resolve-litige', authenticate, requireLevel(3), async (req, r
     if (updatedRows.count === 1 && resolution === 'CONFIRME' && !(await tx.fundMovement.findFirst({ where: { contributionId: id }, select: { id: true } }))) {
       await recordDirectEntry(tx, contribution, req.user!.userId)
     }
+    // Annulée alors que l'argent était entré dans le grand livre : il en sort
+    if (updatedRows.count === 1 && resolution === 'ANNULE') {
+      await recordDisputeExit(tx, contribution, req.user!.userId)
+    }
     return updatedRows
   })
   if (result.count !== 1) throw new AppError('BUSINESS_RULE', 'Ce litige a déjà été traité')
@@ -800,12 +808,13 @@ const FUND_MOVEMENT_LABELS: Record<string, string> = {
   TRANSFERT_ANNULATION: 'Transfert annulé, fonds revenus',
   DEPOT_BANCAIRE: 'Déposé en banque (reçu archivé)',
   REPRISE_INITIALE: 'Position de départ',
+  ANNULATION_LITIGE: 'Litige annulé, argent sorti du circuit',
 }
 
 const LOCATION_LABELS: Record<string, string> = {
   CHEZ_COLLECTEUR: 'Chez le collecteur', EN_TRANSIT: 'En transit', CHEZ_RESPONSABLE: 'Chez le responsable',
   REMIS_TRESORIER: 'Chez le trésorier', EN_CAISSE: 'En caisse', EN_BANQUE: 'En banque',
-  PORTEFEUILLE_ELECTRONIQUE: 'Portefeuille électronique',
+  PORTEFEUILLE_ELECTRONIQUE: 'Portefeuille électronique', HORS_CIRCUIT: 'Hors circuit',
 }
 
 const TIMELINE_ACTION_LABELS: Record<string, string> = {

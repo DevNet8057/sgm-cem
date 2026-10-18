@@ -17,7 +17,11 @@ const ALLOWED: Record<LocalisationFonds | 'ENTREE', readonly LocalisationFonds[]
   EN_CAISSE: ['EN_BANQUE'],
   PORTEFEUILLE_ELECTRONIQUE: ['EN_BANQUE'],
   EN_BANQUE: [],
+  HORS_CIRCUIT: [],
 }
+
+/** Emplacements d'où l'argent d'un litige peut sortir du circuit (ceux où un litige est permis). */
+const DISPUTE_EXIT_FROM: readonly LocalisationFonds[] = ['CHEZ_COLLECTEUR', 'PORTEFEUILLE_ELECTRONIQUE', 'EN_TRANSIT']
 
 /** Emplacements d'où un détenteur peut remettre l'argent à quelqu'un d'autre. */
 export const TRANSFERABLE_LOCATIONS = ['CHEZ_COLLECTEUR', 'CHEZ_RESPONSABLE'] as const satisfies readonly LocalisationFonds[]
@@ -27,7 +31,11 @@ export const DEPOSITABLE_LOCATIONS = ['REMIS_TRESORIER', 'EN_CAISSE', 'PORTEFEUI
 
 const ELECTRONIC_MODES: readonly ModePaiement[] = ['MTN_MOMO', 'ORANGE_MONEY', 'YELII', 'CARTE_VISA']
 
-export function isTransitionAllowed(from: LocalisationFonds | null, to: LocalisationFonds): boolean {
+export function isTransitionAllowed(from: LocalisationFonds | null, to: LocalisationFonds, reason?: FundMovementReason): boolean {
+  // La sortie du circuit est réservée à l'annulation d'un litige, et inversement
+  if (reason === 'ANNULATION_LITIGE' || to === 'HORS_CIRCUIT') {
+    return reason === 'ANNULATION_LITIGE' && to === 'HORS_CIRCUIT' && from !== null && DISPUTE_EXIT_FROM.includes(from)
+  }
   return ALLOWED[from ?? 'ENTREE'].includes(to)
 }
 
@@ -66,7 +74,7 @@ export interface MovementInput {
 export async function recordMovements(tx: Tx, movements: MovementInput[]): Promise<void> {
   if (movements.length === 0) return
   for (const m of movements) {
-    if (!isTransitionAllowed(m.from, m.to)) {
+    if (!isTransitionAllowed(m.from, m.to, m.reason)) {
       throw new AppError('BUSINESS_RULE', `Mouvement de fonds interdit : ${m.from ?? 'entrée'} → ${m.to}`, 409)
     }
   }
@@ -136,6 +144,26 @@ export async function recordDirectEntry(
   }])
 }
 
+/**
+ * Litige résolu « annulée » sur une contribution dont l'argent était entré dans le
+ * grand livre : sortie du circuit depuis son emplacement actuel. Sans mouvement
+ * antérieur (litige ouvert avant toute confirmation), rien n'est écrit.
+ */
+export async function recordDisputeExit(
+  tx: Tx,
+  contribution: { id: string; montant: number; localisationFonds: LocalisationFonds; detenteurId: string | null },
+  actorId: string,
+): Promise<boolean> {
+  const entered = await tx.fundMovement.findFirst({ where: { contributionId: contribution.id }, select: { id: true } })
+  if (!entered) return false
+  await recordMovements(tx, [{
+    contributionId: contribution.id, montant: contribution.montant, from: contribution.localisationFonds, to: 'HORS_CIRCUIT',
+    holderFromId: contribution.detenteurId, reason: 'ANNULATION_LITIGE', actorId,
+  }])
+  await tx.contribution.update({ where: { id: contribution.id }, data: { localisationFonds: 'HORS_CIRCUIT', detenteurId: null } })
+  return true
+}
+
 // ── Contrôles et positions (jalon J3) ──────────────────────────────────
 
 type LastMovement = { contributionId: string; toLocation: LocalisationFonds; holderToId: string | null }
@@ -151,8 +179,10 @@ export interface LedgerCheck {
  * livre donne exactement son emplacement et son détenteur actuels.
  */
 export async function checkLedger(db: PrismaClient): Promise<LedgerCheck> {
-  const [confirmed, last] = await Promise.all([
+  const [confirmed, cancelled, last] = await Promise.all([
     db.contribution.findMany({ where: { statut: 'CONFIRME' }, select: { id: true, localisationFonds: true, detenteurId: true } }),
+    // Annulée après être entrée dans le grand livre : son dernier mouvement doit être la sortie du circuit
+    db.contribution.findMany({ where: { statut: 'ANNULE', fundMovements: { some: {} } }, select: { id: true, localisationFonds: true, detenteurId: true } }),
     db.$queryRaw<LastMovement[]>`
       SELECT DISTINCT ON ("contributionId") "contributionId", "toLocation", "holderToId"
       FROM "fund_movements" ORDER BY "contributionId", "at" DESC, "id" DESC`,
@@ -161,6 +191,7 @@ export async function checkLedger(db: PrismaClient): Promise<LedgerCheck> {
   const mismatches = confirmed
     .map(c => ({ c, m: lastById.get(c.id) }))
     .filter(({ c, m }) => !m || m.toLocation !== c.localisationFonds || (m.holderToId ?? null) !== (c.detenteurId ?? null))
+    .concat(cancelled.map(c => ({ c, m: lastById.get(c.id) })).filter(({ m }) => m?.toLocation !== 'HORS_CIRCUIT'))
     .map(({ c, m }) => ({
       contributionId: c.id, localisationFonds: c.localisationFonds, detenteurId: c.detenteurId,
       ledgerLocation: m?.toLocation ?? null, ledgerHolderId: m?.holderToId ?? null,
@@ -186,6 +217,7 @@ export async function positionAt(db: PrismaClient, at: Date): Promise<FundsPosit
         FROM "fund_movements" WHERE "at" <= ${at}
         ORDER BY "contributionId", "at" DESC, "id" DESC
       ) m
+      WHERE m."toLocation" <> 'HORS_CIRCUIT'
       GROUP BY m."toLocation" ORDER BY m."toLocation"`,
     db.fundMovement.findFirst({ orderBy: { at: 'asc' }, select: { at: true } }),
   ])

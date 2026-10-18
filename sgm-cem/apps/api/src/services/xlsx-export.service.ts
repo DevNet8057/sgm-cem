@@ -104,7 +104,7 @@ export const LABELS = {
   mode: { ESPECES: 'Espèces', MTN_MOMO: 'MTN MoMo', ORANGE_MONEY: 'Orange Money', YELII: 'Yelii', CARTE_VISA: 'Carte', VIREMENT: 'Virement' } as Record<string, string>,
   localisation: {
     CHEZ_COLLECTEUR: 'Chez le collecteur', EN_TRANSIT: 'En transit', CHEZ_RESPONSABLE: 'Chez le responsable',
-    REMIS_TRESORIER: 'Chez le trésorier', EN_CAISSE: 'En caisse', EN_BANQUE: 'En banque', PORTEFEUILLE_ELECTRONIQUE: 'Portefeuille électronique',
+    REMIS_TRESORIER: 'Chez le trésorier', EN_CAISSE: 'En caisse', EN_BANQUE: 'En banque', PORTEFEUILLE_ELECTRONIQUE: 'Portefeuille électronique', HORS_CIRCUIT: 'Hors circuit (litige annulé)',
   } as Record<string, string>,
 }
 

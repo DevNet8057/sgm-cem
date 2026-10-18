@@ -21,6 +21,7 @@ const LOCATION_LABELS: Record<string, string> = {
   EN_CAISSE: 'En caisse',
   EN_BANQUE: 'En banque',
   PORTEFEUILLE_ELECTRONIQUE: 'Portefeuille électronique',
+  HORS_CIRCUIT: 'Hors circuit (litige annulé)',
 }
 
 const DEPOSITABLE = ['REMIS_TRESORIER', 'EN_CAISSE', 'PORTEFEUILLE_ELECTRONIQUE']
