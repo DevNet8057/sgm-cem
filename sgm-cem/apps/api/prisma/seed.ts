@@ -456,6 +456,17 @@ async function main() {
     }
 
     console.log(`   ✅ ${contribCount} contributions de démonstration (3 mois de données)`)
+
+    // Grand livre : position de départ des contributions confirmées de démonstration
+    // (même écriture que la migration 20261017140000_grand_livre_fonds, qui passe
+    // avant le seed sur une base neuve ; sans elle, le contrôle quotidien alerte)
+    const reprises = await prisma.$executeRaw`
+      INSERT INTO "fund_movements" ("id", "contributionId", "montant", "fromLocation", "toLocation", "holderToId", "reason", "transferId", "bankDepositId", "at")
+      SELECT 'fm-reprise-' || c."id", c."id", c."montant", NULL, c."localisationFonds", c."detenteurId", 'REPRISE_INITIALE', c."transferId", c."bankDepositId", CURRENT_TIMESTAMP
+      FROM "contributions" c
+      WHERE c."statut" = 'CONFIRME'
+        AND NOT EXISTS (SELECT 1 FROM "fund_movements" m WHERE m."contributionId" = c."id")`
+    console.log(`   ✅ ${reprises} position(s) de départ inscrite(s) au grand livre`)
   }
 
   // ── 10. Notifications d'exemple ─────────────────────────────────────

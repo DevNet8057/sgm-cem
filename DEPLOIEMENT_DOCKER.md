@@ -141,6 +141,17 @@ L'API **refuse de démarrer** si l'une manque ou fait moins de 32 caractères :
 Rotation : mettre l'ancienne dans `CONFIG_ENCRYPTION_KEY_PREVIOUS`, redémarrer (rechiffrement automatique), puis la retirer.
 `TRUST_PROXY` : `0` quand l'API est exposée directement (ce compose), `1` derrière Caddy.
 
+## Vérification Docker du 18/10/2026 (branche `claude/ecstatic-gates-g8pt2c`)
+Démarrage complet sur une base neuve : `postgres`, `redis`, `gotenberg`, `api`, `web` en bonne santé,
+10 migrations appliquées, seed de démonstration, API sans droits root, parcours navigateur sans erreur
+serveur, PDF (Gotenberg) et export Excel produits, **0 écart** au contrôle du grand livre.
+- **Corrigé** : sur base neuve le seed de démonstration passe après la migration du grand livre ;
+  `prisma/seed.ts` inscrit désormais la position de départ des contributions confirmées (sinon 66 écarts).
+- **À savoir** : `docker-compose.yml` code en dur l'IP du poste de développement (`172.21.253.77`)
+  dans `APP_URL`, `API_URL` et `NEXT_PUBLIC_*` — à remplacer par l'adresse du poste ou `localhost`
+  (les `NEXT_PUBLIC_*` sont figées au build de l'image web : reconstruire après changement).
+- Détail, et ce qui reste à faire : [`docs/pilotage/08_RESTE_A_FAIRE.md`](docs/pilotage/08_RESTE_A_FAIRE.md).
+
 ## Mise en production (prochaine étape décidée : à faire)
 
 1. VPS (Hetzner/Contabo/OVH ~5-10 €/mois) + nom de domaine.

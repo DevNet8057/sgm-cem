@@ -23,6 +23,7 @@ Dossier de référence v1.0 (17/10/2026), plus les documents historiques. Ordre 
 | [`qualite/08_CONVENTIONS_DEVELOPPEMENT.md`](qualite/08_CONVENTIONS_DEVELOPPEMENT.md) | Conventions API et web, définition de « terminé », modèle de PR |
 | [`pilotage/07_FEUILLE_DE_ROUTE.md`](pilotage/07_FEUILLE_DE_ROUTE.md) | Phases 0 à 4, jalons, indicateurs |
 | [`pilotage/AVANCEMENT.md`](pilotage/AVANCEMENT.md) | Journal d'avancement de la feuille de route (mis à jour à chaque phase) |
+| [`pilotage/08_RESTE_A_FAIRE.md`](pilotage/08_RESTE_A_FAIRE.md) | Reste à faire avant la production (revue du 18/10/2026) : intégrations Google, téléphone, notifications, paiements ; vérification Docker |
 | [`audit/09_RAPPORT_AUDIT_SGM-CEM.md`](audit/09_RAPPORT_AUDIT_SGM-CEM.md) | Rapport d'audit du 17/10/2026 (constats V-xx, UX-xx, preuves) |
 
 ## `reference/` — documents de référence historiques (toujours valables sauf contradiction avec le dossier v1.0)

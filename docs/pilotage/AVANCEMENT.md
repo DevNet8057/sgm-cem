@@ -110,6 +110,11 @@ Reporté (avec raison) :
 - **Écran *Validations*** : il affiche au plus les 100 plus anciennes déclarations en attente (limite antérieure, sans pagination) ; à paginer si le volume le justifie.
 - Points de la phase 3 toujours reportés : découpage modulaire complet de l'API, OpenAPI, file d'attente des notifications, 19 avertissements `set-state-in-effect`.
 
+## Revue après la phase 4 (18/10/2026)
+- **Démarrage Docker de la branche** sur base neuve : 5 services en bonne santé, parcours navigateur sans erreur serveur, PDF et Excel produits. Un défaut corrigé : le seed de démonstration n'inscrivait pas la position de départ au grand livre (66 écarts → 0).
+- **Statuts du cahier des charges** revus exigence par exigence d'après le code (§5 et nouveau §14) : obligatoires 30 conformes, 26 partiels, 3 non conformes (EF-M02-06, EF-M03-01, EF-M06-05).
+- **Reste à faire** (intégrations Google, téléphone, notifications, paiements ; priorités ; validations à faire avec de vrais comptes) : [`08_RESTE_A_FAIRE.md`](08_RESTE_A_FAIRE.md).
+
 ## ⚠️ Avant de déployer cette version
 1. **Sauvegarder** la base (`scripts/backup-db.ps1`) — l'API le fait aussi automatiquement au démarrage.
 2. Dans le `.env` racine : `CSRF_SECRET`, `JWT_SECRET`, `REFRESH_TOKEN_SECRET` et **`CONFIG_ENCRYPTION_KEY`** (nouveau) doivent faire **≥ 32 caractères** (`openssl rand -base64 48`), sinon l'API refuse de démarrer en production. Conserver `CONFIG_ENCRYPTION_KEY` hors du serveur : au premier démarrage, les secrets d'intégration en base sont chiffrés avec elle.
