@@ -397,11 +397,11 @@ function RubriqueCard({ rubrique: r, loadingStatus, onEdit, onStatus, onRenew }:
         </div>
 
         <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
-          <span>{r.nbContributions ?? 0} contribution(s)</span>
+          <span>{r.nbContributions ?? 0} contribution(s){r.totalScope === 'COLLECTEUR' ? ' encaissée(s) par vous' : r.totalScope === 'MEMBRE' ? ' de votre part' : ''}</span>
           <span className="font-mono font-semibold text-[#1A6B1A]">{formatAmount(r.totalCollecte)}</span>
         </div>
 
-        {r.targetAmount && (
+        {r.targetAmount && (r.totalScope ?? 'GLOBAL') === 'GLOBAL' && (
           <div className="mb-4">
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
               <div className="h-full rounded-full transition-all duration-700"

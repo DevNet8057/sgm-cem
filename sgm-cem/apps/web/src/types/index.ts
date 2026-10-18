@@ -67,6 +67,8 @@ export interface Rubrique {
   targetAll: boolean
   totalCollecte?: number
   nbContributions?: number
+  // GLOBAL (niveau 3 et plus) ; sinon totaux limités aux encaissements du collecteur ou aux contributions du membre
+  totalScope?: 'GLOBAL' | 'COLLECTEUR' | 'MEMBRE'
   createdAt: string
 }
 

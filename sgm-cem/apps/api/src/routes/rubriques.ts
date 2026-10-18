@@ -1,7 +1,8 @@
 import { Router } from 'express'
 import { z } from 'zod'
+import type { Prisma } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
-import { requireLevel } from '../middleware/rbac'
+import { requireLevel, ROLE_LEVELS } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { getPrisma } from '../lib/prisma'
 import { refundsByRubrique } from '../services/refund.service'
@@ -41,15 +42,26 @@ router.get('/', authenticate, requireLevel(1), async (req, res) => {
     orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }]
   })
 
-  const refunded = await refundsByRubrique()
-  const enriched = await Promise.all(rubriques.map(async r => {
+  // EF-M04-06 : total global réservé au niveau 3 et plus ; un collecteur voit ses
+  // encaissements, un membre ses propres contributions
+  const role = req.user!.role
+  const scope: Prisma.ContributionWhereInput | null = (ROLE_LEVELS[role] ?? 0) >= 3 ? null
+    : role === 'COLLECTEUR' ? { collecteurId: req.user!.userId }
+    : { membre: { userId: req.user!.userId } }
+  const totalScope = scope === null ? 'GLOBAL' : role === 'COLLECTEUR' ? 'COLLECTEUR' : 'MEMBRE'
+
+  const refunded = await refundsByRubrique(undefined, scope ? { contribution: scope } : {})
+  const enriched = await Promise.all(rubriques.map(async ({ _count, ...r }) => {
     const agg = await prisma.contribution.aggregate({
-      where: { rubriqueId: r.id, statut: 'CONFIRME' },
+      where: { rubriqueId: r.id, statut: 'CONFIRME', ...scope },
       _sum: { montant: true },
       _count: true
     })
     // Net des remboursements exécutés
-    return { ...r, totalCollecte: (agg._sum.montant ?? 0) - (refunded.get(r.id) ?? 0), nbContributions: agg._count }
+    return {
+      ...r, ...(scope === null && { _count }), totalScope,
+      totalCollecte: (agg._sum.montant ?? 0) - (refunded.get(r.id) ?? 0), nbContributions: agg._count,
+    }
   }))
 
   res.json({ success: true, data: enriched })
