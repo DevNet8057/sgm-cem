@@ -30,7 +30,11 @@ let redis: IORedis | null = null
 function sharedRedis(): IORedis | null {
   const url = process.env.REDIS_URL
   if (!url) return null
-  redis ??= new IORedis(url, { maxRetriesPerRequest: 1, enableOfflineQueue: false })
+  // Les limiteurs sont créés pendant le chargement de l'application, avant que
+  // la connexion Redis asynchrone soit prête. Garder la file d'attente active
+  // évite un rejet synchrone au démarrage ; express-rate-limit reste en mode
+  // dégradé grâce à passOnStoreError si Redis devient réellement indisponible.
+  redis ??= new IORedis(url, { maxRetriesPerRequest: 1, enableOfflineQueue: true })
   return redis
 }
 

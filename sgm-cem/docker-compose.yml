@@ -73,8 +73,8 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/sgm_cem
       REDIS_URL: redis://redis:6379
       PORT: 3001
-      APP_URL: http://172.21.253.77:3000
-      API_URL: http://172.21.253.77:3001
+      APP_URL: http://localhost:3000
+      API_URL: http://localhost:3001
       YELII_API_KEY: ${YELII_API_KEY}
       YELII_WEBHOOK_SECRET: ${YELII_WEBHOOK_SECRET}
       YELII_BASE_URL: ${YELII_BASE_URL}
@@ -105,8 +105,8 @@ services:
       args:
         # Les NEXT_PUBLIC_* sont figées dans le bundle AU BUILD (pas à l'exécution).
         # DOIVENT pointer vers l'IP du serveur pour que le frontend fonctionne depuis un navigateur distant.
-        NEXT_PUBLIC_API_URL: http://172.21.253.77:3001
-        NEXT_PUBLIC_APP_URL: http://172.21.253.77:3000
+        NEXT_PUBLIC_API_URL: http://localhost:3001
+        NEXT_PUBLIC_APP_URL: http://localhost:3000
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     restart: always
     depends_on:
@@ -116,8 +116,8 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: http://172.21.253.77:3001
-      NEXT_PUBLIC_APP_URL: http://172.21.253.77:3000
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
     networks:
       - sgm-net
     healthcheck:
