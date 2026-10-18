@@ -852,6 +852,8 @@ model AuditLog {
   details    Json?
   ipAddress  String?
   userAgent  String?
+  // Auteur réel quand l'action est faite sous impersonation (panneau développeur)
+  impersonatedById String?
   createdAt  DateTime    @default(now())
 
   user User @relation(fields: [userId], references: [id])

@@ -19,6 +19,8 @@ const TEST_KEY = 'TEST_CONFIG_SERVICE_KEY'
 const TEST_ENV_KEY = 'TEST_CONFIG_ENV_ONLY_KEY'
 
 let testUser: { id: string; fullName: string }
+// Le journal d'audit est inaltérable : on ne lit que les entrées de cette exécution
+const START = new Date()
 
 beforeAll(async () => {
   // Un utilisateur réel est requis pour l'audit log (FK userId)
@@ -28,14 +30,12 @@ beforeAll(async () => {
 
   await prisma.systemConfigHistory.deleteMany({ where: { configKey: TEST_KEY } })
   await prisma.systemConfig.deleteMany({ where: { key: TEST_KEY } })
-  await prisma.auditLog.deleteMany({ where: { entityType: 'SystemConfig', entityId: TEST_KEY } })
   __clearConfigCacheForTests()
 })
 
 afterAll(async () => {
   await prisma.systemConfigHistory.deleteMany({ where: { configKey: TEST_KEY } })
   await prisma.systemConfig.deleteMany({ where: { key: TEST_KEY } })
-  await prisma.auditLog.deleteMany({ where: { entityType: 'SystemConfig', entityId: TEST_KEY } })
   delete process.env[TEST_ENV_KEY]
 })
 
@@ -86,7 +86,7 @@ describe('config.service — DB source de vérité + invalidation immédiate', (
 
   it("l'audit log général reçoit DEVELOPER_PANEL_CONFIG_CHANGED", async () => {
     const audits = await prisma.auditLog.findMany({
-      where: { entityType: 'SystemConfig', entityId: TEST_KEY },
+      where: { entityType: 'SystemConfig', entityId: TEST_KEY, createdAt: { gte: START } },
     })
     expect(audits.length).toBe(2)
     expect(audits.every(a => a.action === 'DEVELOPER_PANEL_CONFIG_CHANGED')).toBe(true)

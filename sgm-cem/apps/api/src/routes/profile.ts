@@ -7,6 +7,7 @@ import { AppError } from '../middleware/errorHandler'
 import { storeFile, deleteStoredFile, getManagedStorageKey } from '../services/storage'
 import { getPrisma } from '../lib/prisma'
 import { normalizeInputPhone } from '../lib/phone'
+import { audit } from '../services/audit.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -178,6 +179,7 @@ router.post('/:userId/photo', authenticate, upload.single('photo'), async (req, 
     select: { id: true, photoUrl: true, fullName: true },
   })
 
+  await audit({ req, userId: req.user!.userId, userName: req.user!.email, action: 'UPDATE', entityType: 'User', entityId: userId, details: { action: 'photo-par-administrateur' } })
   res.json({ success: true, data: updated, storageMode: result.mode })
 })
 

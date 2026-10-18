@@ -9,6 +9,7 @@ import { getPrisma } from '../lib/prisma'
 import { findInactiveMembers } from '../services/inactive-members.service'
 import { nextMatricule, nextMatricules } from '../services/matricule.service'
 import { normalizeInputPhone } from '../lib/phone'
+import { audit } from '../services/audit.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -308,6 +309,7 @@ router.delete('/:id/couple', authenticate, requireLevel(3), async (req, res) => 
   }
   await prisma.membre.update({ where: { id }, data: { coupleId: null } })
 
+  await audit({ req, userId: req.user!.userId, userName: req.user!.email, action: 'UPDATE', entityType: 'Membre', entityId: id, details: { action: 'suppression-lien-couple', ancienConjointId: membre.coupleId } })
   res.json({ success: true, message: 'Lien couple supprimé' })
 })
 
@@ -317,12 +319,16 @@ router.patch('/:id/status', authenticate, requireLevel(3), async (req, res) => {
     statut: z.enum(['EN_OBSERVATION', 'EN_SUIVI', 'FIN_DE_SUIVI', 'DIASPORA']),
   }).parse(req.body)
 
+  const id = String(req.params.id)
+  const current = await prisma.membre.findUnique({ where: { id }, select: { statut: true } })
+  if (!current) throw new AppError('NOT_FOUND', 'Membre introuvable', 404)
   const membre = await prisma.membre.update({
-    where: { id: String(req.params.id) },
+    where: { id },
     data: { statut },
     include: { user: { select: { fullName: true, email: true, role: true } } },
   })
 
+  await audit({ req, userId: req.user!.userId, userName: req.user!.email, action: 'UPDATE', entityType: 'Membre', entityId: id, details: { statut, ancienStatut: current.statut } })
   res.json({ success: true, data: membre })
 })
 
@@ -371,6 +377,7 @@ router.post('/import', authenticate, requireLevel(3), async (req, res) => {
     return rows
   })
 
+  await audit({ req, userId: req.user!.userId, userName: req.user!.email, action: 'CREATE', entityType: 'MembreImport', details: { nombre: created.length, matricules: created.map(m => m.memberId) } })
   res.status(201).json({ success: true, data: created, meta: { imported: created.length } })
 })
 

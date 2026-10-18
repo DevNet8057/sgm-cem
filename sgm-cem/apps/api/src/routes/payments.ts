@@ -713,6 +713,7 @@ router.post('/retry-webhook/:transactionId', authenticate, requireLevel(4), asyn
   }
 
   const result = await retryYeliiCallback(transactionId)
+  await audit({ req, userId: req.user!.userId, userName: req.user!.email, action: 'UPDATE', entityType: 'Contribution', entityId: contribution.id, details: { action: 'relance-webhook-yelii', transactionId } })
   res.json({ success: true, data: result })
 })
 

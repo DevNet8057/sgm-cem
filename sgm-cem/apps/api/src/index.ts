@@ -38,6 +38,7 @@ import { startScheduledJobs } from './jobs/scheduler'
 import { initSocketIO } from './lib/socket'
 import { loadConfigCache, startConfigRefresh } from './services/config.service'
 import { apiLimiter } from './middleware/rate-limit'
+import { requestContext } from './lib/request-context'
 import { randomUUID } from 'crypto'
 import pinoHttp from 'pino-http'
 import { applyLogLevel, logger } from './lib/logger'
@@ -113,6 +114,10 @@ function mount(path: string, router: Router) {
   ROUTE_MOUNTS.push([path, router])
   app.use(path, router)
 }
+
+// Contexte de requête pour le journal d'audit (IP, navigateur, impersonation),
+// webhooks des prestataires compris
+app.use(requestContext)
 
 mount('/webhooks', yeliiWebhookRouter)
 mount('/webhooks', cinetpayWebhookRouter)
