@@ -68,6 +68,11 @@ const initialConfigs: SeedConf[] = [
   { key: 'ORANGE_CLIENT_SECRET', category: 'INTEGRATION_KEYS', label: 'Orange Money — Client Secret', isSecret: true },
   { key: 'ORANGE_MERCHANT_KEY', category: 'INTEGRATION_KEYS', label: 'Orange Money — Merchant Key', isSecret: true },
   { key: 'DIALOG360_API_KEY', category: 'INTEGRATION_KEYS', label: 'WhatsApp 360Dialog — Clé API', isSecret: true },
+  {
+    key: 'DIALOG360_BASE_URL', category: 'INTEGRATION_KEYS', label: 'WhatsApp 360Dialog — Adresse de l\'API',
+    description: 'API Cloud : https://waba-v2.360dialog.io (défaut). Bac à sable 360dialog : son adresse dédiée.',
+    defaultValue: 'https://waba-v2.360dialog.io',
+  },
   { key: 'TWILIO_ACCOUNT_SID', category: 'INTEGRATION_KEYS', label: 'Twilio — Account SID' },
   { key: 'TWILIO_AUTH_TOKEN', category: 'INTEGRATION_KEYS', label: 'Twilio — Auth Token', isSecret: true },
   { key: 'TWILIO_FROM', category: 'INTEGRATION_KEYS', label: 'Twilio — Numéro d\'envoi' },
@@ -138,6 +143,34 @@ const initialConfigs: SeedConf[] = [
     key: 'AUTO_SEND_RECEIPT_WHATSAPP', category: 'NOTIFICATIONS', label: 'Envoi auto du reçu par WhatsApp',
     description: 'false = le reçu est présenté dans l\'app (Partager/Imprimer) au lieu d\'être envoyé en document WhatsApp. Le message texte de confirmation reste envoyé.',
     defaultValue: 'false',
+  },
+  {
+    key: 'WHATSAPP_TEMPLATE_LANG', category: 'NOTIFICATIONS', label: 'WhatsApp — langue des modèles',
+    description: 'Code de langue des modèles approuvés par Meta (ex. fr, fr_FR).', defaultValue: 'fr',
+  },
+  {
+    key: 'WHATSAPP_TEMPLATE_OTP', category: 'NOTIFICATIONS', label: 'WhatsApp — modèle « code de connexion »',
+    description: 'Nom du modèle approuvé par Meta (catégorie AUTHENTICATION, paramètre {{1}} = code, bouton « copier le code »). Vide = message libre, refusé par WhatsApp hors fenêtre de 24 h.',
+  },
+  {
+    key: 'WHATSAPP_TEMPLATE_PAIEMENT_CONFIRME', category: 'NOTIFICATIONS', label: 'WhatsApp — modèle « paiement confirmé »',
+    description: 'Nom du modèle approuvé par Meta ({{1}} membre, {{2}} montant, {{3}} rubrique). Vide = message libre, refusé par WhatsApp hors fenêtre de 24 h.',
+  },
+  {
+    key: 'WHATSAPP_TEMPLATE_PAIEMENT_ECHOUE', category: 'NOTIFICATIONS', label: 'WhatsApp — modèle « paiement échoué »',
+    description: 'Nom du modèle approuvé par Meta ({{1}} membre, {{2}} montant, {{3}} rubrique). Vide = message libre, refusé par WhatsApp hors fenêtre de 24 h.',
+  },
+  {
+    key: 'WHATSAPP_TEMPLATE_PAIEMENT_INITIE', category: 'NOTIFICATIONS', label: 'WhatsApp — modèle « paiement Mobile Money à valider »',
+    description: 'Nom du modèle approuvé par Meta ({{1}} opérateur, {{2}} montant). Vide = message libre, refusé par WhatsApp hors fenêtre de 24 h.',
+  },
+  {
+    key: 'WHATSAPP_TEMPLATE_A_CONFIRMER', category: 'NOTIFICATIONS', label: 'WhatsApp — modèle « paiement à confirmer (collecteur) »',
+    description: 'Nom du modèle approuvé par Meta ({{1}} membre, {{2}} montant, {{3}} rubrique). Vide = message libre, refusé par WhatsApp hors fenêtre de 24 h.',
+  },
+  {
+    key: 'WHATSAPP_TEMPLATE_RELEVE', category: 'NOTIFICATIONS', label: 'WhatsApp — modèle « relevé mensuel »',
+    description: 'Nom du modèle approuvé par Meta ({{1}} membre, {{2}} mois, {{3}} confirmé, {{4}} en attente). Vide = message libre, refusé par WhatsApp hors fenêtre de 24 h.',
   },
   {
     key: 'VAPID_PUBLIC_KEY', category: 'NOTIFICATIONS', label: 'Web Push — clé publique VAPID',

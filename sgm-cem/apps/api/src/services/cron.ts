@@ -29,7 +29,7 @@ export async function runLedgerCheck(): Promise<number> {
   }
 }
 
-export async function runMonthlyStatements(): Promise<{ sent: number; errors: number }> {
+export async function runMonthlyStatements(): Promise<{ sent: number; notDelivered: number; errors: number }> {
   const now = new Date()
   // Previous month
   const year  = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear()
@@ -47,6 +47,7 @@ export async function runMonthlyStatements(): Promise<{ sent: number; errors: nu
   })
 
   let sent = 0
+  let notDelivered = 0
   let errors = 0
 
   for (const membre of membres) {
@@ -72,7 +73,8 @@ export async function runMonthlyStatements(): Promise<{ sent: number; errors: nu
 
       const phone = membre.user.whatsappPhone ?? membre.user.phone
 
-      await sendMonthlyStatement({
+      // Compté « envoyé » seulement si WhatsApp ou le SMS a abouti (la notification dans l'application part toujours)
+      const delivered = await sendMonthlyStatement({
         userId:         membre.user.id,
         phone:          phone ?? null,
         memberName:     membre.user.fullName,
@@ -86,12 +88,13 @@ export async function runMonthlyStatements(): Promise<{ sent: number; errors: nu
         })),
       })
 
-      sent++
+      if (delivered) sent++
+      else notDelivered++
     } catch (e) {
       console.error(`[Cron] Error sending statement for member ${membre.id}:`, e)
       errors++
     }
   }
 
-  return { sent, errors }
+  return { sent, notDelivered, errors }
 }

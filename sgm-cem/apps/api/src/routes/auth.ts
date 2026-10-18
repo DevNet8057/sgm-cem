@@ -203,7 +203,7 @@ router.post('/otp/request', otpLimiter, async (req, res) => {
 
   // Envoyer en priorité sur le numéro WhatsApp enregistré, fallback SMS
   const waTarget = user.whatsappPhone ?? user.phone ?? full
-  const waOk = await sendWhatsApp(waTarget, msg)
+  const waOk = await sendWhatsApp(waTarget, msg, { configKey: 'WHATSAPP_TEMPLATE_OTP', params: [code], otpCode: code })
   if (!waOk && user.phone) await sendSMS(user.phone, `SGM-CEM - Code: ${code} - Valable 5 min`)
 
   // En développement, afficher le code dans les logs serveur si les services ne sont pas configurés

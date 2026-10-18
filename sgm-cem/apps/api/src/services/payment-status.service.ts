@@ -411,9 +411,9 @@ async function notifyContributeur(
     const msg = `CEM Melen - Paiement confirmé\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${rubriqueLabel}\nMerci pour votre contribution !`
     let sent = false
     if (receiptUrl) sent = await sendWhatsAppDocument(phone, receiptUrl, msg)
-    if (!sent) await sendWhatsApp(phone, msg)
+    if (!sent) await sendWhatsApp(phone, msg, { configKey: 'WHATSAPP_TEMPLATE_PAIEMENT_CONFIRME', params: [memberName, `${montantStr} FCFA`, rubriqueLabel] })
   } else {
     const msg = `CEM Melen - Paiement échoué\nMembre: ${memberName}\nMontant: ${montantStr} FCFA\nRubrique: ${rubriqueLabel}\nRéessayez ou contactez un collecteur.`
-    await sendWhatsApp(phone, msg)
+    await sendWhatsApp(phone, msg, { configKey: 'WHATSAPP_TEMPLATE_PAIEMENT_ECHOUE', params: [memberName, `${montantStr} FCFA`, rubriqueLabel] })
   }
 }

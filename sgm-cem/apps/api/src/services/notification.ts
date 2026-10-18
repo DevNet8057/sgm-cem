@@ -58,55 +58,77 @@ export async function sendSMS(to: string, body: string): Promise<boolean> {
   } catch (e) { console.error('[SMS]', e); return false }
 }
 
-export async function sendWhatsApp(phone: string, message: string): Promise<boolean> {
+// API Cloud de 360dialog (l'ancienne adresse waba.360dialog.io/v1 est celle de l'API « On-Premise »)
+const DEFAULT_DIALOG360_URL = 'https://waba-v2.360dialog.io'
+const WHATSAPP_TIMEOUT_MS = 10_000
+
+/**
+ * Modèle de message approuvé par Meta. Hors de la fenêtre de 24 h ouverte par un
+ * message du destinataire, WhatsApp n'accepte QUE des modèles : `configKey` est le
+ * réglage (panneau développeur) qui porte le nom du modèle créé chez 360dialog.
+ * `otpCode` : modèle d'authentification (bouton « copier le code »).
+ */
+export interface WhatsAppTemplate {
+  configKey: string
+  params: string[]
+  otpCode?: string
+}
+
+/** Corps de l'appel pour un modèle (format de l'API Cloud de Meta). */
+export function templateMessage(name: string, language: string, t: WhatsAppTemplate) {
+  const components: Array<Record<string, unknown>> = []
+  if (t.params.length) components.push({ type: 'body', parameters: t.params.map(text => ({ type: 'text', text })) })
+  if (t.otpCode) components.push({ type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: t.otpCode }] })
+  return { type: 'template', template: { name, language: { code: language }, components } }
+}
+
+async function postWhatsApp(label: string, phone: string, message: Record<string, unknown>): Promise<boolean> {
+  const apiKey = getConfig('DIALOG360_API_KEY')
+  if (!apiKey) { console.warn(`${label} DIALOG360_API_KEY non configurée — message non envoyé`); return false }
+  const base = (getConfig('DIALOG360_BASE_URL') || DEFAULT_DIALOG360_URL).replace(/\/+$/, '')
   try {
-    if (!getConfigBool('WHATSAPP_ENABLED', true)) { console.log('[WhatsApp] Désactivé via WHATSAPP_ENABLED'); return false }
-    const apiKey = getConfig('DIALOG360_API_KEY')
-    if (!apiKey) { console.warn('[WhatsApp] DIALOG360_API_KEY non configuree — message non envoye'); return false }
-    const normalized = normalizePhoneDigits(phone)
-    const resp = await axios.post('https://waba.360dialog.io/v1/messages',
-      { messaging_product: 'whatsapp', to: normalized, type: 'text', text: { body: message } },
-      { headers: { 'D360-API-KEY': apiKey, 'Content-Type': 'application/json' } }
+    const resp = await axios.post(`${base}/messages`,
+      { messaging_product: 'whatsapp', recipient_type: 'individual', to: normalizePhoneDigits(phone), ...message },
+      { headers: { 'D360-API-KEY': apiKey, 'Content-Type': 'application/json' }, timeout: WHATSAPP_TIMEOUT_MS }
     )
-    if (resp.data?.errors?.length) { console.error('[WhatsApp] erreurs API:', resp.data.errors); return false }
+    if (resp.data?.errors?.length || resp.data?.error) { console.error(`${label} erreurs API:`, resp.data.errors ?? resp.data.error); return false }
     return true
   } catch (e) {
-    if (axios.isAxiosError(e)) console.error('[WhatsApp]', e.response?.status, e.response?.data ?? e.message)
-    else console.error('[WhatsApp]', e)
+    if (axios.isAxiosError(e)) console.error(label, e.response?.status, e.response?.data ?? e.message)
+    else console.error(label, e)
     return false
   }
 }
 
+/**
+ * Envoie un message WhatsApp : par le modèle indiqué s'il est réglé, sinon en texte
+ * libre (délivré seulement si le destinataire a écrit au numéro dans les 24 h).
+ */
+export async function sendWhatsApp(phone: string, message: string, template?: WhatsAppTemplate): Promise<boolean> {
+  if (!getConfigBool('WHATSAPP_ENABLED', true)) { console.log('[WhatsApp] Désactivé via WHATSAPP_ENABLED'); return false }
+  const name = template ? getConfig(template.configKey)?.trim() : undefined
+  if (template && !name) console.warn(`[WhatsApp] Modèle ${template.configKey} non réglé : message libre, refusé par WhatsApp hors fenêtre de 24 h`)
+  const body = template && name
+    ? templateMessage(name, getConfig('WHATSAPP_TEMPLATE_LANG')?.trim() || 'fr', template)
+    : { type: 'text', text: { body: message } }
+  return postWhatsApp('[WhatsApp]', phone, body)
+}
+
 export async function sendWhatsAppDocument(phone: string, pdfUrl: string, caption: string): Promise<boolean> {
-  try {
-    // Décision produit (2026-07-05) : le reçu n'est PLUS envoyé automatiquement
-    // par WhatsApp — il est présenté dans l'app avec Partager/Imprimer.
-    // Les appelants retombent sur un message texte de confirmation.
-    // Réactivable depuis le panneau développeur (section Notifications).
-    if (!getConfigBool('AUTO_SEND_RECEIPT_WHATSAPP', false)) {
-      console.log('[WhatsApp doc] Envoi auto du reçu désactivé (AUTO_SEND_RECEIPT_WHATSAPP)')
-      return false
-    }
-    if (!getConfigBool('WHATSAPP_ENABLED', true)) { console.log('[WhatsApp doc] Désactivé via WHATSAPP_ENABLED'); return false }
-    const apiKey = getConfig('DIALOG360_API_KEY')
-    if (!apiKey) { console.warn('[WhatsApp doc] DIALOG360_API_KEY non configuree — document non envoye'); return false }
-    if (isLocallyHostedUrl(pdfUrl)) {
-      console.warn(`[WhatsApp doc] URL non joignable depuis WhatsApp (${pdfUrl}) — configurez S3/R2 (voir .env) pour permettre l'envoi de documents. Repli sur message texte.`)
-      return false
-    }
-    const normalized = normalizePhoneDigits(phone)
-    const resp = await axios.post('https://waba.360dialog.io/v1/messages',
-      { messaging_product: 'whatsapp', to: normalized, type: 'document',
-        document: { link: pdfUrl, caption, filename: 'recu-cem.pdf' } },
-      { headers: { 'D360-API-KEY': apiKey, 'Content-Type': 'application/json' } }
-    )
-    if (resp.data?.errors?.length) { console.error('[WhatsApp doc] erreurs API:', resp.data.errors); return false }
-    return true
-  } catch (e) {
-    if (axios.isAxiosError(e)) console.error('[WhatsApp doc]', e.response?.status, e.response?.data ?? e.message)
-    else console.error('[WhatsApp doc]', e)
+  // Décision produit (2026-07-05) : le reçu n'est PLUS envoyé automatiquement
+  // par WhatsApp — il est présenté dans l'app avec Partager/Imprimer.
+  // Les appelants retombent sur un message texte de confirmation.
+  // Réactivable depuis le panneau développeur (section Notifications).
+  if (!getConfigBool('AUTO_SEND_RECEIPT_WHATSAPP', false)) {
+    console.log('[WhatsApp doc] Envoi auto du reçu désactivé (AUTO_SEND_RECEIPT_WHATSAPP)')
     return false
   }
+  if (!getConfigBool('WHATSAPP_ENABLED', true)) { console.log('[WhatsApp doc] Désactivé via WHATSAPP_ENABLED'); return false }
+  if (isLocallyHostedUrl(pdfUrl)) {
+    console.warn(`[WhatsApp doc] URL non joignable depuis WhatsApp (${pdfUrl}) — configurez S3/R2 (voir .env) pour permettre l'envoi de documents. Repli sur message texte.`)
+    return false
+  }
+  return postWhatsApp('[WhatsApp doc]', phone, { type: 'document', document: { link: pdfUrl, caption, filename: 'recu-cem.pdf' } })
 }
 
 /**
@@ -249,7 +271,7 @@ export async function notifyCollecteurNewContribution(p: {
     `${p.memberName} - ${p.montant.toLocaleString('fr-FR')} FCFA (${p.rubriqueCode})`, 'CONTRIBUTION',
     undefined, { view: 'validations', id: p.contributionId })
   if (p.collecteurPhone) {
-    const ok = await sendWhatsApp(p.collecteurPhone, msg)
+    const ok = await sendWhatsApp(p.collecteurPhone, msg, { configKey: 'WHATSAPP_TEMPLATE_A_CONFIRMER', params: [p.memberName, `${p.montant.toLocaleString('fr-FR')} FCFA`, p.rubriqueCode] })
     if (!ok) await sendSMS(p.collecteurPhone, msg.substring(0, 160))
   }
 }
@@ -264,12 +286,13 @@ export async function notifyMemberConfirmed(p: {
     undefined, { view: 'mes-contributions', id: p.contributionId })
 
   // WhatsApp avec document PDF si disponible
+  const confirmedTemplate: WhatsAppTemplate = { configKey: 'WHATSAPP_TEMPLATE_PAIEMENT_CONFIRME', params: [p.memberName, `${p.montant.toLocaleString('fr-FR')} FCFA`, p.rubriqueCode] }
   if (p.memberPhone) {
     if (p.receiptUrl) {
       const ok = await sendWhatsAppDocument(p.memberPhone, p.receiptUrl, msg)
-      if (!ok) await sendWhatsApp(p.memberPhone, msg)
+      if (!ok) await sendWhatsApp(p.memberPhone, msg, confirmedTemplate)
     } else {
-      const ok = await sendWhatsApp(p.memberPhone, msg)
+      const ok = await sendWhatsApp(p.memberPhone, msg, confirmedTemplate)
       if (!ok) await sendSMS(p.memberPhone, msg.substring(0, 160))
     }
   }
@@ -308,19 +331,21 @@ export async function notifyMobilePaymentInitiated(p: {
   const msg = `CEM Melen - Demande ${label}\nValidez le paiement de ${p.montant.toLocaleString('fr-FR')} FCFA sur votre telephone.\nEntrez votre code PIN ${label} pour confirmer.`
   await notifyInApp(p.userId, `Demande ${label} envoyee`,
     `Validez ${p.montant.toLocaleString('fr-FR')} FCFA sur votre ${label}.`, 'CONTRIBUTION')
-  await sendWhatsApp(p.phone, msg)
+  await sendWhatsApp(p.phone, msg, { configKey: 'WHATSAPP_TEMPLATE_PAIEMENT_INITIE', params: [label, `${p.montant.toLocaleString('fr-FR')} FCFA`] })
 }
 
 export async function sendMonthlyStatement(p: {
   userId: string; phone?: string | null; memberName: string; month: string
   totalConfirmed: number; totalPending: number
   contributions: Array<{ rubrique: string; montant: number; statut: string }>
-}): Promise<void> {
+}): Promise<boolean> {
   const lines = p.contributions.map(c => `${c.rubrique}: ${c.montant.toLocaleString('fr-FR')} FCFA (${c.statut})`).join('\n')
   const msg = `CEM Melen - Releve ${p.month}\nMembre: ${p.memberName}\nConfirme: ${p.totalConfirmed.toLocaleString('fr-FR')} FCFA\nEn attente: ${p.totalPending.toLocaleString('fr-FR')} FCFA\n\nDetail:\n${lines}\n\nMerci pour votre fidelite !`
   await notifyInApp(p.userId, `Releve ${p.month}`, `Confirme: ${p.totalConfirmed.toLocaleString('fr-FR')} FCFA`, 'INFO')
-  if (p.phone) {
-    const ok = await sendWhatsApp(p.phone, msg)
-    if (!ok) await sendSMS(p.phone, msg.substring(0, 160))
-  }
+  if (!p.phone) return false
+  const confirmed = `${p.totalConfirmed.toLocaleString('fr-FR')} FCFA`
+  const pending = `${p.totalPending.toLocaleString('fr-FR')} FCFA`
+  if (await sendWhatsApp(p.phone, msg, { configKey: 'WHATSAPP_TEMPLATE_RELEVE', params: [p.memberName, p.month, confirmed, pending] })) return true
+  // Le détail ne tient pas dans un SMS : résumé seulement (le détail reste dans l'application)
+  return sendSMS(p.phone, `CEM Melen - Releve ${p.month} : confirme ${confirmed}, en attente ${pending}. Detail dans SGM-CEM.`)
 }
