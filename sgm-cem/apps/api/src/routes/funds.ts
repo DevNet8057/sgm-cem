@@ -709,7 +709,7 @@ router.patch('/bank-deposit', authenticate, receiveProof, async (req, res) => {
   // Le reçu est stocké avant l'écriture en base (clé unique, jamais écrasée)
   const now = new Date()
   const key = `banque/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/depot-${randomUUID()}.${proofType.ext}`
-  const stored = await storeFile(key, file.buffer, proofType.mime)
+  const stored = await storeFile(key, file.buffer, proofType.mime, 'private')
 
   // Enregistrement du dépôt, déplacement des fonds et grand livre : tout ou rien,
   // et une contribution ne peut pas entrer dans deux dépôts simultanés
@@ -788,7 +788,7 @@ router.get('/bank-deposits/:id/proof', authenticate, requireLevel(4), async (req
     select: { proofKey: true, proofBucket: true, proofMime: true, proofName: true },
   })
   if (!deposit?.proofKey) throw new AppError('NOT_FOUND', 'Aucun reçu pour ce dépôt', 404)
-  const file = await getFileStream(deposit.proofKey, deposit.proofBucket === 'local' ? undefined : deposit.proofBucket ?? undefined)
+  const file = await getFileStream(deposit.proofKey, deposit.proofBucket ?? undefined)
   if (!file) throw new AppError('NOT_FOUND', 'Reçu introuvable dans le stockage', 404)
   res.setHeader('Content-Type', deposit.proofMime ?? 'application/octet-stream')
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(deposit.proofName ?? 'recu-depot')}"`)

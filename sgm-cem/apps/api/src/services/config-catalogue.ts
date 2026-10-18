@@ -59,7 +59,11 @@ export function configCatalogue(API_URL = process.env.API_URL ?? 'http://localho
     { key: 'TWILIO_ACCOUNT_SID', category: 'INTEGRATION_KEYS', label: 'Twilio — Account SID' },
     { key: 'TWILIO_AUTH_TOKEN', category: 'INTEGRATION_KEYS', label: 'Twilio — Auth Token', isSecret: true },
     { key: 'TWILIO_FROM', category: 'INTEGRATION_KEYS', label: 'Twilio — Numéro d\'envoi' },
-    { key: 'S3_BUCKET_NAME', category: 'INTEGRATION_KEYS', label: 'S3 — Bucket' },
+    { key: 'S3_BUCKET_NAME', category: 'INTEGRATION_KEYS', label: 'S3 — Bucket public (reçus, avatars)' },
+    {
+      key: 'S3_PRIVATE_BUCKET_NAME', category: 'INTEGRATION_KEYS', label: 'S3 — Bucket privé (GED, preuves)',
+      description: 'Bucket SANS accès public. Vide : les fichiers privés restent sur le disque du serveur (volume uploads).',
+    },
     { key: 'S3_ACCESS_KEY_ID', category: 'INTEGRATION_KEYS', label: 'S3 — Access Key ID', isSecret: true },
     { key: 'S3_SECRET_ACCESS_KEY', category: 'INTEGRATION_KEYS', label: 'S3 — Secret Access Key', isSecret: true },
     { key: 'S3_REGION', category: 'INTEGRATION_KEYS', label: 'S3 — Région' },

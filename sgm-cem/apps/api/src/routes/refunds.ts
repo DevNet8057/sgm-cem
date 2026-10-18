@@ -139,7 +139,7 @@ router.patch('/:id/execute', authenticate, requireRole('TRESORIER'), receiveProo
 
   const now = new Date()
   const key = `remboursements/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/remboursement-${randomUUID()}.${proofType.ext}`
-  const stored = await storeFile(key, file.buffer, proofType.mime)
+  const stored = await storeFile(key, file.buffer, proofType.mime, 'private')
   const refund = await transition(id, ['VALIDE'], {
     statut: 'EXECUTE', executedById: req.user!.userId, executedByName: await nameOf(req.user!.userId, req.user!.email), executedAt: now,
     sourceLocation, reference, proofKey: stored.s3Key, proofBucket: stored.s3Bucket, proofMime: proofType.mime, proofName: file.originalname.slice(0, 200), proofSize: file.size,
@@ -156,7 +156,7 @@ router.patch('/:id/execute', authenticate, requireRole('TRESORIER'), receiveProo
 router.get('/:id/proof', authenticate, requireLevel(3), async (req, res) => {
   const refund = await prisma.remboursement.findUnique({ where: { id: String(req.params.id) }, select: { proofKey: true, proofBucket: true, proofMime: true, proofName: true } })
   if (!refund?.proofKey) throw new AppError('NOT_FOUND', 'Aucune preuve pour ce remboursement', 404)
-  const file = await getFileStream(refund.proofKey, refund.proofBucket === 'local' ? undefined : refund.proofBucket ?? undefined)
+  const file = await getFileStream(refund.proofKey, refund.proofBucket ?? undefined)
   if (!file) throw new AppError('NOT_FOUND', 'Preuve introuvable dans le stockage', 404)
   res.setHeader('Content-Type', refund.proofMime ?? 'application/octet-stream')
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(refund.proofName ?? 'preuve-remboursement')}"`)

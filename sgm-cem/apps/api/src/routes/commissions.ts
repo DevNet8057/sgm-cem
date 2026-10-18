@@ -171,7 +171,7 @@ router.post('/documents', authenticate, requireLevel(2), gedUpload.single('file'
   const safeName = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')
   const key = `ged/${year}/${meta.commissionId}/${Date.now()}-${safeName}`
 
-  const stored = await storeFile(key, req.file.buffer, req.file.mimetype)
+  const stored = await storeFile(key, req.file.buffer, req.file.mimetype, 'private')
 
   const expiresAt = new Date()
   expiresAt.setFullYear(expiresAt.getFullYear() + typeDocument.retentionAnnees)
@@ -262,7 +262,7 @@ router.post('/documents/:id/versions', authenticate, requireLevel(2), gedUpload.
   const version = (last._max.version ?? source.version) + 1
 
   const safeName = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')
-  const stored = await storeFile(`ged/${new Date().getFullYear()}/${source.commissionId}/${Date.now()}-v${version}-${safeName}`, req.file.buffer, req.file.mimetype)
+  const stored = await storeFile(`ged/${new Date().getFullYear()}/${source.commissionId}/${Date.now()}-v${version}-${safeName}`, req.file.buffer, req.file.mimetype, 'private')
   const document = await prisma.document.create({
     data: {
       commissionId: source.commissionId, typeCode: source.typeCode, titre: source.titre, description: source.description, tags: source.tags,

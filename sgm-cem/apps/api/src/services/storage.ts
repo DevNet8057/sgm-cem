@@ -3,6 +3,7 @@ import { Readable } from 'stream'
 import fs from 'fs'
 import path from 'path'
 import { getConfig } from './config.service'
+import { logger } from '../lib/logger'
 
 // Client S3 reconstruit si la configuration change depuis le panneau
 // développeur (lecture au moment de l'appel, jamais au chargement du module).
@@ -49,21 +50,36 @@ export interface StorageResult {
 }
 
 /**
+ * Public : reçus et avatars, servis par lien direct.
+ * Privé : GED, preuves de dépôt et de remboursement — jamais de lien public,
+ * lus seulement par les routes de téléchargement (droits vérifiés).
+ */
+export type Visibility = 'public' | 'private'
+
+let privateFallbackWarned = false
+
+/**
  * Upload a file buffer to S3 (or local disk as fallback).
  * Key should be a unique path like "ged/2025/01/doc-xyz.pdf" or "avatars/user-abc.jpg".
+ * Un fichier privé va dans S3_PRIVATE_BUCKET_NAME ; sans ce réglage, il reste sur le
+ * disque du serveur (volume uploads, jamais servi en direct) plutôt que dans un
+ * espace public.
  */
 export async function storeFile(
   key: string,
   buffer: Buffer,
-  mimeType: string
+  mimeType: string,
+  visibility: Visibility = 'public',
 ): Promise<StorageResult> {
-  const bucket = getConfig('S3_BUCKET_NAME') ?? 'local'
+  const privateBucket = getConfig('S3_PRIVATE_BUCKET_NAME')?.trim()
+  const bucket = visibility === 'private' ? privateBucket : getConfig('S3_BUCKET_NAME')
   const client = getS3Client()
 
-  if (client) {
+  if (client && bucket) {
     await client.send(
       new PutObjectCommand({ Bucket: bucket, Key: key, Body: buffer, ContentType: mimeType })
     )
+    if (visibility === 'private') return { s3Key: key, s3Bucket: bucket, url: '', mode: 'S3' }
     const publicUrl = getConfig('S3_PUBLIC_URL')
     const endpoint = getConfig('S3_ENDPOINT')
     const url = publicUrl
@@ -73,11 +89,16 @@ export async function storeFile(
       : `https://${bucket}.s3.${getConfig('S3_REGION') ?? 'us-east-1'}.amazonaws.com/${key}`
     return { s3Key: key, s3Bucket: bucket, url, mode: 'S3' }
   }
+  if (client && visibility === 'private' && !privateFallbackWarned) {
+    privateFallbackWarned = true
+    logger.warn('[Stockage] S3_PRIVATE_BUCKET_NAME non réglé : fichiers privés gardés sur le disque du serveur (volume uploads, à sauvegarder)')
+  }
 
-  // Local fallback — served via GET /uploads/:key
+  // Disque local — seuls receipts/ et avatars/ sont servis par /uploads (index.ts)
   const localPath = path.join(LOCAL_DIR, key)
   ensureDir(localPath)
   fs.writeFileSync(localPath, buffer)
+  if (visibility === 'private') return { s3Key: key, s3Bucket: 'local', url: '', mode: 'local' }
   const apiUrl = getConfig('API_URL') ?? 'http://localhost:3001'
   return { s3Key: key, s3Bucket: 'local', url: `${apiUrl}/uploads/${key}`, mode: 'local' }
 }
@@ -103,7 +124,8 @@ export async function getFileStream(
   const bucketName = bucket ?? getConfig('S3_BUCKET_NAME')
   const client = getS3Client()
 
-  if (client && bucketName) {
+  // Fichier enregistré sur disque (bucket « local ») : lu sur disque même si S3 est réglé depuis
+  if (client && bucketName && bucketName !== 'local') {
     try {
       const resp = await client.send(new GetObjectCommand({ Bucket: bucketName, Key: key }))
       if (!resp.Body) return null
@@ -120,7 +142,7 @@ export async function getFileStream(
 export async function deleteStoredFile(key: string, bucket?: string): Promise<void> {
   const bucketName = bucket ?? getConfig('S3_BUCKET_NAME')
   const client = getS3Client()
-  if (client && bucketName) {
+  if (client && bucketName && bucketName !== 'local') {
     try { await client.send(new DeleteObjectCommand({ Bucket: bucketName, Key: key })) } catch { /* silent */ }
     return
   }
