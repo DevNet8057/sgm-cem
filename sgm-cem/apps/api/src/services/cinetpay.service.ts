@@ -1,6 +1,8 @@
 import crypto from 'crypto'
 import { getConfig } from './config.service'
 
+// Sans réponse dans ce délai, l'appel échoue au lieu de bloquer la requête du payeur
+const CINETPAY_REQUEST_TIMEOUT_MS = 15_000
 const CINETPAY_PAYMENT_URL = 'https://api-checkout.cinetpay.com/v2/payment'
 const CINETPAY_VERIFICATION_URL = 'https://api-checkout.cinetpay.com/v2/payment/check'
 
@@ -128,6 +130,7 @@ export async function initiateCinetpayPayment(params: {
   const response = await fetch(CINETPAY_PAYMENT_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(CINETPAY_REQUEST_TIMEOUT_MS),
     body: JSON.stringify({
       apikey: apiKey,
       site_id: siteId,
@@ -182,6 +185,7 @@ export async function verifyCinetpayTransaction(
   const response = await fetch(CINETPAY_VERIFICATION_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(CINETPAY_REQUEST_TIMEOUT_MS),
     body: JSON.stringify({
       apikey: apiKey,
       site_id: siteId,

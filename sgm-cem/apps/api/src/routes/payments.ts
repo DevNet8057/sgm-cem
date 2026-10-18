@@ -17,6 +17,9 @@ import { initiateTrackedYeliiPayment } from '../services/payment-attempt.service
 import { createPaymentBatch, PaymentBatchError } from '../services/payment-batch.service'
 import { notifyCollecteurNewContribution } from '../services/notification'
 
+// Fenêtre de réutilisation d'une demande de paiement en cours (anti double-clic, anti double débit)
+const PAYMENT_REUSE_WINDOW_MS = 30 * 60 * 1000
+
 const router = Router()
 const prisma = getPrisma()
 
@@ -242,6 +245,9 @@ router.post('/initiate', authenticate, requireLevel(1), async (req, res) => {
         // rapide : son paymentStatus historique peut encore être PENDING.
         statut: 'EN_ATTENTE_CONFIRMATION',
         paymentStatus: { in: ['PENDING', 'PROCESSING'] },
+        // Au-delà, une demande restée sans réponse ne bloque plus un nouvel essai ;
+        // elle reste suivie par la réconciliation (une confirmation tardive est prise en compte)
+        createdAt: { gte: new Date(Date.now() - PAYMENT_REUSE_WINDOW_MS) },
       },
     })
 
