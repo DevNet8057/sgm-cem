@@ -1,8 +1,8 @@
 'use client'
 import { useMemo, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ArrowRight, BellRing, Building2, Calendar, Check, ChevronDown, CreditCard, FolderOpen, HandCoins, Landmark, MapPin, Plus, RefreshCw, ShieldCheck, Shield, Smartphone, User, UserCheck, UserPlus, Wallet, X, XCircle, Loader2, Banknote } from 'lucide-react'
-import api from '@/lib/api'
+import { AlertTriangle, ArrowRight, BellRing, Building2, Calendar, Check, ChevronDown, CreditCard, FileText, FolderOpen, HandCoins, Landmark, MapPin, Plus, RefreshCw, ShieldCheck, Shield, Smartphone, User, UserCheck, UserPlus, Wallet, X, XCircle, Loader2, Banknote } from 'lucide-react'
+import api, { getBaseURL } from '@/lib/api'
 import { cn, formatAmount, formatDate, formatDateTime, LOCALISATION_FONDS_LABELS, MODE_PAIEMENT_LABELS, ROLE_LABELS, TRANSFER_TYPE_LABELS, contributorKind, contributorName } from '@/lib/utils'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
@@ -11,6 +11,7 @@ import { SkeletonTableRow } from '@/components/ui/Skeleton'
 import { Modal } from '@/components/ui/Modal'
 import { ContributorBadge } from '@/components/ui/CompactList'
 import { useAppStore } from '@/store/appStore'
+import { useAuthStore } from '@/store/authStore'
 import type { CollecteurSummary, CollecteursResponse, Contribution, LocalisationFonds, TransferType, UserRole } from '@/types'
 
 const LOCATION_LABELS: Record<string, string> = {
@@ -351,6 +352,8 @@ export function Collecteurs() {
       {canSeeDeposits && <FundsPositionCard />}
       {canSeeDeposits && <BankDepositHistory />}
 
+      <TransferHistory />
+
       <TraceSection />
 
       <Modal open={!!remiseFor} onClose={() => setRemiseFor(null)} size="sm"
@@ -405,6 +408,100 @@ async function openProof(depositId: string) {
   } catch {
     tab?.close()
   }
+}
+
+// ── Historique des remises de fonds, avec leur bordereau ───────────────
+interface TransferEntry {
+  id: string
+  createdAt: string
+  confirmedAt: string | null
+  senderId: string
+  senderName: string
+  receiverId: string
+  receiverName: string
+  totalAmount: number
+  transferType: TransferType
+  status: 'PENDING_APPROVAL' | 'CONFIRMED' | 'REFUSED' | 'CANCELLED'
+  refusalReason: string | null
+  contributions: Array<{ id: string }>
+}
+
+const TRANSFER_STATUS: Record<TransferEntry['status'], { label: string; className: string }> = {
+  PENDING_APPROVAL: { label: 'En attente', className: 'bg-amber-50 text-amber-700 border-amber-200' },
+  CONFIRMED: { label: 'Confirmée', className: 'bg-[#E8F5E8] text-[#1A6B1A] border-[#1A6B1A]/20' },
+  REFUSED: { label: 'Refusée', className: 'bg-red-50 text-red-700 border-red-200' },
+  CANCELLED: { label: 'Annulée', className: 'bg-gray-50 text-gray-500 border-gray-200' },
+}
+
+function TransferHistory() {
+  const [showAll, setShowAll] = useState(false)
+  const me = useAuthStore(s => s.user)
+  // Même règle que l'API : les deux parties, le trésorier et l'administration
+  const canOpenBordereau = (t: TransferEntry) =>
+    t.senderId === me?.id || t.receiverId === me?.id || ['ADMIN', 'DEVELOPER', 'TRESORIER'].includes(me?.role ?? '')
+  const { data: transfers, isLoading } = useQuery<TransferEntry[]>({
+    queryKey: ['funds-transfers'],
+    queryFn: async () => (await api.get('/funds/transfers')).data.data,
+    refetchInterval: 60000,
+  })
+  const rows = showAll ? (transfers ?? []) : (transfers ?? []).slice(0, 10)
+
+  return (
+    <section aria-labelledby="historique-remises" className="mt-5 bg-white rounded-[18px] border border-gray-100 overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-100">
+        <h3 id="historique-remises" className="font-display font-semibold text-[#0F4A0F] text-sm flex items-center gap-2">
+          <HandCoins size={16} /> Historique des remises de fonds
+        </h3>
+        <p className="text-gray-500 text-xs">Chaque remise confirmée a son bordereau PDF signé par les deux parties</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm table-mobile-cards">
+          <thead>
+            <tr className="border-b border-gray-100 bg-gray-50/50">
+              {['Date', 'De', 'À', 'Montant', 'Statut', ''].map(col => (
+                <th key={col} className="px-4 py-3 text-left text-xs font-semibold text-gray-500">{col}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              Array.from({ length: 3 }).map((_, i) => <SkeletonTableRow key={i} cols={6} />)
+            ) : rows.length === 0 ? (
+              <tr><td colSpan={6}><EmptyState icon={HandCoins} title="Aucune remise" description="Les remises de fonds envoyées ou reçues apparaîtront ici." /></td></tr>
+            ) : rows.map(t => (
+              <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
+                <td className="px-4 py-3 text-xs text-gray-500" data-label="Date">{formatDateTime(t.confirmedAt ?? t.createdAt)}</td>
+                <td className="px-4 py-3 text-gray-800" data-label="De">{t.senderName}</td>
+                <td className="px-4 py-3 text-gray-800" data-label="À">{t.receiverName}</td>
+                <td className="px-4 py-3 font-mono font-bold text-[#0F4A0F]" data-label="Montant">
+                  {formatAmount(t.totalAmount)}
+                  <p className="text-[10px] font-sans font-normal text-gray-400">{t.contributions.length} contribution(s) · {TRANSFER_TYPE_LABELS[t.transferType] ?? t.transferType}</p>
+                </td>
+                <td className="px-4 py-3" data-label="Statut">
+                  <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold', TRANSFER_STATUS[t.status].className)}>{TRANSFER_STATUS[t.status].label}</span>
+                  {t.refusalReason && <p className="mt-1 text-[10px] text-gray-400">{t.refusalReason}</p>}
+                </td>
+                <td className="px-4 py-3 text-right" data-label="Action">
+                  {t.status === 'CONFIRMED' && canOpenBordereau(t) && (
+                    <Button size="sm" variant="ghost" onClick={() => window.open(`${getBaseURL()}/funds/transfers/${t.id}/borderau`, '_blank')}>
+                      <FileText size={13} /> Bordereau
+                    </Button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {(transfers?.length ?? 0) > 10 && (
+        <div className="px-5 py-3 border-t border-gray-100 text-center">
+          <Button size="sm" variant="ghost" onClick={() => setShowAll(v => !v)}>
+            {showAll ? 'Afficher moins' : `Afficher les ${transfers!.length} remises`}
+          </Button>
+        </div>
+      )}
+    </section>
+  )
 }
 
 // ── Position des fonds à une date (grand livre, jalon J3) ──────────────

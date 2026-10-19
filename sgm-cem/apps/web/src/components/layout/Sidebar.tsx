@@ -128,14 +128,15 @@ export function Sidebar() {
           items={menuItems}
         />
       </nav>
+      {/* Bandeau sous le menu (et non par-dessus) : ne masque jamais un libellé */}
       {moreBelow && (
         <button
           type="button"
           onClick={() => navRef.current?.scrollBy({ top: navRef.current.clientHeight * 0.6, behavior: 'smooth' })}
-          className="absolute inset-x-0 bottom-0 flex h-10 items-end justify-center bg-gradient-to-t from-[#0f5721] to-transparent pb-1 text-white/70 hover:text-white"
+          className="flex h-7 w-full shrink-0 items-center justify-center gap-1 border-t border-white/10 text-[11px] font-semibold text-white/60 hover:text-white"
           aria-label="Afficher la suite du menu"
         >
-          <ChevronDown size={18} className="animate-bounce" aria-hidden />
+          Suite du menu <ChevronDown size={14} className="animate-bounce" aria-hidden />
         </button>
       )}
       </div>

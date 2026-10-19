@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bell, Info, Play, RefreshCw, Save, Settings, ShieldCheck, SlidersHorizontal, TrendingUp } from 'lucide-react'
+import { Bell, FileText, Info, Play, RefreshCw, Save, Settings, ShieldCheck, SlidersHorizontal, TrendingUp } from 'lucide-react'
 import api from '@/lib/api'
 import { formatAmount, formatDateTime } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
@@ -91,6 +91,10 @@ type SettingsForm = {
   transferAlertTresorierHours: string
   communityName: string
   communityVerse: string
+  communityAddress: string
+  communityPhone: string
+  communityEmail: string
+  communityLegalId: string
 }
 
 const emptyForm: SettingsForm = {
@@ -104,6 +108,10 @@ const emptyForm: SettingsForm = {
   transferAlertTresorierHours: '',
   communityName: '',
   communityVerse: '',
+  communityAddress: '',
+  communityPhone: '',
+  communityEmail: '',
+  communityLegalId: '',
 }
 
 export function Parametres() {
@@ -135,6 +143,10 @@ export function Parametres() {
       transferAlertTresorierHours: String(data.transferAlertTresorierHours),
       communityName: data.communityName,
       communityVerse: data.communityVerse,
+      communityAddress: data.communityAddress ?? '',
+      communityPhone: data.communityPhone ?? '',
+      communityEmail: data.communityEmail ?? '',
+      communityLegalId: data.communityLegalId ?? '',
     })
   }, [data])
 
@@ -183,6 +195,13 @@ export function Parametres() {
                 className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30"
               />
             </label>
+          </Panel>
+
+          <Panel icon={FileText} title="Coordonnées imprimées sur les documents">
+            <Input label="Adresse" value={form.communityAddress} onChange={communityAddress => setForm({ ...form, communityAddress })} />
+            <Input label="Téléphone" value={form.communityPhone} onChange={communityPhone => setForm({ ...form, communityPhone })} />
+            <Input label="E-mail" type="email" value={form.communityEmail} onChange={communityEmail => setForm({ ...form, communityEmail })} />
+            <Input label="Identifiant légal (déclaration, agrément)" value={form.communityLegalId} onChange={communityLegalId => setForm({ ...form, communityLegalId })} />
           </Panel>
 
           <Panel icon={SlidersHorizontal} title="Regles financieres">
@@ -368,5 +387,10 @@ function serialize(form: SettingsForm) {
     transferAlertTresorierHours: Number(form.transferAlertTresorierHours),
     communityName: form.communityName,
     communityVerse: form.communityVerse,
+    // Coordonnées imprimées sur les reçus, factures et rapports
+    communityAddress: form.communityAddress.trim() || undefined,
+    communityPhone: form.communityPhone.trim() || null,
+    communityEmail: form.communityEmail.trim() || null,
+    communityLegalId: form.communityLegalId.trim() || null,
   }
 }

@@ -1,8 +1,8 @@
 'use client'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Banknote, CheckCircle2, CircleDollarSign, Plus, Receipt, Search, X } from 'lucide-react'
-import api from '@/lib/api'
+import { Banknote, CheckCircle2, CircleDollarSign, FileText, Plus, Receipt, Search, X } from 'lucide-react'
+import api, { getBaseURL } from '@/lib/api'
 import { cn, formatAmount, formatDate, MODE_PAIEMENT_LABELS } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -240,7 +240,12 @@ function PrestationDetail({ prestation: p, cours, setCours, entree, setEntree, a
             <p className="text-sm text-gray-500">{p.commanditaire}{p.lieu ? ` - ${p.lieu}` : ''}</p>
             {p.dateEvenement && <p className="text-xs text-gray-400 mt-1">Evenement: {formatDate(p.dateEvenement)}</p>}
           </div>
-          <Status status={p.statut} />
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => window.open(`${getBaseURL()}/documents/prestations/${p.id}/facture`, '_blank')}>
+              <FileText size={14} /> Facture PDF
+            </Button>
+            <Status status={p.statut} />
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">

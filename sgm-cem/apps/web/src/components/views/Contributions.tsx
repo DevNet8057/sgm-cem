@@ -1,10 +1,11 @@
 'use client'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Activity, AlertTriangle, Banknote, ChevronsUpDown, Clock, CreditCard, Eye, FileText, Filter, Loader2, MapPin, Paperclip, Plus, Search, Undo2, Wand2, X } from 'lucide-react'
-import api, { fetchAllPages, getBaseURL } from '@/lib/api'
-import { cn, formatAmount, formatDate, formatDateTime, MODE_PAIEMENT_LABELS, contributorKind, contributorName } from '@/lib/utils'
+import { Activity, AlertTriangle, Banknote, ChevronsUpDown, Clock, CreditCard, Eye, FileSpreadsheet, FileText, Filter, Loader2, MapPin, Paperclip, Plus, Search, Undo2, Wand2, X } from 'lucide-react'
+import api, { downloadFromApi, fetchAllPages, getBaseURL } from '@/lib/api'
+import { cn, ROLE_LEVELS, formatAmount, formatDate, formatDateTime, MODE_PAIEMENT_LABELS, contributorKind, contributorName } from '@/lib/utils'
 import { useAppStore } from '@/store/appStore'
+import { PeriodPicker, periodParams, type PeriodValue } from '@/components/ui/PeriodPicker'
 import { useAuthStore } from '@/store/authStore'
 import { RefundRequestModal } from '@/components/contributions/RefundRequestModal'
 import { Button } from '@/components/ui/Button'
@@ -47,6 +48,23 @@ export function Contributions() {
   const { addToast } = useAppStore()
   // Remboursement (lot 4.1) : demandé par le trésorier sur une contribution confirmée
   const isTreasurer = useAuthStore(s => s.user?.role) === 'TRESORIER'
+  const canExport = (ROLE_LEVELS[useAuthStore(s => s.user?.role) ?? ''] ?? 0) >= 3
+  const [exporting, setExporting] = useState(false)
+  // Export Excel côté serveur avec les filtres en cours (toutes les pages)
+  async function exportExcel() {
+    setExporting(true)
+    try {
+      await downloadFromApi('/exports/contributions.xlsx', {
+        statut: statusFilter || undefined, modePaiement: modeFilter || undefined,
+        rubriqueId: rubriqueFilter || undefined, search: search || undefined,
+        ...Object.fromEntries(Object.entries(periodParams(period)).map(([k, v]) => [k, String(v)])),
+      }, 'contributions.xlsx')
+    } catch {
+      addToast({ title: 'Export impossible pour le moment', variant: 'error' })
+    } finally {
+      setExporting(false)
+    }
+  }
   const [refundFor, setRefundFor] = useState<Contribution | null>(null)
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState('')
@@ -54,6 +72,8 @@ export function Contributions() {
   const [rubriqueFilter, setRubriqueFilter] = useState('')
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const [search, setSearch] = useState('')
+  // Période consultée (historique) : null = toutes les périodes
+  const [period, setPeriod] = useState<PeriodValue | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [showDeclare, setShowDeclare] = useState(false)
   const [showStepper, setShowStepper] = useState(false)
@@ -81,7 +101,7 @@ export function Contributions() {
   } | null>(null)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['contributions', page, statusFilter, modeFilter, rubriqueFilter, search],
+    queryKey: ['contributions', page, statusFilter, modeFilter, rubriqueFilter, search, period],
     queryFn: async () => (await api.get('/contributions', {
       params: {
         page, limit: 20,
@@ -89,6 +109,7 @@ export function Contributions() {
         modePaiement: modeFilter || undefined,
         rubriqueId: rubriqueFilter || undefined,
         search: search || undefined,
+        ...periodParams(period),
       }
     })).data,
   })
@@ -402,6 +423,11 @@ export function Contributions() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
+            {canExport && (
+              <Button size="sm" variant="outline" loading={exporting} onClick={exportExcel}>
+                <FileSpreadsheet size={14} /> Excel
+              </Button>
+            )}
             <Button size="sm" variant="outline" onClick={() => setShowAdvancedFilters(v => !v)}>
               <Filter size={14} className={showAdvancedFilters ? 'text-[#1A6B1A]' : ''} />
               Filtres
@@ -426,6 +452,11 @@ export function Contributions() {
       </div>
 
       {/* D : Query builder — chips de filtres */}
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <span className="text-xs font-semibold text-gray-500">Période</span>
+        <PeriodPicker value={period} onChange={p => { setPeriod(p); setPage(1) }} allowAll className="w-full sm:w-[360px]" />
+      </div>
+
       {showAdvancedFilters && (
         <div className="mb-4 bg-white rounded-[18px] border border-gray-100 p-4 space-y-3">
           <div className="flex items-center justify-between">

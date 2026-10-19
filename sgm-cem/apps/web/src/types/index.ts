@@ -385,6 +385,10 @@ export interface SystemSettings {
   transferAlertTresorierHours: number
   communityName: string
   communityVerse: string
+  communityAddress: string
+  communityPhone: string | null
+  communityEmail: string | null
+  communityLegalId: string | null
   updatedAt: string
 }
 

@@ -1,8 +1,8 @@
 'use client'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, FolderOpen, Paperclip, Undo2, X } from 'lucide-react'
-import api from '@/lib/api'
+import { Check, FileText, FolderOpen, Paperclip, Undo2, X } from 'lucide-react'
+import api, { getBaseURL } from '@/lib/api'
 import { cn, formatAmount, formatDateTime } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
 import { useAppStore } from '@/store/appStore'
@@ -191,6 +191,7 @@ export function Remboursements() {
                   <Button size="sm" variant="ghost" loading={cancel.isPending && cancel.variables === r.id} onClick={() => cancel.mutate(r.id)}>Annuler la demande</Button>
                 )}
                 {r.hasProof && <Button size="sm" variant="ghost" onClick={() => openRefundProof(r.id)}><Paperclip size={13} /> Voir la preuve</Button>}
+                <Button size="sm" variant="ghost" onClick={() => window.open(`${getBaseURL()}/documents/remboursements/${r.id}/avis`, '_blank')}><FileText size={13} /> Avis PDF</Button>
               </div>
             </article>
           )

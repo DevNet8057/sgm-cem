@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/Button'
 
 type ReportKey = 'membres' | 'rubriques' | 'contributions'
 
+const MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
+
 export function Rapports() {
   const [loading, setLoading] = useState<ReportKey | 'pdf-view' | 'pdf-download' | null>(null)
   const [error, setError] = useState('')
@@ -25,11 +27,19 @@ export function Rapports() {
     }
   }
 
+  // Période du rapport : année entière ou un mois précis
+  const thisYear = new Date().getFullYear()
+  const [year, setYear] = useState(thisYear)
+  const [month, setMonth] = useState(0)
+
   function openFinancialReport(mode: 'view' | 'download') {
     setLoading(mode === 'view' ? 'pdf-view' : 'pdf-download')
     setError('')
     try {
-      const url = `${getBaseURL()}/stats/financial-report.pdf${mode === 'download' ? '?download=1' : ''}`
+      const qs = new URLSearchParams({ year: String(year) })
+      if (month) qs.set('month', String(month))
+      if (mode === 'download') qs.set('download', '1')
+      const url = `${getBaseURL()}/stats/financial-report.pdf?${qs}`
       window.open(url, '_blank')
     } catch {
       setError("Impossible d'ouvrir le rapport PDF.")
@@ -54,9 +64,20 @@ export function Rapports() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <ReportCard
           title="Rapport financier"
-          description="Résumé annuel, moyens de paiement, top contributeurs et taux par rubrique — PDF prêt à imprimer."
+          description="Recettes, rubriques, moyens de paiement, position des fonds, dépôts et remboursements — PDF prêt à imprimer et à signer."
           icon="print"
         >
+          <div className="flex gap-2 mb-2">
+            <select aria-label="Année du rapport" value={year} onChange={e => setYear(Number(e.target.value))}
+              className="flex-1 min-w-0 h-9 rounded-[10px] border border-gray-200 bg-white px-2 text-sm text-gray-700">
+              {Array.from({ length: 6 }, (_, i) => thisYear - i).map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <select aria-label="Mois du rapport" value={month} onChange={e => setMonth(Number(e.target.value))}
+              className="flex-1 min-w-0 h-9 rounded-[10px] border border-gray-200 bg-white px-2 text-sm text-gray-700">
+              <option value={0}>Année entière</option>
+              {MOIS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+          </div>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" loading={loading === 'pdf-view'} onClick={() => openFinancialReport('view')} className="flex-1">
               <Eye size={13} /> Voir

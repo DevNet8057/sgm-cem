@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { motion, useReducedMotion } from 'framer-motion'
 import { AlertTriangle, ArrowRight, CreditCard, FileText, Search, Wallet, X } from 'lucide-react'
 import api, { getBaseURL } from '@/lib/api'
+import { PeriodPicker, periodParams, type PeriodValue } from '@/components/ui/PeriodPicker'
 import { cn, formatAmount, formatDate, MODE_PAIEMENT_LABELS } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
 import { Button } from '@/components/ui/Button'
@@ -21,6 +22,9 @@ export function MesContributions() {
   const [page, setPage] = useState(1)
   const [montantMin, setMontantMin] = useState('')
   const [montantMax, setMontantMax] = useState('')
+  const [statementYear, setStatementYear] = useState(new Date().getFullYear())
+  // Période de l'historique affiché : null = toutes les périodes
+  const [period, setPeriod] = useState<PeriodValue | null>(null)
   const [payingFor, setPayingFor] = useState<{ rubriqueId?: string; montant?: number } | null>(null)
 
   // Mêmes queryKeys que RubriquesMembre.tsx : react-query dédoublonne la requête
@@ -68,13 +72,14 @@ export function MesContributions() {
 
   // Recherche faite par l'API sur tout l'historique (plus seulement la page affichée)
   const { data, isLoading } = useQuery({
-    queryKey: ['mes-contributions', page, montantMin, montantMax, search.trim()],
+    queryKey: ['mes-contributions', page, montantMin, montantMax, search.trim(), period],
     queryFn: async () => (await api.get('/contributions/me', {
       params: {
         page, limit: 20,
         ...(montantMin && { montantMin }),
         ...(montantMax && { montantMax }),
         ...(search.trim() && { search: search.trim() }),
+        ...periodParams(period),
       },
     })).data,
   })
@@ -112,15 +117,29 @@ export function MesContributions() {
               Bonjour {user?.firstName} — Historique de vos contributions au ministère
             </p>
           </div>
-          <Button
-            size="sm"
-            loading={loadingRubriques || loadingMyMembre}
-            disabled={!myMembre || (openRubriques?.length ?? 0) === 0}
-            onClick={() => setPayingFor({})}
-          >
-            <Wallet size={14} />
-            Faire une contribution
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Relevé annuel signé (attestation de contributions) */}
+            <div className="flex items-center rounded-[10px] border border-gray-200 bg-white">
+              <select aria-label="Année du relevé" value={statementYear} onChange={e => setStatementYear(Number(e.target.value))}
+                className="h-8 rounded-l-[10px] bg-transparent pl-2 pr-1 text-sm text-gray-700 focus:outline-none">
+                {[0, 1, 2].map(i => new Date().getFullYear() - i).map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+              <button type="button" disabled={!myMembre}
+                onClick={() => window.open(`${getBaseURL()}/documents/releve/me?year=${statementYear}`, '_blank')}
+                className="h-8 flex items-center gap-1.5 border-l border-gray-200 px-3 text-sm font-semibold text-[#1A6B1A] hover:bg-[#E8F5E8] rounded-r-[10px] disabled:opacity-50">
+                <FileText size={14} /> Relevé PDF
+              </button>
+            </div>
+            <Button
+              size="sm"
+              loading={loadingRubriques || loadingMyMembre}
+              disabled={!myMembre || (openRubriques?.length ?? 0) === 0}
+              onClick={() => setPayingFor({})}
+            >
+              <Wallet size={14} />
+              Faire une contribution
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -150,6 +169,10 @@ export function MesContributions() {
             placeholder="Rechercher par rubrique…"
             className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-[10px] text-sm focus:outline-none focus:ring-2 focus:ring-[#1A6B1A]/30 focus:border-[#1A6B1A]"
           />
+        </div>
+        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center">
+          <span className="text-xs font-semibold text-gray-500">Période :</span>
+          <PeriodPicker value={period} onChange={p => { setPeriod(p); setPage(1) }} allowAll className="w-full sm:w-[360px]" />
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold text-gray-500">Montant :</span>

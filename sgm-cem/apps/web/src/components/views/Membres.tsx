@@ -2,10 +2,11 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Download, Edit3, FileUp, Heart, HeartOff,
+  Download, Edit3, FileSpreadsheet, FileText, FileUp, Heart, HeartOff,
   Plus, Search, UserMinus, Users, X,
 } from 'lucide-react'
-import api from '@/lib/api'
+import api, { downloadFromApi, getBaseURL } from '@/lib/api'
+import { useAppStore } from '@/store/appStore'
 import { cn, formatDate } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -61,6 +62,22 @@ export function Membres() {
   const [coupleResults,   setCoupleResults]   = useState<Membre[]>([])
   const [coupleMode,      setCoupleMode]      = useState<'search' | 'manual' | 'linked'>('search')
   const [searchingCouple, setSearchingCouple] = useState(false)
+
+  const { addToast } = useAppStore()
+  const [exporting, setExporting] = useState(false)
+  async function exportExcel() {
+    setExporting(true)
+    try {
+      await downloadFromApi('/exports/membres.xlsx', {
+        search: search || undefined, groupe: filterGroupe || undefined,
+        statut: filterStatut || undefined, profilFinancier: filterProfil || undefined,
+      }, 'membres.xlsx')
+    } catch {
+      addToast({ title: 'Export impossible pour le moment', variant: 'error' })
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ['membres', page, search, filterGroupe, filterStatut, filterProfil],
@@ -183,6 +200,10 @@ export function Membres() {
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="outline" onClick={() => setShowInactive(true)}>
               <UserMinus size={14} /> Inactifs
+            </Button>
+            {/* Export serveur avec les filtres en cours (toutes les pages) */}
+            <Button size="sm" variant="outline" loading={exporting} onClick={exportExcel}>
+              <FileSpreadsheet size={14} /> Excel
             </Button>
             <Button size="sm" variant="outline" onClick={() => { setMode(mode === 'import' ? 'none' : 'import'); setError('') }}>
               <FileUp size={14} /> Importer
@@ -456,9 +477,15 @@ export function Membres() {
                       <td className="px-4 py-3" data-label="Statut"><StatusBadge status={m.statut} /></td>
                       <td className="px-4 py-3 text-xs text-gray-400" data-label="Adhésion">{formatDate(m.dateAdhesion)}</td>
                       <td className="px-4 py-3" data-label="Action">
-                        <Button size="sm" variant="outline" onClick={() => startEdit(m)}>
-                          <Edit3 size={13} /> Modifier
-                        </Button>
+                        <div className="flex flex-wrap gap-1.5">
+                          <Button size="sm" variant="outline" onClick={() => startEdit(m)}>
+                            <Edit3 size={13} /> Modifier
+                          </Button>
+                          <Button size="sm" variant="ghost" title="Relevé annuel des contributions (PDF)"
+                            onClick={() => window.open(`${getBaseURL()}/documents/releve/${m.id}?year=${new Date().getFullYear()}`, '_blank')}>
+                            <FileText size={13} /> Relevé
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   )

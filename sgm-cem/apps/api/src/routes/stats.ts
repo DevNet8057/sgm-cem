@@ -5,6 +5,7 @@ import { requireLevel } from '../middleware/rbac'
 import { generateFinancialReportPdf } from '../services/financial-report'
 import { getPrisma } from '../lib/prisma'
 import { refundsByRubrique, refundsTotal } from '../services/refund.service'
+import { monthBounds, periodBounds } from '../services/closure.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -13,10 +14,8 @@ export async function computeDashboardStats(requestedYear?: number, requestedMon
   const now = new Date()
   const year = requestedYear || now.getFullYear()
   const month = requestedMonth && requestedMonth >= 1 && requestedMonth <= 12 ? requestedMonth : undefined
-  const startOfYear = new Date(year, 0, 1)
-  const endOfYear = new Date(year, 11, 31, 23, 59, 59, 999)
-  const startOfPeriod = month ? new Date(year, month - 1, 1) : startOfYear
-  const endOfPeriod = month ? new Date(year, month, 0, 23, 59, 59, 999) : endOfYear
+  // Bornes à l'heure de Yaoundé, identiques aux clôtures et au rapport financier
+  const { start: startOfPeriod, end: endOfPeriod } = periodBounds(year, month)
   const periodFilter = { gte: startOfPeriod, lte: endOfPeriod }
 
   const [
@@ -218,8 +217,7 @@ router.get('/monthly', authenticate, requireLevel(3), async (req, res) => {
 
   const monthly = await Promise.all(
     Array.from({ length: 12 }, (_, i) => i).map(async (month) => {
-      const start = new Date(year, month, 1)
-      const end = new Date(year, month + 1, 0, 23, 59, 59, 999)
+      const { start, end } = monthBounds(year, month + 1)
       const [confirmed, pending, litiges] = await Promise.all([
         prisma.contribution.aggregate({
           where: { statut: 'CONFIRME', createdAt: { gte: start, lte: end } },

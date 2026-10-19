@@ -105,8 +105,8 @@ router.get('/rubriques.xlsx', authenticate, requireLevel(3), async (req, res) =>
 
 // GET /api/exports/contributions.xlsx — mêmes filtres et périmètre que GET /api/contributions
 router.get('/contributions.xlsx', authenticate, requireLevel(3), async (req, res) => {
-  const { statut, rubriqueId, membreId, localisation, search, modePaiement } = queryOf(req)
-  const filters = { statut, rubriqueId, membreId, localisation, search, modePaiement }
+  const { statut, rubriqueId, membreId, localisation, search, modePaiement, year, month } = queryOf(req)
+  const filters = { statut, rubriqueId, membreId, localisation, search, modePaiement, year, month }
   const contributions = await prisma.contribution.findMany({
     where: contributionListWhere({ userId: req.user!.userId, role: req.user!.role }, filters),
     include: {

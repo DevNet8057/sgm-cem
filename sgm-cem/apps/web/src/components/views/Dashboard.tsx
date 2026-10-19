@@ -3,7 +3,7 @@
 import { TodoCard } from '@/components/dashboard/TodoCard'
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Alert, Button, Card, Empty, Progress, Segmented, Select, Skeleton, Statistic, Tag } from 'antd'
+import { Alert, Button, Card, Empty, Progress, Segmented, Skeleton, Statistic, Tag } from 'antd'
 import { motion } from 'framer-motion'
 import {
   AlertTriangle, CheckCircle2, CreditCard, Crown, FileText, FolderOpen,
@@ -18,6 +18,8 @@ import { ActivityCard } from '@/components/ui/ActivityCard'
 import { Avatar } from '@/components/ui/Avatar'
 import { formatAmount, MODE_PAIEMENT_LABELS, contributorName } from '@/lib/utils'
 import { useAppStore } from '@/store/appStore'
+import { useSharedPeriod } from '@/store/periodStore'
+import { PeriodPicker, periodLabel } from '@/components/ui/PeriodPicker'
 import { useAuthStore } from '@/store/authStore'
 import type { CollecteursResponse, Contribution, DashboardStats, ModePaiement } from '@/types'
 
@@ -39,26 +41,17 @@ const STATUS_LABELS: Record<string, string> = {
   CONFIRME: 'Confirmé', EN_ATTENTE_CONFIRMATION: 'En attente', LITIGE: 'Litige', ANNULE: 'Annulé',
 }
 
-const MONTH_OPTIONS = [
-  { value: 'all', label: "Toute l'année" },
-  ...Array.from({ length: 12 }, (_, index) => ({
-    value: String(index + 1),
-    label: new Date(2026, index, 1).toLocaleDateString('fr-FR', { month: 'long' }),
-  })),
-]
 
 export function Dashboard() {
   const { setActiveView, navigateToNotification } = useAppStore()
   const { user } = useAuthStore()
   const canSeeFundsHolders = user?.role === 'TRESORIER' || user?.role === 'ADMIN' || user?.role === 'DEVELOPER'
-  const currentYear = new Date().getFullYear()
-  const [year, setYear] = useState(currentYear)
-  const [month, setMonth] = useState(String(new Date().getMonth() + 1))
+  const { period, setPeriod } = useSharedPeriod()
+  const { year } = period
+  const month = period.month ? String(period.month) : 'all'
   const [chartMode, setChartMode] = useState<'montants' | 'taux'>('montants')
   const selectedMonth = month === 'all' ? undefined : Number(month)
-  const periodLabel = month === 'all'
-    ? `Année ${year}`
-    : `${MONTH_OPTIONS.find(option => option.value === month)?.label ?? ''} ${year}`
+  const periodText = periodLabel(period)
 
   const statsQuery = useQuery<DashboardStats>({
     queryKey: ['dashboard-stats', year, month],
@@ -79,7 +72,6 @@ export function Dashboard() {
   const stats = statsQuery.data
   const monthlyData = monthlyQuery.data ?? []
   const monthlyTotal = useMemo(() => monthlyData.reduce((sum, item) => sum + item.total, 0), [monthlyData])
-  const years = Array.from({ length: 7 }, (_, index) => currentYear - 4 + index)
   const motionProps = { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.35 } }
 
   // flex/gap plutôt que space-y (margin-based) : antd réinitialise margin-bottom
@@ -101,9 +93,9 @@ export function Dashboard() {
             <h1 className="font-display text-3xl font-semibold text-white md:text-4xl">Bonjour, {user?.firstName ?? '…'}</h1>
             <p className="mt-1 text-sm text-white/65">Culte d&apos;Enfants de Melen · Tableau de bord financier</p>
           </div>
-          <div className="grid min-w-32 grid-cols-2 gap-2 sm:flex sm:min-w-[290px]">
-            <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-white/60" htmlFor="dashboard-month">Mois</label><Select id="dashboard-month" value={month} onChange={setMonth} options={MONTH_OPTIONS} className="w-full" aria-label="Mois des statistiques" /></div>
-            <div><label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-white/60" htmlFor="dashboard-year">Année</label><Select id="dashboard-year" value={year} onChange={setYear} options={years.map(value => ({ value, label: String(value) }))} className="w-full" aria-label="Année des statistiques" /></div>
+          <div className="w-full sm:w-[340px]">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-white/60">Période affichée</p>
+            <PeriodPicker value={period} onChange={p => p && setPeriod(p)} tone="dark" />
           </div>
         </div>
       </Card>
@@ -119,7 +111,7 @@ export function Dashboard() {
           <MetricCard icon={<Wallet size={20} />} title={month === 'all' ? 'Collecte annuelle' : 'Collecte du mois'} value={stats?.totalCollectedPeriod ?? 0} formatter={formatAmount} color="#1A6B1A" onClick={() => setActiveView('contributions')} />
           <MetricCard icon={<TrendingUp size={20} />} title="Contributions confirmées" value={stats?.totalConfirmedContributions ?? 0} color="#D4A900" iconTextColor="#052005" onClick={() => setActiveView('statistiques')} />
           <MetricCard icon={<CheckCircle2 size={20} />} title="Taux de confirmation" value={stats?.globalConfirmationRate ?? 0} suffix="%" color="#2563EB" onClick={() => setActiveView('validations')} />
-          <MetricCard icon={<AlertTriangle size={20} />} title="Litiges actifs" value={stats?.litiges ?? 0} color="#DC2626" onClick={() => setActiveView('litiges')} />
+          <MetricCard icon={<AlertTriangle size={20} />} title="Litiges de la période" value={stats?.litiges ?? 0} color="#DC2626" onClick={() => setActiveView('litiges')} />
         </div>
       )}
 
@@ -141,7 +133,7 @@ export function Dashboard() {
                   </BarChart>
                 )}
               </ResponsiveContainer>
-              <div aria-live="polite" className="mt-3 flex flex-wrap justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-500"><span>Total {year} : <strong className="text-[#0F4A0F]">{formatAmount(monthlyTotal)}</strong></span><span>{periodLabel} · {stats?.totalConfirmedContributions ?? 0} contribution(s) confirmée(s)</span></div>
+              <div aria-live="polite" className="mt-3 flex flex-wrap justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-500"><span>Total {year} : <strong className="text-[#0F4A0F]">{formatAmount(monthlyTotal)}</strong></span><span className="first-letter:uppercase">{periodText} · {stats?.totalConfirmedContributions ?? 0} contribution(s) confirmée(s)</span></div>
             </>
           )}
         </Panel>
@@ -194,7 +186,7 @@ export function Dashboard() {
         </Panel>
 
         <Panel title="Taux par rubrique">
-          {(stats?.contributionRates?.length ?? 0) === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Aucune rubrique active" /> : <div className="space-y-4">{(stats?.contributionRates ?? []).map(item => <button key={item.rubriqueId} onClick={() => setActiveView('rubriques')} className="w-full text-left"><div className="mb-1 flex justify-between text-xs"><strong className="text-slate-700">{item.code}</strong><span>{item.rate == null ? 'Libre' : `${item.rate} %`}</span></div><Progress aria-label={`Taux de contribution ${item.code}`} percent={Math.min(100, item.rate ?? 0)} showInfo={false} strokeColor={(item.rate ?? 0) >= 80 ? '#1A6B1A' : (item.rate ?? 0) >= 50 ? '#F5C400' : '#EF4444'} /><div className="flex justify-between text-[11px] text-slate-400"><span>{formatAmount(item.total)}</span><span>{item.count} paiement(s)</span></div></button>)}</div>}
+          {(stats?.contributionRates?.length ?? 0) === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={`Aucune collecte en ${periodText}`} /> : <div className="space-y-4">{(stats?.contributionRates ?? []).map(item => <button key={item.rubriqueId} onClick={() => setActiveView('rubriques')} className="w-full text-left"><div className="mb-1 flex justify-between text-xs"><strong className="text-slate-700">{item.code}</strong><span>{item.rate == null ? 'Libre' : `${item.rate} %`}</span></div><Progress aria-label={`Taux de contribution ${item.code}`} percent={Math.min(100, item.rate ?? 0)} showInfo={false} strokeColor={(item.rate ?? 0) >= 80 ? '#1A6B1A' : (item.rate ?? 0) >= 50 ? '#F5C400' : '#EF4444'} /><div className="flex justify-between text-[11px] text-slate-400"><span>{formatAmount(item.total)}</span><span>{item.count} paiement(s)</span></div></button>)}</div>}
         </Panel>
 
         <div className="flex flex-col gap-5">

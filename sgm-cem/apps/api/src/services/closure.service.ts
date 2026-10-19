@@ -17,6 +17,21 @@ export function monthBounds(annee: number, mois: number): { start: Date; end: Da
   return { start, end: new Date(next.getTime() - 1) }
 }
 
+/** Bornes d'une année entière ou d'un mois (heure de Yaoundé). */
+export function periodBounds(annee: number, mois?: number): { start: Date; end: Date } {
+  if (mois) return monthBounds(annee, mois)
+  return { start: monthBounds(annee, 1).start, end: monthBounds(annee, 12).end }
+}
+
+/** Lit ?year=&month= d'une requête ; filtre createdAt, ou undefined sans année valide. */
+export function periodFilterFromQuery(q: { year?: unknown; month?: unknown }): { gte: Date; lte: Date } | undefined {
+  const year = Number(q.year)
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) return undefined
+  const month = Number(q.month)
+  const { start, end } = periodBounds(year, Number.isInteger(month) && month >= 1 && month <= 12 ? month : undefined)
+  return { gte: start, lte: end }
+}
+
 export interface ClosureFigures {
   annee: number
   mois: number

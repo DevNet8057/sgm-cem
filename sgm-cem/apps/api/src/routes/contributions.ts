@@ -8,6 +8,7 @@ import { syncPaymentContributionStatus } from '../services/payment-status.servic
 import { generateReceiptPDF, generateReceiptPdf } from '../services/receipt'
 import { getFileStream } from '../services/storage'
 import { getConfig } from '../services/config.service'
+import { periodFilterFromQuery } from '../services/closure.service'
 import { notifyCollecteurNewContribution, notifyInApp } from '../services/notification'
 import { notifyPayerDecision } from '../services/payer-notice.service'
 import { calculateRemainingBalance } from '@sgm-cem/shared'
@@ -90,7 +91,10 @@ const declareSchema = z.object({
  */
 export function contributionListWhere(actor: ContributionActor, q: {
   statut?: string; rubriqueId?: string; membreId?: string; localisation?: string; search?: string; modePaiement?: string
+  year?: string; month?: string
 }): Prisma.ContributionWhereInput {
+  // Période facultative (année, ou mois d'une année) : consultation de l'historique
+  const period = periodFilterFromQuery(q)
   const localisations = q.localisation
     ? z.array(z.nativeEnum(LocalisationFonds)).parse(q.localisation.split(',').filter(Boolean))
     : undefined
@@ -104,6 +108,7 @@ export function contributionListWhere(actor: ContributionActor, q: {
         ...(q.membreId && { membreId: q.membreId }),
         ...(localisations && { localisationFonds: { in: localisations } }),
         ...(q.modePaiement && { modePaiement: z.nativeEnum(ModePaiement).parse(q.modePaiement) }),
+        ...(period && { createdAt: period }),
       },
       ...(term ? [{
         OR: [
@@ -118,12 +123,12 @@ export function contributionListWhere(actor: ContributionActor, q: {
 }
 
 router.get('/', authenticate, requireLevel(2), async (req, res) => {
-  const { page = '1', limit = '20', statut, rubriqueId, membreId, localisation, search, modePaiement } = req.query as Record<string, string>
+  const { page = '1', limit = '20', statut, rubriqueId, membreId, localisation, search, modePaiement, year, month } = req.query as Record<string, string>
   const currentPage = Math.max(1, parseInt(page, 10) || 1)
   const pageSize = Math.min(100, Math.max(1, parseInt(limit, 10) || 20))
   const skip = (currentPage - 1) * pageSize
   // Filtres côté serveur (jamais de filtrage d'une seule page dans le navigateur)
-  const where = contributionListWhere(actorOf(req), { statut, rubriqueId, membreId, localisation, search, modePaiement })
+  const where = contributionListWhere(actorOf(req), { statut, rubriqueId, membreId, localisation, search, modePaiement, year, month })
 
   const [contributions, total, sum] = await Promise.all([
     prisma.contribution.findMany({
@@ -225,7 +230,7 @@ router.get('/me', authenticate, requireLevel(1), async (req, res) => {
   const membre = await prisma.membre.findFirst({ where: { userId: req.user!.userId }, select: { id: true } })
   if (!membre) throw new AppError('NOT_FOUND', 'Profil membre introuvable pour ce compte', 404)
 
-  const { page = '1', limit = '20', montantMin, montantMax, search } = req.query as Record<string, string>
+  const { page = '1', limit = '20', montantMin, montantMax, search, year, month } = req.query as Record<string, string>
   const currentPage = Math.max(1, parseInt(page, 10) || 1)
   const pageSize = Math.min(100, Math.max(1, parseInt(limit, 10) || 20))
   const skip = (currentPage - 1) * pageSize
@@ -235,8 +240,10 @@ router.get('/me', authenticate, requireLevel(1), async (req, res) => {
   if (montantMax) montantFilter.lte = parseInt(montantMax, 10)
 
   const term = search?.trim().slice(0, 80)
+  const period = periodFilterFromQuery({ year, month })
   const where = {
     membreId: membre.id,
+    ...(period && { createdAt: period }),
     ...(Object.keys(montantFilter).length > 0 && { montant: montantFilter }),
     // Recherche sur TOUTES les contributions, pas seulement la page affichée
     ...(term && { rubrique: { OR: [
