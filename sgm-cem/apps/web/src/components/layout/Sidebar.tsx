@@ -1,5 +1,6 @@
 'use client'
-import { LogOut, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ChevronDown, LogOut, X } from 'lucide-react'
 import { Badge, Drawer, Layout, Menu, type MenuProps } from 'antd'
 import { motion } from 'framer-motion'
 import { useAppStore } from '@/store/appStore'
@@ -14,6 +15,22 @@ export function Sidebar() {
   const { user, logout } = useAuthStore()
 
   const filteredNav = visibleNav(user?.role)
+
+  // Menu plus long que l'écran : indice « suite en bas » et élément actif ramené à l'écran
+  const navRef = useRef<HTMLElement>(null)
+  const [moreBelow, setMoreBelow] = useState(false)
+  useEffect(() => {
+    const nav = navRef.current
+    if (!nav) return
+    const update = () => setMoreBelow(nav.scrollTop + nav.clientHeight < nav.scrollHeight - 4)
+    update()
+    nav.addEventListener('scroll', update, { passive: true })
+    window.addEventListener('resize', update)
+    return () => { nav.removeEventListener('scroll', update); window.removeEventListener('resize', update) }
+  }, [filteredNav.length])
+  useEffect(() => {
+    navRef.current?.querySelector('.ant-menu-item-selected')?.scrollIntoView({ block: 'nearest' })
+  }, [activeView])
 
   const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
     setActiveView(key)
@@ -51,8 +68,9 @@ export function Sidebar() {
             </span>
           ),
           style: {
-            height: 40,
-            lineHeight: '40px',
+            height: 34,
+            lineHeight: '34px',
+            marginBlock: 2,
             marginInline: 0,
             width: '100%',
             borderRadius: 10,
@@ -67,7 +85,7 @@ export function Sidebar() {
 
   const sidebarContent = (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[linear-gradient(180deg,#041b0a_0%,#0b3d18_48%,#0f5721_100%)] text-white">
-      <div className="flex min-h-[76px] items-center justify-between border-b border-white/10 px-5 py-4">
+      <div className="flex min-h-[64px] items-center justify-between border-b border-white/10 px-5 py-3">
         <div className="flex min-w-0 items-center gap-3">
           <motion.div
             initial={{ opacity: 0, scale: 0.92 }}
@@ -93,12 +111,13 @@ export function Sidebar() {
       </div>
 
       {user && (
-        <div className="border-b border-white/[0.06] px-4 py-3">
+        <div className="border-b border-white/[0.06] px-4 py-2">
           <Badge color="#F5C400" text={<span className="text-[11px] font-semibold text-[#F8D94E]">{ROLE_LABELS[user.role] ?? user.role}</span>} />
         </div>
       )}
 
-      <nav className="scrollbar-thin flex-1 overflow-y-auto px-2 py-3" aria-label="Navigation principale">
+      <div className="relative flex min-h-0 flex-1 flex-col">
+      <nav ref={navRef} className="scrollbar-thin flex-1 overflow-y-auto px-2 py-2" aria-label="Navigation principale">
         <Menu
           mode="inline"
           theme="dark"
@@ -109,6 +128,17 @@ export function Sidebar() {
           items={menuItems}
         />
       </nav>
+      {moreBelow && (
+        <button
+          type="button"
+          onClick={() => navRef.current?.scrollBy({ top: navRef.current.clientHeight * 0.6, behavior: 'smooth' })}
+          className="absolute inset-x-0 bottom-0 flex h-10 items-end justify-center bg-gradient-to-t from-[#0f5721] to-transparent pb-1 text-white/70 hover:text-white"
+          aria-label="Afficher la suite du menu"
+        >
+          <ChevronDown size={18} className="animate-bounce" aria-hidden />
+        </button>
+      )}
+      </div>
 
       {user && (
         <div className="border-t border-white/10 p-4">

@@ -55,11 +55,21 @@ export async function initCsrf(): Promise<void> {
   }
 }
 
-// Include CSRF token on state-changing requests
-api.interceptors.request.use((config) => {
+// Premier jeton de la page : un seul appel partagé par les écritures qui l'attendent
+let firstCsrf: Promise<void> | null = null
+function ensureCsrf(): Promise<void> {
+  firstCsrf ??= initCsrf().finally(() => { firstCsrf = null })
+  return firstCsrf
+}
+
+// Include CSRF token on state-changing requests. Après un rechargement de page, une
+// écriture partie avant la récupération du jeton (suivi d'activité…) l'attend au lieu
+// d'être refusée en 403.
+api.interceptors.request.use(async (config) => {
   const method = (config.method ?? 'get').toLowerCase()
-  if (['post', 'put', 'patch', 'delete'].includes(method) && csrfToken) {
-    config.headers['x-csrf-token'] = csrfToken
+  if (['post', 'put', 'patch', 'delete'].includes(method)) {
+    if (!csrfToken) await ensureCsrf()
+    if (csrfToken) config.headers['x-csrf-token'] = csrfToken
   }
   return config
 })

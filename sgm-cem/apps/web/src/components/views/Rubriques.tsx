@@ -3,7 +3,8 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Archive, Bell, CalendarPlus, Edit3, FolderOpen, Lock, Plus, Search, Unlock, X } from 'lucide-react'
 import api from '@/lib/api'
-import { cn, formatAmount, progressGradient } from '@/lib/utils'
+import { cn, formatAmount, progressGradient, ROLE_LEVELS } from '@/lib/utils'
+import { useAuthStore } from '@/store/authStore'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { SkeletonCard } from '@/components/ui/Skeleton'
@@ -30,6 +31,8 @@ const emptyForm = {
 type RubriqueForm = typeof emptyForm
 
 export function Rubriques() {
+  // Gestion des rubriques (création, modification, reconduction, statut) : niveau 3 et plus
+  const canManage = (ROLE_LEVELS[useAuthStore(s => s.user?.role) ?? ''] ?? 0) >= 3
   const queryClient = useQueryClient()
   const [search,       setSearch]       = useState('')
   const [filterType,   setFilterType]   = useState('')
@@ -49,6 +52,7 @@ export function Rubriques() {
     queryKey: ['settings-ratios'],
     queryFn: async () => (await api.get('/settings/ratios')).data.data,
     staleTime: 5 * 60 * 1000,
+    enabled: canManage,
   })
 
   // Reconduction N → N+1 (EF-M04-03)
@@ -147,10 +151,12 @@ export function Rubriques() {
             <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Rubriques</h2>
             <p className="text-gray-500 text-sm mt-0.5">{data?.length ?? 0} rubrique(s) configurée(s)</p>
           </div>
-          <Button size="sm" onClick={startCreate}>
-            {mode === 'create' ? <X size={14} /> : <Plus size={14} />}
-            {mode === 'create' ? 'Fermer' : 'Nouvelle rubrique'}
-          </Button>
+          {canManage && (
+            <Button size="sm" onClick={startCreate}>
+              {mode === 'create' ? <X size={14} /> : <Plus size={14} />}
+              {mode === 'create' ? 'Fermer' : 'Nouvelle rubrique'}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -221,7 +227,7 @@ export function Rubriques() {
           {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
         </div>
       ) : rubriques.length === 0 ? (
-        <EmptyState icon={FolderOpen} title="Aucune rubrique" description="Commencez par creer une rubrique de contribution" actionLabel="Créer une rubrique" onAction={startCreate} />
+        <EmptyState icon={FolderOpen} title="Aucune rubrique" description={canManage ? 'Commencez par créer une rubrique de contribution' : 'Aucune rubrique n’est encore ouverte'} {...(canManage && { actionLabel: 'Créer une rubrique', onAction: startCreate })} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 stagger-children">
           {rubriques.map(r => (
@@ -229,6 +235,7 @@ export function Rubriques() {
               key={r.id}
               rubrique={r}
               loadingStatus={updateStatus.isPending}
+              canManage={canManage}
               onEdit={() => startEdit(r)}
               onStatus={(status) => updateStatus.mutate({ id: r.id, status })}
               onRenew={() => { setRenewError(''); setRenewRate(String(settings?.defaultIncreaseRate ?? 0)); setRenewFor(r) }}
@@ -361,9 +368,10 @@ function RubriqueEditor({ mode, form, setForm, error, loading, onCancel, onSubmi
   )
 }
 
-function RubriqueCard({ rubrique: r, loadingStatus, onEdit, onStatus, onRenew }: {
+function RubriqueCard({ rubrique: r, loadingStatus, canManage, onEdit, onStatus, onRenew }: {
   rubrique: Rubrique
   loadingStatus: boolean
+  canManage: boolean
   onEdit: () => void
   onStatus: (status: RubriqueStatut) => void
   onRenew: () => void
@@ -411,7 +419,7 @@ function RubriqueCard({ rubrique: r, loadingStatus, onEdit, onStatus, onRenew }:
           </div>
         )}
 
-        <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-100">
+        {canManage && <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-100">
           <Button size="sm" variant="outline" onClick={onEdit}><Edit3 size={13} />Modifier</Button>
           <Button size="sm" variant="ghost" onClick={onRenew}><CalendarPlus size={13} />Reconduire</Button>
           {r.status !== 'OUVERTE' ? (
@@ -422,7 +430,7 @@ function RubriqueCard({ rubrique: r, loadingStatus, onEdit, onStatus, onRenew }:
           {r.status !== 'ARCHIVEE' && (
             <Button size="sm" variant="danger" loading={loadingStatus} onClick={() => onStatus('ARCHIVEE')}><Archive size={13} />Archiver</Button>
           )}
-        </div>
+        </div>}
       </div>
     </div>
   )
