@@ -121,7 +121,7 @@ export function Clotures() {
   )
 
   return (
-    <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter">
+    <div className="p-4 md:p-6 animate-page-enter">
       <div className="relative overflow-hidden rounded-[18px] border border-[#0F4A0F]/10 bg-white mb-5">
         <div className="absolute inset-y-0 left-0 w-1.5 bg-[#1A6B1A]" />
         <div className="p-5">

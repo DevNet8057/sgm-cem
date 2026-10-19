@@ -27,7 +27,7 @@ export function DashboardCollecteur() {
   const totalMontant = confirmed.reduce((s, c) => s + c.montant, 0)
 
   return (
-    <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter space-y-5">
+    <div className="p-4 md:p-6 animate-page-enter space-y-5">
       {/* Banner */}
       <div className="relative overflow-hidden rounded-[20px] cross-bg"
         style={{ background: 'linear-gradient(135deg, #052005 0%, #0F4A0F 50%, #1A6B1A 100%)' }}>

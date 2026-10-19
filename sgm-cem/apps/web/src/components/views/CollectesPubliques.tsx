@@ -170,7 +170,7 @@ export function CollectesPubliques() {
   const highlightedId = useFocusHighlight(collectes.map(c => c.id))
 
   return (
-    <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter">
+    <div className="p-4 md:p-6 animate-page-enter">
       <div className="relative overflow-hidden rounded-[18px] border border-[#0F4A0F]/10 bg-white mb-6">
         <div className="absolute inset-y-0 left-0 w-1.5 bg-[#F5C400]" />
         <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

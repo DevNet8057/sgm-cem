@@ -166,7 +166,9 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
         <MaintenanceBanner />
         <PushPermissionBanner />
         <OfflineBanner isOffline={isOffline} queuedCount={queuedCount} />
-        <main className="flex-1 overflow-y-auto scrollbar-thin page-transition">
+        {/* Sous lg, la barre de navigation du bas (fixe, 4 rem + zone de sécurité) recouvre
+            la fin de la zone qui défile : cette marge garde le dernier bloc visible sur tous les écrans */}
+        <main className="flex-1 overflow-y-auto scrollbar-thin page-transition pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0">
           {children}
         </main>
         <BottomNav />

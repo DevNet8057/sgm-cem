@@ -388,7 +388,7 @@ export function Contributions() {
   const detail = contributions.find(c => c.id === detailId) ?? null
 
   return (
-    <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter">
+    <div className="p-4 md:p-6 animate-page-enter">
       {/* Header */}
       <div className="relative overflow-hidden rounded-[18px] border border-[#0F4A0F]/10 bg-white mb-6 shadow-cem-sm">
         <div className="absolute inset-y-0 left-0 w-2 bg-[#1A6B1A]" />

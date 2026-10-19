@@ -166,7 +166,7 @@ export function Membres() {
   const isCouple = form.profilFinancier === 'COUPLE'
 
   return (
-    <div className="p-4 md:p-6 pb-20 lg:pb-6 animate-page-enter">
+    <div className="p-4 md:p-6 animate-page-enter">
       <InactiveMembersModal open={showInactive} onClose={() => setShowInactive(false)} />
       {/* Header */}
       <div className="relative overflow-hidden rounded-[18px] border border-[#0F4A0F]/10 bg-white mb-6 shadow-cem-sm">

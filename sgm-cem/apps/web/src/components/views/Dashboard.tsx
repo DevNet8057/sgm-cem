@@ -87,7 +87,7 @@ export function Dashboard() {
   // Card/Panel du dashboard et l'élément suivant — gap sur un conteneur flex ne
   // peut pas être écrasé par la marge d'un enfant.
   return (
-    <motion.div {...motionProps} className="flex flex-col gap-4 p-4 pb-20 md:gap-6 md:p-6 lg:pb-6">
+    <motion.div {...motionProps} className="flex flex-col gap-4 p-4 md:gap-6 md:p-6">
       <Card
         variant="borderless"
         className="overflow-hidden shadow-lg"
@@ -197,8 +197,8 @@ export function Dashboard() {
           {(stats?.contributionRates?.length ?? 0) === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Aucune rubrique active" /> : <div className="space-y-4">{(stats?.contributionRates ?? []).map(item => <button key={item.rubriqueId} onClick={() => setActiveView('rubriques')} className="w-full text-left"><div className="mb-1 flex justify-between text-xs"><strong className="text-slate-700">{item.code}</strong><span>{item.rate == null ? 'Libre' : `${item.rate} %`}</span></div><Progress aria-label={`Taux de contribution ${item.code}`} percent={Math.min(100, item.rate ?? 0)} showInfo={false} strokeColor={(item.rate ?? 0) >= 80 ? '#1A6B1A' : (item.rate ?? 0) >= 50 ? '#F5C400' : '#EF4444'} /><div className="flex justify-between text-[11px] text-slate-400"><span>{formatAmount(item.total)}</span><span>{item.count} paiement(s)</span></div></button>)}</div>}
         </Panel>
 
-        <div className="space-y-5">
-          <Panel title="Actions rapides"><div className="grid grid-cols-2 gap-2">{[
+        <div className="flex flex-col gap-5">
+          <Panel title="Actions rapides" fill={false}><div className="grid grid-cols-2 gap-2">{[
             { icon: Users, label: 'Nouveau membre', view: 'membres' }, { icon: CreditCard, label: 'Enregistrer', view: 'contributions' },
             { icon: CheckCircle2, label: 'Valider', view: 'validations' }, { icon: FileText, label: 'Rapport', view: 'rapports' },
           ].map(action => <Button key={action.label} block className="h-auto py-3" onClick={() => setActiveView(action.view)}><span className="flex flex-col items-center gap-1"><action.icon size={17} /><small>{action.label}</small></span></Button>)}</div></Panel>
@@ -216,8 +216,10 @@ function MetricCard({ icon, title, value, suffix, formatter, color, iconTextColo
 
 function DashboardSkeleton() { return <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <Card key={index}><Skeleton active paragraph={{ rows: 2 }} /></Card>)}</div> }
 
-function Panel({ title, extra, children }: { title: string; extra?: React.ReactNode; children: React.ReactNode }) {
-  return <Card title={<span className="font-display text-lg font-semibold text-[#0F4A0F]">{title}</span>} extra={extra} className="h-full shadow-sm">{children}</Card>
+// fill : la carte prend toute la hauteur de sa case de grille (cartes alignées d'une même rangée).
+// À désactiver quand d'autres blocs sont empilés dans la même case, sinon ils sont repoussés hors de la grille.
+function Panel({ title, extra, children, fill = true }: { title: string; extra?: React.ReactNode; children: React.ReactNode; fill?: boolean }) {
+  return <Card title={<span className="font-display text-lg font-semibold text-[#0F4A0F]">{title}</span>} extra={extra} className={fill ? 'h-full shadow-sm' : 'shadow-sm'}>{children}</Card>
 }
 
 function ActivityTimeline({ items }: { items: Contribution[] }) {
