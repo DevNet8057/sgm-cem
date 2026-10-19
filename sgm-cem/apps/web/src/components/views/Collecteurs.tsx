@@ -319,7 +319,7 @@ export function Collecteurs() {
             </>
           )}
           <div className="grid grid-cols-1 gap-2 border-t border-gray-100 p-3 sm:grid-cols-[1fr_1fr_auto]">
-            <label className={cn('flex min-h-11 cursor-pointer items-center gap-2 rounded-[10px] border border-dashed px-3 text-sm',
+            <label className={cn('relative flex min-h-11 cursor-pointer items-center gap-2 rounded-[10px] border border-dashed px-3 text-sm',
               depositProof ? 'border-[#1A6B1A] bg-[#E8F5E8] text-[#0F4A0F]' : 'border-gray-300 text-slate-600')}>
               <FolderOpen size={15} aria-hidden />
               <span className="min-w-0 flex-1 truncate">{depositProof ? depositProof.name : 'Reçu de dépôt (PDF ou photo) — obligatoire'}</span>
