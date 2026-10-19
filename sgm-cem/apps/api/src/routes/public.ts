@@ -30,6 +30,11 @@ import {
   type ChampPersonnalise,
 } from '../services/collecte.service'
 import { calculateAmountWithCommission, YELII_COMMISSION_RATE } from '@sgm-cem/shared'
+import { timingSafeEqual } from 'crypto'
+import { loadIdentity, verificationSignature, type VerifiableKind } from '../services/documents/document-kit'
+import { receiptNumber } from '../services/receipt'
+import { borderauNumber } from '../services/borderau'
+import { invoiceNumber, refundNumber } from '../services/documents/extra-documents'
 
 const router = Router()
 const prisma = getPrisma()
@@ -523,6 +528,44 @@ router.get('/payments/:contributionId/status', statusLimiter, async (req, res) =
       receiptUrl: synced.receiptUrl ?? null,
     },
   })
+})
+
+/**
+ * GET /api/public/verifier/:type/:id?s=…
+ * Vérification d'un document par son code QR : le lien porte une signature
+ * (impossible à fabriquer), la réponse ne donne que le strict nécessaire
+ * (numéro, montant, date, statut, initiales) — jamais de nom complet ni de téléphone.
+ */
+const initials = (name?: string | null) => (name ?? '').split(/\s+/).filter(Boolean).map(w => `${w[0].toUpperCase()}.`).join(' ') || '—'
+
+router.get('/verifier/:type/:id', publicLimiter, async (req, res) => {
+  const type = String(req.params.type) as VerifiableKind
+  const id = String(req.params.id)
+  const sig = String(req.query.s ?? '')
+  const expected = ['recu', 'facture', 'remboursement', 'bordereau'].includes(type) ? verificationSignature(type, id) : ''
+  const valid = expected.length > 0 && sig.length === expected.length && timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
+  const notFound = () => res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Document inconnu ou lien altéré : ce document ne peut pas être authentifié.' } })
+  if (!valid) return notFound()
+  const { name: community } = await loadIdentity()
+
+  if (type === 'recu') {
+    const c = await prisma.contribution.findUnique({ where: { id }, select: { id: true, createdAt: true, confirmedAt: true, montant: true, statut: true, rubrique: { select: { title: true } }, membre: { select: { user: { select: { fullName: true } } } }, contributeurExterne: { select: { nom: true } } } })
+    if (!c) return notFound()
+    return res.json({ success: true, data: { type: 'Reçu', numero: receiptNumber(c), communaute: community, montant: c.montant, date: c.confirmedAt ?? c.createdAt, statut: c.statut, objet: c.rubrique.title, payeur: initials(c.membre?.user.fullName ?? c.contributeurExterne?.nom) } })
+  }
+  if (type === 'facture') {
+    const p = await prisma.prestation.findUnique({ where: { id }, select: { reference: true, createdAt: true, tarifFinal: true, totalEntrees: true, titre: true, commanditaire: true } })
+    if (!p) return notFound()
+    return res.json({ success: true, data: { type: 'Facture', numero: invoiceNumber(p.reference), communaute: community, montant: p.tarifFinal, date: p.createdAt, statut: p.totalEntrees >= p.tarifFinal ? 'ACQUITTEE' : 'A_REGLER', objet: p.titre, payeur: initials(p.commanditaire) } })
+  }
+  if (type === 'remboursement') {
+    const r = await prisma.remboursement.findUnique({ where: { id }, select: { id: true, requestedAt: true, executedAt: true, montant: true, statut: true, beneficiaire: true } })
+    if (!r) return notFound()
+    return res.json({ success: true, data: { type: 'Avis de remboursement', numero: refundNumber(r), communaute: community, montant: r.montant, date: r.executedAt ?? r.requestedAt, statut: r.statut, objet: 'Remboursement', payeur: initials(r.beneficiaire) } })
+  }
+  const t = await prisma.fundsTransfer.findUnique({ where: { id }, select: { id: true, createdAt: true, totalAmount: true, status: true, senderName: true } })
+  if (!t) return notFound()
+  return res.json({ success: true, data: { type: 'Bordereau de remise', numero: borderauNumber(t), communaute: community, montant: t.totalAmount, date: t.createdAt, statut: t.status, objet: 'Remise de fonds', payeur: initials(t.senderName) } })
 })
 
 export { router as publicRouter }

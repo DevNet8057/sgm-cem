@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { z } from 'zod'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { generateFinancialReportPdf } from '../services/financial-report'
@@ -200,11 +201,15 @@ router.get('/dashboard', authenticate, requireLevel(3), async (req, res) => {
  * les reçus et bordereaux. Remplace l'ancien flux popup + impression navigateur.
  */
 router.get('/financial-report.pdf', authenticate, requireLevel(3), async (req, res) => {
-  const year = parseInt(req.query.year as string) || undefined
-  const pdf = await generateFinancialReportPdf(year)
+  // Année (défaut : année en cours) et mois facultatif (1 à 12)
+  const { year, month } = z.object({
+    year: z.coerce.number().int().min(2000).max(2100).default(new Date().getFullYear()),
+    month: z.coerce.number().int().min(1).max(12).optional(),
+  }).parse(req.query)
+  const pdf = await generateFinancialReportPdf({ year, month })
   const disposition = req.query.download === '1' ? 'attachment' : 'inline'
   res.setHeader('Content-Type', 'application/pdf')
-  res.setHeader('Content-Disposition', `${disposition}; filename="Rapport-Financier-CEM-${year ?? new Date().getFullYear()}.pdf"`)
+  res.setHeader('Content-Disposition', `${disposition}; filename="Rapport-financier-${year}${month ? `-${String(month).padStart(2, '0')}` : ''}.pdf"`)
   res.send(pdf)
 })
 

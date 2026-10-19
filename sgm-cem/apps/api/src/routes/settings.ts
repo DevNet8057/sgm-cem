@@ -19,6 +19,10 @@ const settingsSchema = z.object({
   transferAlertTresorierHours: z.number().int().min(0).max(720).optional(),
   communityName: z.string().min(3).max(120).optional(),
   communityVerse: z.string().min(3).max(600).optional(),
+  communityAddress: z.string().trim().min(3).max(200).optional(),
+  communityPhone: z.string().trim().max(40).nullable().optional(),
+  communityEmail: z.string().trim().email().max(120).nullable().optional().or(z.literal('').transform(() => null)),
+  communityLegalId: z.string().trim().max(160).nullable().optional(),
 })
 
 router.get('/', authenticate, requireLevel(4), async (_req, res) => {

@@ -789,6 +789,11 @@ model SystemSettings {
   transferAlertTresorierHours  Int      @default(48)
   communityName                String   @default("Culte d'Enfants de Melen")
   communityVerse               String   @default("Or, à celui qui peut faire...")
+  // Identité imprimée sur les documents (reçus, factures, rapports)
+  communityAddress             String   @default("Église Évangélique du Cameroun, paroisse de Melen — Yaoundé, Cameroun")
+  communityPhone               String?
+  communityEmail               String?
+  communityLegalId             String? // récépissé de déclaration, numéro d'enregistrement…
   updatedAt                    DateTime @updatedAt
 
   @@map("system_settings")

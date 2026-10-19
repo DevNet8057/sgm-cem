@@ -116,6 +116,12 @@ async function renderWithGotenberg(baseUrl: string, html: string, options: PDFOp
     // Gotenberg exige une marge explicite (défaut 0,39 pouce sinon)
     form.append(`margin${side[0].toUpperCase()}${side.slice(1)}`, value === undefined ? '0' : String(value))
   }
+  // Pied de page répété (numéros de page) : fichier footer.html, mêmes classes
+  // pageNumber / totalPages que le footerTemplate de Chromium
+  if (options.displayHeaderFooter && options.footerTemplate) {
+    const footer = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;-webkit-print-color-adjust:exact;}</style></head><body>${options.footerTemplate}</body></html>`
+    form.append('files', new Blob([footer], { type: 'text/html' }), 'footer.html')
+  }
   const res = await fetch(`${baseUrl.replace(/\/$/, '')}/forms/chromium/convert/html`, {
     method: 'POST',
     body: form,

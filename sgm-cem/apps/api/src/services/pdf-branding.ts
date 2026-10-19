@@ -22,12 +22,13 @@ export function formatXAF(amount: number): string {
   return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(amount) + ' FCFA'
 }
 
+// Dates des documents à l'heure de Yaoundé, quel que soit le fuseau du serveur
 export function formatDate(date: Date | string): string {
-  return new Date(date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
+  return new Date(date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Africa/Douala' })
 }
 
 export function formatDateTime(date: Date | string): string {
-  return new Date(date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return new Date(date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Douala' })
 }
 
 export function escapeHtml(value: unknown): string {

@@ -23,6 +23,7 @@ import { collectesRouter } from './routes/collectes'
 import { commissionsRouter } from './routes/commissions'
 import { prestationsRouter } from './routes/prestations'
 import { statsRouter } from './routes/stats'
+import { documentsRouter } from './routes/documents'
 import { settingsRouter } from './routes/settings'
 import { notificationsRouter } from './routes/notifications'
 import { profileRouter } from './routes/profile'
@@ -178,6 +179,7 @@ mount('/api/collectes', collectesRouter)
 mount('/api/commissions', commissionsRouter)
 mount('/api/prestations', prestationsRouter)
 mount('/api/stats', statsRouter)
+mount('/api/documents', documentsRouter)
 mount('/api/settings', settingsRouter)
 mount('/api/notifications', notificationsRouter)
 mount('/api/profile', profileRouter)

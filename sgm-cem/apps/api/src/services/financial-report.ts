@@ -1,211 +1,213 @@
+// Rapport financier (année ou mois, heure de Yaoundé) présentable au Bureau :
+// synthèse, flux mensuels, rubriques, moyens de paiement, position des fonds en
+// fin de période (grand livre), dépôts en banque, remboursements, prestations,
+// clôtures, signatures. Gabarit commun des documents.
 import { renderPdf } from './pdf-render'
-import { computeDashboardStats } from '../routes/stats'
-import { formatXAF, formatDateTime, getLogoDataUri, renderDocFooter, escapeHtml as e } from './pdf-branding'
 import { getPrisma } from '../lib/prisma'
+import { positionAt } from './fund-ledger.service'
+import { MOIS, monthBounds } from './closure.service'
+import { MODE_LABELS } from './receipt'
+import { e, formatDate, loadIdentity, money, pdfOptions, renderDocument } from './documents/document-kit'
 
 const prisma = getPrisma()
 
-const MODE_LABELS: Record<string, string> = {
-  ESPECES: 'Espèces', MTN_MOMO: 'MTN MoMo', ORANGE_MONEY: 'Orange Money',
-  YELII: 'Mobile Money (Yelii)', CARTE_VISA: 'Carte bancaire', VIREMENT: 'Virement bancaire',
+export interface ReportPeriod { year: number; month?: number }
+
+const LOCATION_LABELS: Record<string, string> = {
+  CHEZ_COLLECTEUR: 'Chez les collecteurs', EN_TRANSIT: 'En transit', CHEZ_RESPONSABLE: 'Chez les responsables',
+  REMIS_TRESORIER: 'Remis au trésorier', EN_CAISSE: 'En caisse', EN_BANQUE: 'En banque', PORTEFEUILLE_ELECTRONIQUE: 'Portefeuille électronique',
+}
+const REFUND_MEANS: Record<string, string> = { ESPECES: 'Espèces', MOBILE_MONEY: 'Mobile Money', VIREMENT: 'Virement' }
+const CLOSURE_LABELS: Record<string, string> = { PRESENTEE: 'Présentée', VALIDEE: 'Visée', REJETEE: 'Refusée' }
+
+export function reportNumber(p: ReportPeriod): string {
+  return p.month ? `RAP-${p.year}-${String(p.month).padStart(2, '0')}` : `RAP-${p.year}`
 }
 
-const MODE_COLORS: Record<string, string> = {
-  ESPECES: '#1A6B1A', MTN_MOMO: '#F5C400', ORANGE_MONEY: '#FF6600',
-  YELII: '#7C3AED', CARTE_VISA: '#2563EB', VIREMENT: '#0F4A0F',
+function bounds(p: ReportPeriod): { start: Date; end: Date } {
+  if (p.month) return monthBounds(p.year, p.month)
+  return { start: monthBounds(p.year, 1).start, end: monthBounds(p.year, 12).end }
 }
 
-export async function generateFinancialReportHtml(year?: number): Promise<string> {
-  const stats = await computeDashboardStats(year)
-  const settings = await prisma.systemSettings.findUnique({ where: { id: 'singleton' } })
-  const communityName = settings?.communityName ?? "Culte d'Enfants de Melen"
-  const verse = settings?.communityVerse ?? 'La Marche Ensemble dans l\'Unité'
-  const numero = `RAP-${stats.year}`
-  const logo = getLogoDataUri()
-  const maxRate = Math.max(...stats.contributionRates.map(r => r.rate ?? 0), 1)
+const MOIS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.']
+const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0)
+const fmtPct = (v: number) => `${v.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %`
 
-  const paymentBars = stats.modePaiementStats.map(item => {
-    const color = MODE_COLORS[item.modePaiement] ?? '#64748B'
-    return `
-    <div class="bar-row">
-      <div class="bar-label">${e(MODE_LABELS[item.modePaiement] ?? item.modePaiement)}</div>
-      <div class="bar-track"><div class="bar-fill" style="width:${item.share}%;background:${color};"></div></div>
-      <div class="bar-value">${item.share}%</div>
-      <div class="bar-amount">${formatXAF(item.total)}</div>
-    </div>`
+/** Histogramme des encaissements nets par mois (SVG intégré, aucune ressource extérieure). */
+function monthlyChart(rows: Array<{ label: string; net: number }>): string {
+  const W = 640, H = 150, pad = 22, bw = (W - pad * 2) / rows.length
+  const max = Math.max(1, ...rows.map(r => r.net))
+  const bars = rows.map((r, i) => {
+    const h = Math.max(0, (r.net / max) * (H - 40))
+    const x = pad + i * bw + bw * 0.18
+    return `<rect x="${x.toFixed(1)}" y="${(H - 20 - h).toFixed(1)}" width="${(bw * 0.64).toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="#1A6B1A"/>
+      <text x="${(pad + i * bw + bw / 2).toFixed(1)}" y="${H - 6}" font-size="9" text-anchor="middle" fill="#5B6B62">${e(r.label)}</text>
+      ${r.net > 0 ? `<text x="${(pad + i * bw + bw / 2).toFixed(1)}" y="${(H - 24 - h).toFixed(1)}" font-size="7.5" text-anchor="middle" fill="#14201A">${Math.round(r.net / 1000).toLocaleString('fr-FR')} k</text>` : ''}`
   }).join('')
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Encaissements nets par mois">
+    <line x1="${pad}" y1="${H - 20}" x2="${W - pad}" y2="${H - 20}" stroke="#DDE5DF"/>${bars}</svg>`
+}
 
-  const topRows = stats.topContributors.map((item, i) => `
-    <tr>
-      <td class="rank rank-${i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : 'plain'}">${i + 1}</td>
-      <td><strong>${e(item.fullName)}</strong></td>
-      <td class="num">${item.count}</td>
-      <td class="num strong">${formatXAF(item.total)}</td>
-    </tr>`).join('')
+export async function generateFinancialReportHtml(period: ReportPeriod): Promise<string> {
+  const { start, end } = bounds(period)
+  const inPeriod = { gte: start, lte: end }
+  const label = period.month ? `${MOIS[period.month - 1]} ${period.year}` : `exercice ${period.year}`
 
-  const rateRows = stats.contributionRates.map(item => {
-    const rate = item.rate ?? 0
-    const pct = item.rate == null ? 0 : Math.min(100, Math.round((rate / maxRate) * 100))
-    return `
-    <tr>
-      <td><span class="code">${e(item.code)}</span><br/>${e(item.title)}</td>
-      <td class="num">${formatXAF(item.total)}</td>
-      <td class="rate-cell">
-        ${item.rate == null
-          ? '<span class="free-badge">Sans objectif</span>'
-          : `<div class="mini-track"><div class="mini-fill" style="width:${pct}%;"></div></div><span class="rate-label">${item.rate}%</span>`}
-      </td>
-    </tr>`
-  }).join('')
+  const [identity, confirmed, pendingAgg, disputedAgg, byMode, byRubrique, refunds, deposits, prestEntrees, prestCours, closures, position, rubriques, contributeurs] = await Promise.all([
+    loadIdentity(),
+    prisma.contribution.aggregate({ where: { statut: 'CONFIRME', createdAt: inPeriod }, _sum: { montant: true }, _count: true }),
+    prisma.contribution.aggregate({ where: { statut: 'EN_ATTENTE_CONFIRMATION', createdAt: inPeriod }, _sum: { montant: true }, _count: true }),
+    prisma.contribution.aggregate({ where: { statut: 'LITIGE', createdAt: inPeriod }, _sum: { montant: true }, _count: true }),
+    prisma.contribution.groupBy({ by: ['modePaiement'], where: { statut: 'CONFIRME', createdAt: inPeriod }, _sum: { montant: true }, _count: true }),
+    prisma.contribution.groupBy({ by: ['rubriqueId'], where: { statut: 'CONFIRME', createdAt: inPeriod }, _sum: { montant: true }, _count: true }),
+    prisma.remboursement.findMany({
+      where: { statut: 'EXECUTE', executedAt: inPeriod },
+      select: { montant: true, moyen: true, executedAt: true, rubriqueId: true, motif: true, contribution: { select: { membre: { select: { user: { select: { fullName: true } } } }, contributeurExterne: { select: { nom: true } } } } },
+      orderBy: { executedAt: 'asc' },
+    }),
+    prisma.bankDeposit.findMany({ where: { createdAt: inPeriod }, select: { referenceBordereau: true, dateBordereau: true, createdAt: true, totalAmount: true, depositedByName: true }, orderBy: { createdAt: 'asc' } }),
+    prisma.entreePrestation.aggregate({ where: { createdAt: inPeriod }, _sum: { montant: true }, _count: true }),
+    prisma.coursPrestation.aggregate({ where: { createdAt: inPeriod }, _sum: { montant: true }, _count: true }),
+    prisma.clotureMensuelle.findMany({ where: { OR: Array.from({ length: period.month ? 1 : 12 }, (_, i) => ({ annee: period.year, mois: period.month ?? i + 1 })) }, orderBy: { mois: 'asc' } }),
+    positionAt(prisma, end),
+    prisma.rubrique.findMany({ select: { id: true, code: true, title: true, targetAmount: true, status: true, fiscalYear: true } }),
+    prisma.contribution.findMany({ where: { statut: 'CONFIRME', createdAt: inPeriod }, select: { membreId: true, contributeurExterneId: true }, distinct: ['membreId', 'contributeurExterneId'] }),
+  ])
 
-  return `<!doctype html>
-<html lang="fr">
-<head>
-  <meta charset="utf-8">
-  <title>Rapport financier ${stats.year}</title>
-  <style>
-    @page { size: A4; margin: 0; }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: "Segoe UI", Arial, sans-serif; color: #0F172A; font-size: 11.5px; line-height: 1.45;
-      background-image: url("data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M14 0h4v14h14v4H18v14h-4V18H0v-4h14z' fill='%23F5C400' fill-opacity='0.05'/%3E%3C/svg%3E");
-    }
-    .page { padding: 14mm 14mm 10mm; }
+  const encaisse = confirmed._sum.montant ?? 0
+  const rembourse = refunds.reduce((s, r) => s + r.montant, 0)
+  const net = encaisse - rembourse
+  const pendingAmount = pendingAgg._sum.montant ?? 0
+  const disputedAmount = disputedAgg._sum.montant ?? 0
+  const totalCount = confirmed._count + pendingAgg._count + disputedAgg._count
+  const prestRecettes = prestEntrees._sum.montant ?? 0
+  const prestDepenses = prestCours._sum.montant ?? 0
 
-    /* ── Cover band ── */
-    .cover {
-      background: linear-gradient(135deg, #052005 0%, #0F4A0F 45%, #1A6B1A 100%);
-      color: white; padding: 22px 26px; display: flex; align-items: center; gap: 18px;
-      position: relative; overflow: hidden;
-    }
-    .cover::after {
-      content: ''; position: absolute; top: -40px; right: -40px; width: 160px; height: 160px;
-      border-radius: 999px; background: radial-gradient(circle, rgba(245,196,0,0.18), transparent 70%);
-    }
-    .cover .logo-box { width: 58px; height: 58px; background: white; border-radius: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.25); }
-    .cover .logo-box img { width: 100%; height: 100%; object-fit: contain; }
-    .cover .ctext { flex: 1; position: relative; z-index: 1; }
-    .cover .ctext .eyebrow { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: #F5C400; font-weight: 700; }
-    .cover .ctext h1 { font-size: 24px; font-weight: 800; margin-top: 4px; }
-    .cover .ctext p { font-size: 11px; opacity: 0.75; margin-top: 3px; }
-    .cover .cmeta { text-align: right; position: relative; z-index: 1; flex-shrink: 0; }
-    .cover .cmeta .num { font-family: "Courier New", monospace; font-size: 13px; font-weight: 700; color: #F5C400; }
-    .cover .cmeta .date { font-size: 9.5px; opacity: 0.7; margin-top: 3px; }
+  // Flux mensuels (exercice) ou journée par journée n'apporte rien sur un mois : un seul tableau de synthèse
+  let monthlySection = ''
+  if (!period.month) {
+    const months = await Promise.all(Array.from({ length: 12 }, async (_, i) => {
+      const b = monthBounds(period.year, i + 1)
+      const [c, r] = await Promise.all([
+        prisma.contribution.aggregate({ where: { statut: 'CONFIRME', createdAt: { gte: b.start, lte: b.end } }, _sum: { montant: true }, _count: true }),
+        prisma.remboursement.aggregate({ where: { statut: 'EXECUTE', executedAt: { gte: b.start, lte: b.end } }, _sum: { montant: true } }),
+      ])
+      const enc = c._sum.montant ?? 0
+      const rem = r._sum.montant ?? 0
+      return { label: MOIS_COURTS[i], name: MOIS[i], count: c._count, enc, rem, net: enc - rem }
+    }))
+    monthlySection = `
+    <section class="flow">
+      <h2>Évolution mensuelle</h2>
+      ${monthlyChart(months)}
+      <table style="margin-top:6px">
+        <thead><tr><th>Mois</th><th class="num">Contributions</th><th class="num">Encaissé</th><th class="num">Remboursé</th><th class="num">Net</th></tr></thead>
+        <tbody>${months.map(m => `<tr${m.count === 0 && m.rem === 0 ? ' class="muted"' : ''}><td>${e(m.name)}</td><td class="num">${m.count}</td><td class="num">${money(m.enc)}</td><td class="num">${m.rem ? money(m.rem) : '—'}</td><td class="num">${money(m.net)}</td></tr>`).join('')}
+          <tr class="total"><td>Total</td><td class="num">${confirmed._count}</td><td class="num">${money(encaisse)}</td><td class="num">${money(rembourse)}</td><td class="num">${money(net)}</td></tr></tbody>
+      </table>
+    </section>`
+  }
 
-    .body-content { padding: 20px 14mm 0; }
+  // Rubriques : toutes celles qui ont bougé dans la période, plus les rubriques ouvertes
+  const refundByRubrique = new Map<string, number>()
+  for (const r of refunds) refundByRubrique.set(r.rubriqueId, (refundByRubrique.get(r.rubriqueId) ?? 0) + r.montant)
+  const encByRubrique = new Map(byRubrique.map(r => [r.rubriqueId, { amount: r._sum.montant ?? 0, count: r._count }]))
+  const rubRows = rubriques
+    .filter(r => encByRubrique.has(r.id) || refundByRubrique.has(r.id) || r.status === 'OUVERTE')
+    .map(r => {
+      const enc = encByRubrique.get(r.id)?.amount ?? 0
+      const rem = refundByRubrique.get(r.id) ?? 0
+      return { ...r, enc, rem, net: enc - rem, count: encByRubrique.get(r.id)?.count ?? 0 }
+    })
+    .sort((a, b) => b.net - a.net)
 
-    /* ── KPI cards ── */
-    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
-    .kpi { border: 1px solid #E2E8F0; border-radius: 12px; padding: 13px; background: white; box-shadow: 0 1px 3px rgba(15,74,15,0.05); position: relative; overflow: hidden; }
-    .kpi::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #1A6B1A; }
-    .kpi.gold::before { background: #F5C400; }
-    .kpi span { display: block; font-size: 9px; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; padding-left: 6px; }
-    .kpi strong { display: block; font-size: 19px; color: #0F4A0F; margin-top: 6px; font-family: "Courier New", monospace; padding-left: 6px; }
+  const modeRows = byMode.map(m => ({ mode: m.modePaiement, amount: m._sum.montant ?? 0, count: m._count })).sort((a, b) => b.amount - a.amount)
 
-    /* ── Section ── */
-    .section { margin-bottom: 18px; background: white; border-radius: 12px; border: 1px solid #EEF2F6; box-shadow: 0 1px 3px rgba(15,74,15,0.04); overflow: hidden; }
-    .section-head { display: flex; align-items: center; gap: 8px; padding: 11px 16px; background: linear-gradient(135deg, #0F4A0F, #1A6B1A); }
-    .section-head .dot { width: 7px; height: 7px; border-radius: 999px; background: #F5C400; }
-    .section-head h2 { color: white; font-size: 12.5px; font-weight: 700; letter-spacing: 0.3px; }
-    .section-body { padding: 14px 16px; }
-
-    .callout { background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 10px; padding: 11px 15px; font-size: 11px; color: #78350F; margin-bottom: 16px; line-height: 1.6; }
-    .callout strong { color: #92400E; }
-
-    /* ── Bar chart (payment modes) ── */
-    .bar-row { display: grid; grid-template-columns: 110px 1fr 40px 90px; align-items: center; gap: 10px; padding: 6px 0; }
-    .bar-label { font-size: 10.5px; font-weight: 600; color: #334155; }
-    .bar-track { height: 10px; background: #F1F5F9; border-radius: 999px; overflow: hidden; }
-    .bar-fill { height: 100%; border-radius: 999px; }
-    .bar-value { font-size: 10.5px; font-weight: 700; color: #0F4A0F; text-align: right; }
-    .bar-amount { font-size: 10px; font-family: "Courier New", monospace; color: #64748B; text-align: right; }
-
-    /* ── Tables ── */
-    table { width: 100%; border-collapse: collapse; font-size: 11px; }
-    th { text-align: left; color: #94A3B8; font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; padding: 0 9px 8px; border-bottom: 1.5px solid #E2E8F0; }
-    th.num, td.num { text-align: right; }
-    td { padding: 8px 9px; border-bottom: 1px solid #F1F5F9; vertical-align: middle; }
-    td.num { font-family: "Courier New", monospace; }
-    td.num.strong { font-weight: 700; color: #0F4A0F; }
-    td .code { font-family: "Courier New", monospace; color: #64748B; font-size: 9.5px; }
-    td.rank { text-align: center; font-weight: 800; width: 26px; border-radius: 999px; }
-    .rank-gold { color: #92400E; } .rank-gold::before { content: '🥇'; }
-    .rank-silver::before { content: '🥈'; }
-    .rank-bronze::before { content: '🥉'; }
-    .rank-plain { color: #94A3B8; }
-    .rate-cell { display: flex; align-items: center; gap: 8px; min-width: 140px; }
-    .mini-track { flex: 1; height: 7px; background: #F1F5F9; border-radius: 999px; overflow: hidden; }
-    .mini-fill { height: 100%; background: linear-gradient(90deg, #1A6B1A, #F5C400); border-radius: 999px; }
-    .rate-label { font-size: 10px; font-weight: 700; color: #0F4A0F; width: 40px; text-align: right; }
-    .free-badge { font-size: 9.5px; color: #94A3B8; font-style: italic; }
-
-    .footer-wrap { padding: 0 14mm 12mm; }
-  </style>
-</head>
-<body>
-  <div class="cover">
-    <div class="logo-box">${logo ? `<img src="${logo}" alt="Logo" />` : ''}</div>
-    <div class="ctext">
-      <div class="eyebrow">Document officiel</div>
-      <h1>Rapport Financier Annuel</h1>
-      <p>${e(communityName)} &bull; EEC Melen, Yaoundé &bull; Exercice ${stats.year}</p>
-    </div>
-    <div class="cmeta">
-      <div class="num">${numero}</div>
-      <div class="date">${formatDateTime(new Date())}</div>
-    </div>
-  </div>
-
-  <div class="body-content">
+  const body = `
+  <section>
     <div class="kpis">
-      <div class="kpi"><span>Membres actifs</span><strong>${stats.totalMembres}</strong></div>
-      <div class="kpi gold"><span>Collecte annuelle</span><strong>${formatXAF(stats.totalCollectedYear)}</strong></div>
-      <div class="kpi"><span>Collecte du mois</span><strong>${formatXAF(stats.totalCollectedMonth)}</strong></div>
-      <div class="kpi"><span>Taux de confirmation</span><strong>${stats.globalConfirmationRate}%</strong></div>
+      <div class="kpi"><div class="k">Encaissé</div><div class="v">${money(encaisse)}</div><div class="s">${confirmed._count} contribution(s) confirmée(s)</div></div>
+      <div class="kpi"><div class="k">Remboursé</div><div class="v">${money(rembourse)}</div><div class="s">${refunds.length} remboursement(s)</div></div>
+      <div class="kpi gold"><div class="k">Net de la période</div><div class="v">${money(net)}</div><div class="s">${contributeurs.length} contributeur(s)</div></div>
+      <div class="kpi"><div class="k">Fonds disponibles</div><div class="v">${position.beforeLedgerStart ? '—' : money(position.total)}</div><div class="s">${position.beforeLedgerStart ? 'non reconstituable à cette date' : `au ${formatDate(end)}`}</div></div>
     </div>
-
-    <div class="callout">
-      Le moyen de contribution le plus utilisé est <strong>${stats.mostUsedPaymentMode ? e(MODE_LABELS[stats.mostUsedPaymentMode.modePaiement] ?? stats.mostUsedPaymentMode.modePaiement) : '—'}</strong>.
-      Le plus grand contributeur de l'exercice est <strong>${e(stats.topContributor?.fullName ?? '—')}</strong> avec <strong>${formatXAF(stats.topContributor?.total ?? 0)}</strong> versés.
-      ${stats.litiges > 0 ? ` <strong>${stats.litiges} contribution(s)</strong> sont actuellement en litige et méritent une attention.` : ' Aucun litige en cours — la trésorerie est saine.'}
+    <div class="kv" style="margin-top:10px">
+      <div><span>En attente de confirmation</span><span>${money(pendingAmount)} · ${pendingAgg._count}</span></div>
+      <div><span>En litige</span><span>${money(disputedAmount)} · ${disputedAgg._count}</span></div>
+      <div><span>Taux de confirmation</span><span>${fmtPct(pct(confirmed._count, totalCount))}</span></div>
+      <div><span>Panier moyen</span><span>${money(confirmed._count ? Math.round(encaisse / confirmed._count) : 0)}</span></div>
     </div>
-
-    <div class="section">
-      <div class="section-head"><span class="dot"></span><h2>Moyens de contribution</h2></div>
-      <div class="section-body">
-        ${paymentBars || '<p style="color:#94A3B8;">Aucune donnée</p>'}
-      </div>
+  </section>
+  ${monthlySection}
+  <section class="flow">
+    <h2>Rubriques</h2>
+    <table>
+      <thead><tr><th>Rubrique</th><th class="num">Nb</th><th class="num">Encaissé</th><th class="num">Remboursé</th><th class="num">Net</th><th class="num">Objectif</th><th class="num">Atteint</th></tr></thead>
+      <tbody>${rubRows.map(r => `<tr><td>${e(r.title)}<span class="sub">${e(r.code)} · ${r.status === 'OUVERTE' ? 'ouverte' : r.status === 'FERMEE' ? 'fermée' : 'archivée'}</span></td>
+        <td class="num">${r.count}</td><td class="num">${money(r.enc)}</td><td class="num">${r.rem ? money(r.rem) : '—'}</td><td class="num">${money(r.net)}</td>
+        <td class="num">${r.targetAmount ? money(r.targetAmount) : '—'}</td><td class="num">${r.targetAmount ? fmtPct(pct(r.net, r.targetAmount)) : '—'}</td></tr>`).join('') || '<tr><td colspan="7">Aucune rubrique</td></tr>'}
+        <tr class="total"><td>Total</td><td class="num">${confirmed._count}</td><td class="num">${money(encaisse)}</td><td class="num">${money(rembourse)}</td><td class="num">${money(net)}</td><td></td><td></td></tr></tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Moyens de paiement</h2>
+    <table>
+      <thead><tr><th>Moyen</th><th class="num">Nb</th><th class="num">Montant</th><th style="width:34%">Part du montant</th></tr></thead>
+      <tbody>${modeRows.map(m => `<tr><td>${e(MODE_LABELS[m.mode] ?? m.mode)}</td><td class="num">${m.count}</td><td class="num">${money(m.amount)}</td>
+        <td><div style="display:flex;align-items:center;gap:6px"><div class="bar" style="flex:1"><span style="width:${pct(m.amount, encaisse)}%"></span></div><span class="num" style="width:44px">${fmtPct(pct(m.amount, encaisse))}</span></div></td></tr>`).join('') || '<tr><td colspan="4">Aucun encaissement</td></tr>'}</tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Position des fonds au ${formatDate(end)}</h2>
+    ${position.beforeLedgerStart ? '<div class="note">Date antérieure à la mise en service du grand livre : position non reconstituable.</div>' : `
+    <table>
+      <thead><tr><th>Emplacement</th><th class="num">Contributions</th><th class="num">Montant</th><th class="num">Part</th></tr></thead>
+      <tbody>${position.byLocation.filter(r => r.amount !== 0).map(r => `<tr><td>${e(LOCATION_LABELS[r.location] ?? r.location)}</td><td class="num">${r.count}</td><td class="num">${money(r.amount)}</td><td class="num">${fmtPct(pct(r.amount, position.total))}</td></tr>`).join('')}
+        <tr class="total"><td>Total des fonds</td><td></td><td class="num">${money(position.total)}</td><td class="num">100 %</td></tr></tbody>
+    </table>`}
+  </section>
+  <section class="flow">
+    <h2>Dépôts en banque</h2>
+    <table>
+      <thead><tr><th>Date</th><th>Bordereau</th><th>Déposé par</th><th class="num">Montant</th></tr></thead>
+      <tbody>${deposits.map(d => `<tr><td>${formatDate(d.dateBordereau ?? d.createdAt)}</td><td>${e(d.referenceBordereau)}</td><td>${e(d.depositedByName)}</td><td class="num">${money(d.totalAmount)}</td></tr>`).join('') || '<tr class="muted"><td colspan="4">Aucun dépôt sur la période</td></tr>'}
+        ${deposits.length ? `<tr class="total"><td colspan="3">Total déposé</td><td class="num">${money(deposits.reduce((s, d) => s + d.totalAmount, 0))}</td></tr>` : ''}</tbody>
+    </table>
+  </section>
+  <section class="flow">
+    <h2>Remboursements exécutés</h2>
+    <table>
+      <thead><tr><th>Date</th><th>Bénéficiaire</th><th>Motif</th><th>Moyen</th><th class="num">Montant</th></tr></thead>
+      <tbody>${refunds.map(r => `<tr><td>${formatDate(r.executedAt!)}</td><td>${e(r.contribution.membre?.user.fullName ?? r.contribution.contributeurExterne?.nom ?? '—')}</td><td>${e(r.motif.slice(0, 70))}</td><td>${e(REFUND_MEANS[r.moyen] ?? r.moyen)}</td><td class="num">${money(r.montant)}</td></tr>`).join('') || '<tr class="muted"><td colspan="5">Aucun remboursement sur la période</td></tr>'}</tbody>
+    </table>
+  </section>
+  <section>
+    <h2>Prestations</h2>
+    <div class="kv three">
+      <div><span>Recettes</span><span>${money(prestRecettes)}</span></div>
+      <div><span>Dépenses</span><span>${money(prestDepenses)}</span></div>
+      <div><span>Résultat</span><span>${money(prestRecettes - prestDepenses)}</span></div>
     </div>
+    <p class="lead" style="font-size:8.6pt">Les prestations sont suivies à part : leur argent n'entre pas encore dans la position des fonds (décision du Bureau du 18/10/2026).</p>
+  </section>
+  <section>
+    <h2>Clôtures mensuelles</h2>
+    <table>
+      <thead><tr><th>Mois</th><th>État</th><th>Visée par</th><th class="num">Écart caisse</th><th class="num">Écart banque</th></tr></thead>
+      <tbody>${closures.map(c => `<tr><td>${e(MOIS[c.mois - 1])} ${c.annee}</td><td>${e(CLOSURE_LABELS[c.statut] ?? c.statut)}</td><td>${e(c.validatedByName ?? '—')}</td><td class="num">${money(c.caisseComptee - c.attenduCaisse)}</td><td class="num">${money(c.soldeBancaire - c.attenduBanque)}</td></tr>`).join('') || '<tr class="muted"><td colspan="5">Aucune clôture présentée sur la période</td></tr>'}</tbody>
+    </table>
+  </section>`
 
-    <div class="section">
-      <div class="section-head"><span class="dot"></span><h2>Top contributeurs</h2></div>
-      <div class="section-body">
-        <table>
-          <thead><tr><th>#</th><th>Membre</th><th class="num">Contributions</th><th class="num">Total versé</th></tr></thead>
-          <tbody>${topRows || '<tr><td colspan="4">Aucune donnée</td></tr>'}</tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-head"><span class="dot"></span><h2>Taux de collecte par rubrique</h2></div>
-      <div class="section-body">
-        <table>
-          <thead><tr><th>Rubrique</th><th class="num">Collecte</th><th>Progression</th></tr></thead>
-          <tbody>${rateRows || '<tr><td colspan="3">Aucune donnée</td></tr>'}</tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <div class="footer-wrap">
-    ${renderDocFooter({ communityName, verse, docNumber: numero })}
-  </div>
-</body>
-</html>`
+  return renderDocument({
+    identity, kind: 'Rapport financier', docNumber: reportNumber(period), issuedAt: new Date(),
+    lead: `Période : <strong>${e(label)}</strong>, du ${formatDate(start)} au ${formatDate(end)} (heure de Yaoundé). Montants en francs CFA ; encaissements confirmés, nets des remboursements exécutés.`,
+    body,
+    signatures: [{ role: 'Le trésorier' }, { role: 'Le président' }],
+    closingNote: 'Rapport établi à partir des écritures enregistrées dans SGM-CEM',
+  })
 }
 
-export async function generateFinancialReportPdf(year?: number): Promise<Buffer> {
-  const html = await generateFinancialReportHtml(year)
-  return renderPdf(html, { format: 'A4', printBackground: true, margin: { top: '0mm', bottom: '10mm', left: '0mm', right: '0mm' } })
+export async function generateFinancialReportPdf(period: ReportPeriod): Promise<Buffer> {
+  const html = await generateFinancialReportHtml(period)
+  return renderPdf(html, pdfOptions('A4', await loadIdentity(), reportNumber(period)))
 }
