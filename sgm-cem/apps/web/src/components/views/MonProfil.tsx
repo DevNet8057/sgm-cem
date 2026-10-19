@@ -75,7 +75,7 @@ export function MonProfil() {
     },
   })
 
-  const hasValidPassword = newPwd.length >= 8 && /[A-Z]/.test(newPwd) && /[0-9]/.test(newPwd)
+  const hasValidPassword = newPwd.length >= 10 && /[A-Za-z]/.test(newPwd) && /[0-9]/.test(newPwd)
 
   const changePwd = useMutation({
     mutationFn: async () => api.post('/auth/change-password', { currentPassword: currentPwd, newPassword: newPwd }),
@@ -116,7 +116,7 @@ export function MonProfil() {
     e.preventDefault()
     setPwdError('')
     if (newPwd !== confirmPwd) { setPwdError('Les mots de passe ne correspondent pas'); return }
-    if (!hasValidPassword) { setPwdError('Mot de passe trop faible (majuscule + chiffre + 8 car. min.)'); return }
+    if (!hasValidPassword) { setPwdError('Mot de passe trop faible : 10 caractères minimum, avec lettres et chiffres'); return }
     changePwd.mutate()
   }
 
@@ -290,7 +290,7 @@ export function MonProfil() {
               label="Nouveau mot de passe"
               value={newPwd}
               onChange={e => setNewPwd(e.target.value)}
-              placeholder="Min. 8 caractères, majuscule, chiffre"
+              placeholder="10 caractères minimum, lettres et chiffres"
               autoComplete="new-password"
               showStrengthIndicator={true}
               required

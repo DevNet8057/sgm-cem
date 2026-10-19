@@ -13,6 +13,7 @@ import { getConfig } from '../services/config.service'
 import { audit } from '../services/audit.service'
 import { closeActivitySessionForLogout } from '../services/activity-write.service'
 import { getPrisma } from '../lib/prisma'
+import { passwordProblem } from '../lib/password-policy'
 
 const router = Router()
 const prisma = getPrisma()
@@ -39,6 +40,10 @@ const otpPhoneKey = (req: Request) => `tel:${phoneVariants(String(req.body?.phon
 const otpRequestByPhone = limiter(10 * 60 * 1000, 5, 'Trop de demandes de code pour ce numéro. Attendez 10 minutes.', { keyGenerator: otpPhoneKey })
 const otpVerifyByPhone  = limiter(10 * 60 * 1000, 10, 'Trop de codes essayés pour ce numéro. Attendez 10 minutes.', { keyGenerator: otpPhoneKey })
 const otpByIp           = limiter(10 * 60 * 1000, 60, 'Trop de tentatives depuis ce réseau. Attendez 10 minutes.')
+
+const LOGIN_MAX_FAILURES = 5
+const LOGIN_LOCK_MS = 15 * 60 * 1000
+const LOGIN_FAILED = 'Identifiants incorrects. Après 5 essais manqués, le compte est bloqué 15 minutes.'
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -106,17 +111,31 @@ router.post('/login', authLimiter, async (req, res) => {
   const user = await prisma.user.findUnique({ where: { email: normalizedEmail } })
   if (!user || !user.isActive) {
     await verifyPassword(password, null) // même durée de réponse que pour un compte existant
-    throw new AppError('ACCESS_DENIED', 'Identifiants incorrects', 401)
+    throw new AppError('ACCESS_DENIED', LOGIN_FAILED, 401)
+  }
+
+  // Compte verrouillé : même réponse qu'un mot de passe faux (rien ne révèle l'existence du compte)
+  if (user.lockedUntil && user.lockedUntil > new Date()) {
+    await verifyPassword(password, null)
+    await audit({ req, userId: user.id, userName: user.fullName, action: 'LOGIN', entityType: 'Session', details: { method: 'email', success: false, reason: 'locked' } })
+    throw new AppError('ACCESS_DENIED', LOGIN_FAILED, 401)
   }
 
   const valid = await verifyPassword(password, user.passwordHash)
   if (!valid) {
+    // Compteur atomique ; au 5e échec d'affilée, verrouillage de 15 minutes
+    const { failedLoginCount } = await prisma.user.update({ where: { id: user.id }, data: { failedLoginCount: { increment: 1 } }, select: { failedLoginCount: true } })
+    const locked = failedLoginCount >= LOGIN_MAX_FAILURES
+    if (locked) await prisma.user.update({ where: { id: user.id }, data: { failedLoginCount: 0, lockedUntil: new Date(Date.now() + LOGIN_LOCK_MS) } })
     await audit({
       req, userId: user.id, userName: user.fullName,
       action: 'LOGIN', entityType: 'Session',
-      details: { method: 'email', success: false, reason: 'wrong_password' },
+      details: { method: 'email', success: false, reason: 'wrong_password', ...(locked && { locked: true }) },
     })
-    throw new AppError('ACCESS_DENIED', 'Identifiants incorrects', 401)
+    throw new AppError('ACCESS_DENIED', LOGIN_FAILED, 401)
+  }
+  if (user.failedLoginCount > 0 || user.lockedUntil) {
+    await prisma.user.update({ where: { id: user.id }, data: { failedLoginCount: 0, lockedUntil: null } })
   }
 
   // Migration transparente des anciens hachages bcrypt vers Argon2id
@@ -142,11 +161,11 @@ router.post('/login', authLimiter, async (req, res) => {
 router.post('/forgot-password', authLimiter, async (req, res) => {
   z.object({ email: z.string().email() }).parse(req.body)
 
-  const admin = await prisma.user.findFirst({
-    where: { role: { in: ['ADMIN', 'DEVELOPER'] }, isActive: true },
-    select: { fullName: true, email: true, phone: true, whatsappPhone: true },
-    orderBy: { createdAt: 'asc' },
-  })
+  // Contact générique réglable (panneau développeur) : jamais les coordonnées
+  // personnelles d'un administrateur
+  const label = getConfig('SUPPORT_CONTACT_LABEL')?.trim() || "Secrétariat du Culte d'Enfants de Melen"
+  const contactEmail = getConfig('SUPPORT_CONTACT_EMAIL')?.trim() || null
+  const contactPhone = getConfig('SUPPORT_CONTACT_PHONE')?.trim() || null
 
   res.json({
     success: true,
@@ -155,11 +174,7 @@ router.post('/forgot-password', authLimiter, async (req, res) => {
       message: "Si un compte correspond à cette adresse, l'administrateur peut réinitialiser son mot de passe depuis son espace. "
         + 'Les comptes associés à Google se connectent avec « Continuer avec Google ». '
         + 'Les membres peuvent aussi se connecter par code reçu sur leur téléphone.',
-      admin: admin ? {
-        fullName: admin.fullName,
-        email: admin.email,
-        phone: admin.whatsappPhone ?? admin.phone ?? null,
-      } : null,
+      contact: { label, email: contactEmail, phone: contactPhone },
     },
   })
 })
@@ -348,16 +363,14 @@ router.post('/google', authLimiter, async (req, res) => {
 router.post('/change-password', authenticate, async (req, res) => {
   const schema = z.object({
     currentPassword: z.string().min(1),
-    newPassword: z.string()
-      .min(8, 'Le nouveau mot de passe doit contenir au moins 8 caractères')
-      .max(128, 'Le mot de passe ne doit pas dépasser 128 caractères')
-      .regex(/[A-Z]/, 'Doit contenir au moins une majuscule')
-      .regex(/[0-9]/, 'Doit contenir au moins un chiffre'),
+    newPassword: z.string().max(128, 'Le mot de passe ne doit pas dépasser 128 caractères'),
   })
   const { currentPassword, newPassword } = schema.parse(req.body)
 
   const user = await prisma.user.findUnique({ where: { id: req.user!.userId } })
   if (!user) throw new AppError('NOT_FOUND', 'Utilisateur introuvable', 404)
+  const problem = passwordProblem(newPassword, { email: user.email })
+  if (problem) throw new AppError('VALIDATION_ERROR', problem, 400, 'newPassword')
 
   const valid = await verifyPassword(currentPassword, user.passwordHash)
   if (!valid) throw new AppError('ACCESS_DENIED', 'Mot de passe actuel incorrect', 401)

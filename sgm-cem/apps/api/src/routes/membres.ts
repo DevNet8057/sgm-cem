@@ -10,6 +10,7 @@ import { findInactiveMembers } from '../services/inactive-members.service'
 import { nextMatricule, nextMatricules } from '../services/matricule.service'
 import { normalizeInputPhone } from '../lib/phone'
 import { audit } from '../services/audit.service'
+import { passwordSchema } from '../lib/password-policy'
 
 const router = Router()
 const prisma = getPrisma()
@@ -27,7 +28,7 @@ const createSchema = z.object({
   profession:      z.string().optional(),
   nomConjoint:     z.string().optional(),
   coupleMembreId:  z.string().optional(),
-  password:        z.string().min(8).max(128).optional(),
+  password:        passwordSchema.optional(),
   adresse:         z.string().max(300).optional(),
   notes:           z.string().max(2000).optional(),
   dateAdhesion:    z.string().datetime().optional(),

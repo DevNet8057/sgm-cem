@@ -253,6 +253,9 @@ model User {
   mustChangePassword Boolean   @default(true)
   notificationToken  String?
   lastLoginAt        DateTime?
+  // Verrouillage après échecs de connexion par mot de passe
+  failedLoginCount   Int       @default(0)
+  lockedUntil        DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 

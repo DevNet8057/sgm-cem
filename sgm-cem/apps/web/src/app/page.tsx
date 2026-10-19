@@ -99,7 +99,7 @@ export default function LoginPage() {
   const [forgotResult, setForgotResult] = useState<{
     method: 'google' | 'admin_contact'
     message: string
-    admin?: { fullName: string; email: string; phone: string | null } | null
+    contact?: { label: string; email: string | null; phone: string | null } | null
   } | null>(null)
 
   /* Phone / OTP */
@@ -504,18 +504,20 @@ export default function LoginPage() {
               <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
               <p className="text-sm text-amber-800 leading-relaxed">{forgotResult.message}</p>
             </div>
-            {forgotResult.admin && (
+            {forgotResult.contact && (
               <div className="bg-gray-50 rounded-[12px] p-4 space-y-2">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Administrateur</p>
-                <p className="text-sm font-semibold text-gray-800">{forgotResult.admin.fullName}</p>
-                <a href={`mailto:${forgotResult.admin.email}`}
-                  className="flex items-center gap-2 text-sm text-[#1A6B1A] hover:underline">
-                  <Mail size={14} /> {forgotResult.admin.email}
-                </a>
-                {forgotResult.admin.phone && (
-                  <a href={`tel:${forgotResult.admin.phone}`}
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Contact</p>
+                <p className="text-sm font-semibold text-gray-800">{forgotResult.contact.label}</p>
+                {forgotResult.contact.email && (
+                  <a href={`mailto:${forgotResult.contact.email}`}
                     className="flex items-center gap-2 text-sm text-[#1A6B1A] hover:underline">
-                    <MessageCircle size={14} /> {forgotResult.admin.phone}
+                    <Mail size={14} /> {forgotResult.contact.email}
+                  </a>
+                )}
+                {forgotResult.contact.phone && (
+                  <a href={`tel:${forgotResult.contact.phone}`}
+                    className="flex items-center gap-2 text-sm text-[#1A6B1A] hover:underline">
+                    <MessageCircle size={14} /> {forgotResult.contact.phone}
                   </a>
                 )}
               </div>

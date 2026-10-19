@@ -129,6 +129,13 @@ export function configCatalogue(API_URL = process.env.API_URL ?? 'http://localho
       key: 'RETENTION_DONATEURS_MOIS', category: 'SYSTEM_BEHAVIOR', label: 'Identité des donateurs non-membres (mois)',
       description: "Sans nouveau don pendant ce délai, l'identité du donateur est anonymisée ; les dons sont conservés (page de confidentialité : 3 ans).", defaultValue: '36',
     },
+    {
+      key: 'SUPPORT_CONTACT_LABEL', category: 'SYSTEM_BEHAVIOR', label: 'Contact affiché — nom',
+      description: "Affiché sur « Mot de passe oublié » (ex. Secrétariat du Culte d'Enfants de Melen). Jamais les coordonnées personnelles d'un administrateur.",
+      defaultValue: "Secrétariat du Culte d'Enfants de Melen",
+    },
+    { key: 'SUPPORT_CONTACT_EMAIL', category: 'SYSTEM_BEHAVIOR', label: 'Contact affiché — e-mail', description: 'Adresse générique de la communauté (facultative).' },
+    { key: 'SUPPORT_CONTACT_PHONE', category: 'SYSTEM_BEHAVIOR', label: 'Contact affiché — téléphone', description: 'Numéro générique de la communauté (facultatif).' },
     { key: 'MOBILE_MONEY_ENABLED', category: 'SYSTEM_BEHAVIOR', label: 'Mobile Money activé', defaultValue: 'true' },
     { key: 'CARD_ENABLED', category: 'SYSTEM_BEHAVIOR', label: 'Carte bancaire activée', defaultValue: 'true' },
     { key: 'CASH_ENABLED', category: 'SYSTEM_BEHAVIOR', label: 'Espèces activées', defaultValue: 'true' },

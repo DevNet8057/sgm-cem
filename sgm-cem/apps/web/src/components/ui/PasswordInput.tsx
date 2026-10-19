@@ -11,7 +11,7 @@ interface PasswordInputProps extends React.InputHTMLAttributes<HTMLInputElement>
 }
 
 const STRENGTH_RULES = [
-  { test: (p: string) => p.length >= 8, label: '8 caractères minimum' },
+  { test: (p: string) => p.length >= 10, label: '10 caractères minimum' },
   { test: (p: string) => /[A-Z]/.test(p), label: 'Au moins une majuscule' },
   { test: (p: string) => /[0-9]/.test(p), label: 'Au moins un chiffre' },
   { test: (p: string) => /[^a-zA-Z0-9]/.test(p), label: 'Un caractère spécial' },

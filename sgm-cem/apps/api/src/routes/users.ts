@@ -8,6 +8,7 @@ import { forgetUserState, revokeUserSessions } from '../lib/session'
 import { getPrisma } from '../lib/prisma'
 import { nextMatricule } from '../services/matricule.service'
 import { normalizeInputPhone } from '../lib/phone'
+import { passwordSchema } from '../lib/password-policy'
 
 const router = Router()
 const prisma = getPrisma()
@@ -43,7 +44,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'DEVELOPER'), async (req, re
     email:     z.string().email(),
     phone:     z.string().optional(),
     role:      z.enum(['ADMIN', 'TRESORIER', 'RESPONSABLE', 'ADJOINT_RESPONSABLE', 'COLLECTEUR', 'MEMBRE']),
-    password:  z.string().min(8).max(128).optional(),
+    password:  passwordSchema.optional(),
   })
   const data = schema.parse(req.body)
   data.phone = normalizeInputPhone(data.phone) ?? undefined
@@ -183,7 +184,7 @@ router.patch('/:id/toggle-active', authenticate, requireRole('ADMIN', 'DEVELOPER
 // ── Reset password (ADMIN only) ───────────────────────────────────────
 router.post('/:id/reset-password', authenticate, requireRole('ADMIN', 'DEVELOPER'), async (req, res) => {
   const id = String(req.params.id)
-  const { password } = z.object({ password: z.string().min(8).max(128).optional() }).parse(req.body)
+  const { password } = z.object({ password: passwordSchema.optional() }).parse(req.body)
 
   const user = await prisma.user.findUnique({ where: { id } })
   if (!user) throw new AppError('NOT_FOUND', 'Utilisateur introuvable', 404)
@@ -194,7 +195,8 @@ router.post('/:id/reset-password', authenticate, requireRole('ADMIN', 'DEVELOPER
 
   await prisma.user.update({
     where: { id },
-    data: { passwordHash, mustChangePassword: true },
+    // Réinitialisation par un administrateur : le verrouillage éventuel est levé
+    data: { passwordHash, mustChangePassword: true, failedLoginCount: 0, lockedUntil: null },
   })
 
   // Invalider toutes les sessions existantes
