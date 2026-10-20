@@ -163,7 +163,7 @@ describe('1. GET /collectes/:slug — vitrine publique, aucune donnée privée',
     expect(res.body.data.isUrgent).toBe(true)
     expect(res.body.data.champsPersonnalises).toHaveLength(2)
     expect(Object.keys(res.body.data).sort()).toEqual(
-      ['champsPersonnalises', 'description', 'isUrgent', 'montantMin', 'montantsSuggeres', 'publicSlug', 'titre'].sort()
+      ['champsPersonnalises', 'description', 'isUrgent', 'montantMin', 'montantsSuggeres', 'publicSlug', 'titre', 'yeliiCommissionRate'].sort()
     )
   })
 

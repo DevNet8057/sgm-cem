@@ -154,6 +154,7 @@ router.get('/collectes/:slug', publicLimiter, async (req, res) => {
       montantMin: collecte.montantMin,
       montantsSuggeres: collecte.montantsSuggeres,
       isUrgent: collecte.isUrgent,
+      yeliiCommissionRate: getConfigNumber('YELII_COMMISSION_RATE', YELII_COMMISSION_RATE),
     },
   })
 })

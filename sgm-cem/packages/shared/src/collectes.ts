@@ -26,6 +26,8 @@ export interface CollectePubliqueDef {
   montantsSuggeres: number[]
   /** Signal visuel volontairement exposé aux donateurs pour les collectes prioritaires. */
   isUrgent: boolean
+  /** Taux de commission Mobile Money en vigueur (réglage YELII_COMMISSION_RATE) : frais affichés = frais prélevés */
+  yeliiCommissionRate?: number
 }
 
 /** Identité minimale d'un contributeur non-membre (collecte publique). */

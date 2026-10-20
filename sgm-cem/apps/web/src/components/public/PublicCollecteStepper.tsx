@@ -84,9 +84,11 @@ export function PublicCollecteStepper({ collecte, slug }: PublicCollecteStepperP
   const [resumeBanner, setResumeBanner] = useState<{ nom: string; phone: string; email: string; montant: string; valeursChamps: ValeursChamps; step: number } | null>(null)
 
   const isMobileMoney = modePaiement === 'YELII'
+  // Taux en vigueur côté serveur (même calcul que le montant réellement demandé à Yelii)
+  const commissionRate = collecte.yeliiCommissionRate ?? YELII_COMMISSION_RATE
   const mmBreakdown = useMemo(
-    () => (Number(montant) > 0 ? calculateAmountWithCommission(Number(montant), YELII_COMMISSION_RATE) : null),
-    [montant]
+    () => (Number(montant) > 0 ? calculateAmountWithCommission(Number(montant), commissionRate) : null),
+    [montant, commissionRate]
   )
 
   // ── Persistance locale du brouillon ───────────────────────────────────────
