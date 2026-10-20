@@ -54,16 +54,19 @@ export function Ged() {
     },
   })
 
-  const { data: documents = [], isLoading } = useQuery({
+  const { data: documentsPage, isLoading } = useQuery({
     queryKey: ['documents', commissionId, statut],
     queryFn: async () => {
       const params = new URLSearchParams()
       if (commissionId) params.set('commissionId', commissionId)
       if (statut) params.set('statut', statut)
-      const res = await api.get<ApiResponse<Document[]>>(`/commissions/documents?${params}`)
-      return res.data.data ?? []
+      const res = await api.get<ApiResponse<Document[]> & { meta?: { total: number; parStatut: Record<string, number> } }>(`/commissions/documents?${params}`)
+      return { documents: res.data.data ?? [], meta: res.data.meta }
     },
   })
+  const documents = useMemo(() => documentsPage?.documents ?? [], [documentsPage])
+  // Compteurs calculés par le serveur sur tout le périmètre (la liste est limitée à 200)
+  const docMeta = documentsPage?.meta
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
@@ -174,9 +177,9 @@ export function Ged() {
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-5">
         <Kpi label="Commissions" value={String(commissions.length)} />
-        <Kpi label="Documents" value={String(documents.length)} />
-        <Kpi label="En attente" value={String(documents.filter(d => d.statut === 'EN_ATTENTE').length)} tone="warning" />
-        <Kpi label="Approuvés" value={String(documents.filter(d => d.statut === 'APPROUVE').length)} tone="success" />
+        <Kpi label="Documents" value={String(docMeta?.total ?? documents.length)} />
+        <Kpi label="En attente" value={String(docMeta?.parStatut.EN_ATTENTE ?? 0)} tone="warning" />
+        <Kpi label="Approuvés" value={String(docMeta?.parStatut.APPROUVE ?? 0)} tone="success" />
       </div>
 
       {showCreate && (

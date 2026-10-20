@@ -17,12 +17,13 @@ import { runInactiveMembersReport } from '../services/inactive-members.service'
 import { runGedRetention } from '../services/ged-retention.service'
 import { runDataRetention } from '../services/data-retention.service'
 import { runOutboxRetries } from '../services/outbox.service'
+import { runTracked } from '../services/incident.service'
 
 const QUEUE = 'sgm-maintenance'
 const TZ = 'Africa/Douala'
 
-type Repeat = { every: number } | { pattern: string; tz: string }
-interface ScheduledJob { name: string; label: string; repeat: Repeat; run: (ctx: JobContext) => Promise<unknown> }
+export type Repeat = { every: number } | { pattern: string; tz: string }
+export interface ScheduledJob { name: string; label: string; repeat: Repeat; run: (ctx: JobContext) => Promise<unknown> }
 interface JobContext { lastRunAt: () => Promise<number>; markRun: (at: number) => Promise<void> }
 
 // Réconciliation : la planification tourne chaque minute et le travail réel ne
@@ -87,7 +88,7 @@ async function startBullmq(url: string): Promise<SchedulerHandle> {
   const worker = new Worker(QUEUE, async job => {
     const def = SCHEDULED_JOBS.find(j => j.name === job.name)
     if (!def) return 'inconnue'
-    return def.run(contextFor(def.name))
+    return runTracked(def.name, () => def.run(contextFor(def.name)))
   }, { connection, concurrency: 1 })
   worker.on('failed', (job, err) => logger.error({ job: job?.name, err: err.message }, 'Tâche planifiée en échec'))
 
@@ -105,7 +106,7 @@ function startLocal(): SchedulerHandle {
       lastRunAt: async () => lastRun.get(job.name) ?? 0,
       markRun: async at => { lastRun.set(job.name, at) },
     }
-    const exec = () => { job.run(ctx).catch(err => logger.error({ job: job.name, err: (err as Error).message }, 'Tâche planifiée en échec')) }
+    const exec = () => { runTracked(job.name, () => job.run(ctx)).catch(err => logger.error({ job: job.name, err: (err as Error).message }, 'Tâche planifiée en échec')) }
     if ('every' in job.repeat) {
       const timer = setInterval(exec, job.repeat.every)
       timer.unref()

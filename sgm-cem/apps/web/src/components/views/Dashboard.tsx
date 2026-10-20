@@ -20,6 +20,7 @@ import { formatAmount, MODE_PAIEMENT_LABELS, contributorName } from '@/lib/utils
 import { useAppStore } from '@/store/appStore'
 import { useSharedPeriod } from '@/store/periodStore'
 import { PeriodPicker, periodLabel } from '@/components/ui/PeriodPicker'
+import { SanteCard } from '@/components/dashboard/SanteCard'
 import { useAuthStore } from '@/store/authStore'
 import type { CollecteursResponse, Contribution, DashboardStats, ModePaiement } from '@/types'
 
@@ -52,6 +53,7 @@ export function Dashboard() {
   const [chartMode, setChartMode] = useState<'montants' | 'taux'>('montants')
   const selectedMonth = month === 'all' ? undefined : Number(month)
   const periodText = periodLabel(period)
+  const trendLabel = period.month ? 'vs mois précédent' : 'vs année précédente'
 
   const statsQuery = useQuery<DashboardStats>({
     queryKey: ['dashboard-stats', year, month],
@@ -102,16 +104,18 @@ export function Dashboard() {
 
       <TodoCard />
 
+      {(user?.role === 'ADMIN' || user?.role === 'DEVELOPER') && <SanteCard />}
+
       {(statsQuery.isError || monthlyQuery.isError) && (
         <Alert showIcon type="error" title="Impossible de charger le tableau de bord" description="Vérifiez votre connexion puis réessayez." action={<Button size="small" onClick={() => { void statsQuery.refetch(); void monthlyQuery.refetch() }}>Réessayer</Button>} />
       )}
 
       {statsQuery.isLoading ? <DashboardSkeleton /> : (
         <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
-          <MetricCard icon={<Wallet size={20} />} title={month === 'all' ? 'Collecte annuelle' : 'Collecte du mois'} value={stats?.totalCollectedPeriod ?? 0} formatter={formatAmount} color="#1A6B1A" onClick={() => setActiveView('contributions')} />
-          <MetricCard icon={<TrendingUp size={20} />} title="Contributions confirmées" value={stats?.totalConfirmedContributions ?? 0} color="#D4A900" iconTextColor="#052005" onClick={() => setActiveView('statistiques')} />
-          <MetricCard icon={<CheckCircle2 size={20} />} title="Taux de confirmation" value={stats?.globalConfirmationRate ?? 0} suffix="%" color="#2563EB" onClick={() => setActiveView('validations')} />
-          <MetricCard icon={<AlertTriangle size={20} />} title="Litiges de la période" value={stats?.litiges ?? 0} color="#DC2626" onClick={() => setActiveView('litiges')} />
+          <MetricCard icon={<Wallet size={20} />} title={month === 'all' ? 'Collecte annuelle' : 'Collecte du mois'} value={stats?.totalCollectedPeriod ?? 0} formatter={formatAmount} color="#1A6B1A" onClick={() => setActiveView('contributions')} trend={{ previous: stats?.previous?.totalCollectedPeriod, kind: 'percent', label: trendLabel }} />
+          <MetricCard icon={<TrendingUp size={20} />} title="Contributions confirmées" value={stats?.totalConfirmedContributions ?? 0} color="#D4A900" iconTextColor="#052005" onClick={() => setActiveView('statistiques')} trend={{ previous: stats?.previous?.totalConfirmedContributions, kind: 'percent', label: trendLabel }} />
+          <MetricCard icon={<CheckCircle2 size={20} />} title="Taux de confirmation" value={stats?.globalConfirmationRate ?? 0} suffix="%" color="#2563EB" onClick={() => setActiveView('validations')} trend={{ previous: stats?.previous?.globalConfirmationRate, kind: 'points', label: trendLabel }} />
+          <MetricCard icon={<AlertTriangle size={20} />} title="Litiges de la période" value={stats?.litiges ?? 0} color="#DC2626" onClick={() => setActiveView('litiges')} trend={{ previous: stats?.previous?.litiges, kind: 'percent', lowerIsBetter: true, label: trendLabel }} />
         </div>
       )}
 
@@ -202,8 +206,23 @@ export function Dashboard() {
   )
 }
 
-function MetricCard({ icon, title, value, suffix, formatter, color, iconTextColor, onClick }: { icon: React.ReactNode; title: string; value: number; suffix?: string; formatter?: (value: number) => string; color: string; iconTextColor?: string; onClick: () => void }) {
-  return <Card hoverable className="relative" styles={{ body: { padding: 18 } }}><button type="button" aria-label={`Consulter ${title}`} onClick={onClick} className="absolute inset-0 z-10 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A6B1A]" /><div className="mb-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: color, color: iconTextColor ?? '#fff' }}>{icon}</span></div><Statistic title={title} value={value} suffix={suffix} formatter={() => formatter ? formatter(value) : value} valueStyle={{ color: '#0F172A', fontWeight: 700, fontSize: 24 }} /></Card>
+type Trend = { previous: number | undefined; kind: 'percent' | 'points'; lowerIsBetter?: boolean; label: string }
+
+function MetricCard({ icon, title, value, suffix, formatter, color, iconTextColor, onClick, trend }: { icon: React.ReactNode; title: string; value: number; suffix?: string; formatter?: (value: number) => string; color: string; iconTextColor?: string; onClick: () => void; trend?: Trend }) {
+  return <Card hoverable className="relative" styles={{ body: { padding: 18 } }}><button type="button" aria-label={`Consulter ${title}`} onClick={onClick} className="absolute inset-0 z-10 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A6B1A]" /><div className="mb-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: color, color: iconTextColor ?? '#fff' }}>{icon}</span></div><Statistic title={title} value={value} suffix={suffix} formatter={() => formatter ? formatter(value) : value} valueStyle={{ color: '#0F172A', fontWeight: 700, fontSize: 24 }} />{trend && <TrendLine value={value} trend={trend} />}</Card>
+}
+
+// Tendance par rapport à la période précédente (EF-M10-01)
+function TrendLine({ value, trend }: { value: number; trend: Trend }) {
+  if (trend.previous === undefined) return null
+  const diff = value - trend.previous
+  let text: string
+  if (diff === 0) text = `= ${trend.label}`
+  else if (trend.kind === 'points') text = `${diff > 0 ? '+' : '−'}${Math.abs(diff)} pt${Math.abs(diff) > 1 ? 's' : ''} ${trend.label}`
+  else if (trend.previous === 0) text = `Nouveau ${trend.label}`
+  else text = `${diff > 0 ? '+' : '−'}${Math.round(Math.abs(diff) / trend.previous * 100)} % ${trend.label}`
+  const good = diff === 0 ? null : (diff > 0) !== !!trend.lowerIsBetter
+  return <p className={`mt-1 text-xs font-semibold ${good === null ? 'text-slate-400' : good ? 'text-[#1A6B1A]' : 'text-red-600'}`}>{diff > 0 ? '▲ ' : diff < 0 ? '▼ ' : ''}{text}</p>
 }
 
 function DashboardSkeleton() { return <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <Card key={index}><Skeleton active paragraph={{ rows: 2 }} /></Card>)}</div> }

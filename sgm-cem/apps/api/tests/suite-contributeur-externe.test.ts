@@ -4,7 +4,8 @@ import { getPrisma } from '../src/lib/prisma'
 import { cleanDonorName, nextAliases, payerName, resolveExternalContributor } from '../src/services/contributeur-externe.service'
 
 const prisma = getPrisma()
-const phone = `+2376${String(Date.now()).slice(-8)}`
+const stamp = String(Date.now()).slice(-7)
+const phone = `+23765${stamp}`
 
 describe('Contributeur externe', () => {
   it('alias : nouveau nom ajouté, nom déjà connu ignoré (casse, accents, espaces)', () => {
@@ -27,7 +28,7 @@ describe('Contributeur externe', () => {
   })
 
   it('e-mail complété seulement s\'il manquait', async () => {
-    const p2 = `${phone.slice(0, -1)}9`
+    const p2 = `+23766${stamp}`
     await resolveExternalContributor(prisma, { phone: p2, nom: 'Sans Mail', consentVersion: 'v1' })
     const again = await resolveExternalContributor(prisma, { phone: p2, nom: 'Sans Mail', email: 'nouveau@test.local', consentVersion: 'v1' })
     expect(again.email).toBe('nouveau@test.local')

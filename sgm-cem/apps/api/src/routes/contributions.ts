@@ -28,6 +28,7 @@ import {
   type ContributionActor,
 } from '../services/contribution-access.service'
 import { payerName } from '../services/contributeur-externe.service'
+import { blockedPaymentsWhere } from '../services/sante.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -204,38 +205,45 @@ router.get('/validations', authenticate, requireLevel(2), async (req, res) => {
 })
 
 /**
- * GET /api/contributions/todo
  * Ce qui attend l'utilisateur, dans son périmètre : confirmations qu'il peut
- * réellement faire, transferts de fonds à réceptionner, litiges (niveau ≥ 3).
- * Alimente le bloc « À traiter » des accueils.
+ * réellement faire, transferts de fonds à réceptionner ; à partir du niveau 3,
+ * litiges ouverts et paiements électroniques bloqués (EF-M10-01).
  */
-router.get('/todo', authenticate, requireLevel(2), async (req, res) => {
-  const actor = actorOf(req)
-  const [pending, transfersToReceive, openDisputes] = await Promise.all([
+export async function computeTodo(actor: ContributionActor) {
+  const supervisor = ['RESPONSABLE', 'ADJOINT_RESPONSABLE', 'TRESORIER', 'ADMIN', 'DEVELOPER'].includes(actor.role)
+  const [pending, transfersToReceive, openDisputes, blockedPayments] = await Promise.all([
+    // Seules les déclarations manuelles se confirment à la main (même filtre que la file « À valider »)
     prisma.contribution.findMany({
-      where: { ...getContributionScope(actor), statut: 'EN_ATTENTE_CONFIRMATION' },
+      where: { ...getContributionScope(actor), statut: 'EN_ATTENTE_CONFIRMATION', modePaiement: { in: ['ESPECES', 'VIREMENT'] }, externalTransactionId: null, momoTransactionId: null },
       select: { id: true, collecteurId: true, statut: true, modePaiement: true, externalTransactionId: true, momoTransactionId: true, transferId: true, bankDepositId: true, localisationFonds: true, montant: true, confirmationAuthorization: true },
-      take: 500,
+      take: 2000,
     }),
     prisma.fundsTransfer.count({ where: { receiverId: actor.userId, status: 'PENDING_APPROVAL' } }),
-    ['RESPONSABLE', 'ADJOINT_RESPONSABLE', 'TRESORIER', 'ADMIN', 'DEVELOPER'].includes(actor.role)
-      ? prisma.contribution.count({ where: { statut: 'LITIGE' } })
-      : Promise.resolve(0),
+    supervisor ? prisma.contribution.count({ where: { statut: 'LITIGE' } }) : Promise.resolve(0),
+    supervisor ? prisma.contribution.count({ where: blockedPaymentsWhere() }) : Promise.resolve(0),
   ])
   const toConfirm = (await actionsFor(actor, pending)).filter(c => c.actions.canConfirm)
-  res.json({
-    success: true,
-    data: {
-      toConfirmCount: toConfirm.length,
-      toConfirmAmount: toConfirm.reduce((sum, c) => sum + c.montant, 0),
-      transfersToReceive,
-      openDisputes,
-    },
-  })
+  return {
+    toConfirmCount: toConfirm.length,
+    toConfirmAmount: toConfirm.reduce((sum, c) => sum + c.montant, 0),
+    transfersToReceive,
+    openDisputes,
+    blockedPayments,
+  }
+}
+
+/** GET /api/contributions/todo — bloc « À traiter » des accueils. */
+router.get('/todo', authenticate, requireLevel(2), async (req, res) => {
+  res.json({ success: true, data: await computeTodo(actorOf(req)) })
 })
 
 router.get('/litiges', authenticate, requireLevel(3), async (req, res) => {
-  const contributions = await prisma.contribution.findMany({
+  const { page, limit } = z.object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+  }).parse(req.query)
+  // Nombre et montant calculés sur tous les litiges, pas sur la page affichée (EF-M10-05)
+  const [contributions, total] = await Promise.all([prisma.contribution.findMany({
     where: { statut: 'LITIGE' },
     include: {
       membre: { include: { user: { select: { fullName: true } } } },
@@ -244,10 +252,15 @@ router.get('/litiges', authenticate, requireLevel(3), async (req, res) => {
       collecteur: { select: { fullName: true } },
     },
     orderBy: { updatedAt: 'desc' },
-    take: 100,
-  })
+    skip: (page - 1) * limit,
+    take: limit,
+  }), prisma.contribution.aggregate({ where: { statut: 'LITIGE' }, _sum: { montant: true }, _count: true })])
 
-  res.json({ success: true, data: await actionsFor(actorOf(req), contributions) })
+  res.json({
+    success: true,
+    data: await actionsFor(actorOf(req), contributions),
+    pagination: { page, limit, total: total._count, totalPages: Math.ceil(total._count / limit), totalAmount: total._sum.montant ?? 0 },
+  })
 })
 
 /**

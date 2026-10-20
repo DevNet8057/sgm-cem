@@ -1,11 +1,11 @@
 'use client'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, ChevronRight, Inbox, UserCheck } from 'lucide-react'
+import { AlertTriangle, ChevronRight, Hourglass, Inbox, UserCheck } from 'lucide-react'
 import api from '@/lib/api'
 import { formatAmount } from '@/lib/utils'
 import { useAppStore } from '@/store/appStore'
 
-type Todo = { toConfirmCount: number; toConfirmAmount: number; transfersToReceive: number; openDisputes: number }
+type Todo = { toConfirmCount: number; toConfirmAmount: number; transfersToReceive: number; openDisputes: number; blockedPayments?: number }
 type TodoItem = { view: string; icon: typeof Inbox; label: string; detail: string; tone: string }
 
 /**
@@ -25,6 +25,7 @@ export function TodoCard() {
   if (data.toConfirmCount > 0) items.push({ view: 'validations', icon: UserCheck, label: `${data.toConfirmCount} encaissement(s) à confirmer`, detail: formatAmount(data.toConfirmAmount), tone: 'text-[#1A6B1A] bg-[#E8F5E8]' })
   if (data.transfersToReceive > 0) items.push({ view: 'transfer-validations', icon: Inbox, label: `${data.transfersToReceive} remise(s) de fonds à réceptionner`, detail: 'Confirmer ou refuser', tone: 'text-[#92400E] bg-[#FFFBEB]' })
   if (data.openDisputes > 0) items.push({ view: 'litiges', icon: AlertTriangle, label: `${data.openDisputes} litige(s) ouvert(s)`, detail: 'À examiner', tone: 'text-[#991B1B] bg-[#FEF2F2]' })
+  if ((data.blockedPayments ?? 0) > 0) items.push({ view: 'contributions', icon: Hourglass, label: `${data.blockedPayments} paiement(s) électronique(s) bloqué(s)`, detail: 'Sans réponse du prestataire depuis plus de 30 min — la réconciliation les suit', tone: 'text-[#9A3412] bg-[#FFF7ED]' })
 
   return (
     <section aria-label="À traiter" className="rounded-[18px] border border-gray-100 bg-white p-4">

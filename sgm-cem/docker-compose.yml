@@ -70,6 +70,8 @@ services:
     environment:
       # Tout ce qui DOIT être configuré pour l'API
       NODE_ENV: production
+      # Heure de Yaoundé : découpage des mois, relevés, relances, tâches planifiées
+      TZ: Africa/Douala
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/sgm_cem
       REDIS_URL: redis://redis:6379
       PORT: 3001
@@ -116,6 +118,7 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: production
+      TZ: Africa/Douala
       NEXT_PUBLIC_API_URL: http://localhost:3001
       NEXT_PUBLIC_APP_URL: http://localhost:3000
     networks:

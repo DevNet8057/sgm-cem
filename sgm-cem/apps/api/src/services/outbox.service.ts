@@ -8,6 +8,7 @@ import { logger } from '../lib/logger'
 import { getConfig, getConfigBool } from './config.service'
 import { sendEmail, textToHtml } from './email'
 import { sendSMS, sendWhatsApp, type WhatsAppTemplate } from './notification'
+import { recordIncident } from './incident.service'
 
 const prisma = getPrisma()
 const MAX_ESSAIS = 4
@@ -70,7 +71,10 @@ async function settle(envoi: Envoi, result: { voie: string } | { erreur: string 
     where: { id: envoi.id },
     data: { statut: abandon ? 'ECHEC' : 'EN_ATTENTE', essais, derniereErreur: result.erreur, prochainEssai: abandon ? null : prochain },
   })
-  if (abandon) logger.warn({ envoiId: envoi.id, objet: envoi.objet, essais }, '[Envois] Abandon après échecs')
+  if (abandon) {
+    logger.warn({ envoiId: envoi.id, objet: envoi.objet, essais }, '[Envois] Abandon après échecs')
+    await recordIncident('ENVOI', envoi.objet, `Abandon après ${essais} essai(s) : ${result.erreur}`)
+  }
   return false
 }
 
@@ -114,7 +118,8 @@ export async function runOutboxRetries(now = new Date()): Promise<{ essais: numb
   let essais = 0
   for (const envoi of dus) {
     if (envoi.expireLe && envoi.expireLe < now) {
-      await prisma.envoi.updateMany({ where: { id: envoi.id, statut: envoi.statut }, data: { statut: 'ECHEC', derniereErreur: 'Délai dépassé', prochainEssai: null } })
+      const expired = await prisma.envoi.updateMany({ where: { id: envoi.id, statut: envoi.statut }, data: { statut: 'ECHEC', derniereErreur: 'Délai dépassé', prochainEssai: null } })
+      if (expired.count === 1) await recordIncident('ENVOI', envoi.objet, `Non remis avant expiration après ${envoi.essais} essai(s) : ${envoi.derniereErreur ?? 'cause inconnue'}`)
       continue
     }
     // Un seul processus prend l'envoi

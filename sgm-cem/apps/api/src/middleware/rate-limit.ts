@@ -27,7 +27,7 @@ export function userOrIpKey(req: Request): string {
 // Compteurs partagés dans Redis quand il est configuré : plusieurs processus API
 // appliquent la même limite et un redémarrage ne la remet pas à zéro.
 let redis: IORedis | null = null
-function sharedRedis(): IORedis | null {
+export function sharedRedis(): IORedis | null {
   const url = process.env.REDIS_URL
   if (!url) return null
   // Les limiteurs sont créés pendant le chargement de l'application, avant que

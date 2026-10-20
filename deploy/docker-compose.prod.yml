@@ -33,7 +33,7 @@ services:
   web:
     <<: *app
     image: ${IMAGE_WEB}
-    environment: { NODE_ENV: production, PORT: "3000", HOSTNAME: "0.0.0.0" }
+    environment: { NODE_ENV: production, TZ: Africa/Douala, PORT: "3000", HOSTNAME: "0.0.0.0" }
     tmpfs: ["/tmp:size=256m", "/app/apps/web/.next/cache:size=256m,uid=1000"]   # cache d'images Next (écriture requise)
     networks: [edge]
     mem_limit: 768m
@@ -50,7 +50,7 @@ services:
     user: "1000:1000"                            # jamais root (dossiers de l'image et volumes neufs : uid 1000)
     # L'entrypoint sauvegarde la base, applique les migrations puis lance dist/index.js
     # Tâches planifiées exécutées par le service worker (BullMQ, une exécution par échéance)
-    environment: { NODE_ENV: production, TRUST_PROXY: "1", RUN_SCHEDULED_JOBS: "false", GOTENBERG_URL: "http://gotenberg:3000" }
+    environment: { NODE_ENV: production, TZ: Africa/Douala, TRUST_PROXY: "1", RUN_SCHEDULED_JOBS: "false", GOTENBERG_URL: "http://gotenberg:3000" }
     tmpfs: ["/tmp:size=256m", "/home/node:size=64m,uid=1000"]
     volumes:
       - uploads:/app/apps/api/uploads          # fichiers locaux si aucun stockage S3 n'est configuré
@@ -74,7 +74,7 @@ services:
     user: "1000:1000"
     working_dir: /app/apps/api
     command: ["node", "dist/worker.js"]
-    environment: { NODE_ENV: production, GOTENBERG_URL: "http://gotenberg:3000" }
+    environment: { NODE_ENV: production, TZ: Africa/Douala, GOTENBERG_URL: "http://gotenberg:3000" }
     tmpfs: ["/tmp:size=256m", "/home/node:size=64m,uid=1000"]
     volumes:
       - uploads:/app/apps/api/uploads          # relevés et reçus générés par les tâches

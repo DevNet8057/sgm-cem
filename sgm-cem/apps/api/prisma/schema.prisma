@@ -390,7 +390,7 @@ model CollectePublique {
 model ContributeurExterne {
   id             String    @id @default(cuid())
   nom            String // premier nom saisi : jamais écrasé par un don suivant (EF-M08-06)
-  aliases        String[] @default([]) // autres noms saisis plus tard avec le même téléphone
+  aliases        String[]  @default([]) // autres noms saisis plus tard avec le même téléphone
   phone          String // E.164 normalisé (+237…)
   email          String?
   // Consentement explicite au traitement (loi n° 2024/017) : date et version du texte accepté
@@ -853,18 +853,18 @@ model SystemConfigHistory {
 }
 
 model AuditLog {
-  id         String      @id @default(cuid())
-  userId     String
-  userName   String
-  action     AuditAction
-  entityType String
-  entityId   String?
-  details    Json?
-  ipAddress  String?
-  userAgent  String?
+  id               String      @id @default(cuid())
+  userId           String
+  userName         String
+  action           AuditAction
+  entityType       String
+  entityId         String?
+  details          Json?
+  ipAddress        String?
+  userAgent        String?
   // Auteur réel quand l'action est faite sous impersonation (panneau développeur)
   impersonatedById String?
-  createdAt  DateTime    @default(now())
+  createdAt        DateTime    @default(now())
 
   user User @relation(fields: [userId], references: [id])
 
@@ -1076,4 +1076,42 @@ model Envoi {
   @@index([statut, prochainEssai])
   @@index([createdAt])
   @@map("envois")
+}
+
+// ── Suivi d'erreurs (point 17) ──────────────────────────────────────────
+enum IncidentSource {
+  TACHE // tâche planifiée
+  WEBHOOK // notification d'un prestataire de paiement
+  ENVOI // WhatsApp, SMS ou e-mail abandonné
+}
+
+// Incident technique regroupé : une même erreur répétée incrémente le compteur.
+// Le message est expurgé (ni téléphone, ni e-mail, ni jeton).
+model Incident {
+  id           String         @id @default(cuid())
+  source       IncidentSource
+  code         String // nom de la tâche, prestataire ou objet de l'envoi
+  message      String
+  occurrences  Int            @default(1)
+  premiereFois DateTime       @default(now())
+  derniereFois DateTime       @default(now())
+  resoluLe     DateTime?
+  resoluPar    String?
+
+  @@index([resoluLe, derniereFois])
+  @@index([source, code])
+  @@map("incidents")
+}
+
+// Dernière exécution de chaque tâche planifiée (santé du système)
+model TacheEtat {
+  nom            String    @id
+  dernierDebut   DateTime?
+  dernierSucces  DateTime?
+  derniereErreur DateTime?
+  erreur         String?
+  resultat       String?
+  dureeMs        Int?
+
+  @@map("taches_etat")
 }

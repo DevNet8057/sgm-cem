@@ -6,6 +6,7 @@ import {
 } from '../services/cinetpay.service'
 import { getPrisma } from '../lib/prisma'
 import { applyProviderOutcome, cinetpayRemoteState } from '../services/payment-status.service'
+import { recordIncident } from '../services/incident.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -26,6 +27,7 @@ router.post('/cinetpay', express.urlencoded({ extended: false }), async (req, re
 
   if (!verifyCinetpaySignature(body, receivedToken)) {
     console.error('[CinetPay Webhook] Signature invalide — requête rejetée')
+    void recordIncident('WEBHOOK', 'cinetpay', 'Signature invalide : clé CINETPAY_SECRET_KEY à vérifier')
     return res.status(401).send('Signature invalide')
   }
 
@@ -50,6 +52,7 @@ router.post('/cinetpay', express.urlencoded({ extended: false }), async (req, re
     verification = await verifyCinetpayTransaction(transactionId)
   } catch (error) {
     console.error(`[CinetPay Webhook] Vérification distante impossible pour ${transactionId}`, error)
+    void recordIncident('WEBHOOK', 'cinetpay', error)
     return res.status(503).send('Vérification CinetPay temporairement indisponible')
   }
 
@@ -62,6 +65,7 @@ router.post('/cinetpay', express.urlencoded({ extended: false }), async (req, re
     return res.status(200).send('OK')
   } catch (error) {
     console.error(`[CinetPay Webhook] Échec du traitement de ${transactionId}`, error)
+    void recordIncident('WEBHOOK', 'cinetpay', error)
     return res.status(500).send('Erreur de traitement CinetPay')
   }
 })

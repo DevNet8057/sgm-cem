@@ -1,7 +1,7 @@
 'use client'
 import { TodoCard } from '@/components/dashboard/TodoCard'
 import { useQuery } from '@tanstack/react-query'
-import { CheckCircle2, Clock, CreditCard, TrendingUp, Wallet } from 'lucide-react'
+import { AlertTriangle, CreditCard, HandCoins, Inbox, UserCheck, Wallet } from 'lucide-react'
 import api from '@/lib/api'
 import { formatAmount, formatDateTime, contributorName } from '@/lib/utils'
 import { useAuthStore } from '@/store/authStore'
@@ -15,16 +15,20 @@ export function DashboardCollecteur() {
   const { user } = useAuthStore()
   const { setActiveView } = useAppStore()
 
+  // Dernières lignes pour la liste ; les indicateurs viennent du serveur (EF-M10-05)
   const { data: myContribs, isLoading } = useQuery<Contribution[]>({
     queryKey: ['my-contributions'],
-    queryFn: async () => (await api.get('/contributions', { params: { limit: 20 } })).data.data,
+    queryFn: async () => (await api.get('/contributions', { params: { limit: 10 } })).data.data,
     refetchInterval: 30000,
   })
-
-  const pending   = (myContribs ?? []).filter(c => c.statut === 'EN_ATTENTE_CONFIRMATION')
-  const confirmed = (myContribs ?? []).filter(c => c.statut === 'CONFIRME')
-  const litiges   = (myContribs ?? []).filter(c => c.statut === 'LITIGE')
-  const totalMontant = confirmed.reduce((s, c) => s + c.montant, 0)
+  const { data: home, isLoading: homeLoading } = useQuery<CollecteurHome>({
+    queryKey: ['accueil-collecteur'],
+    queryFn: async () => (await api.get('/stats/collecteur')).data.data,
+    refetchInterval: 30000,
+  })
+  const variation = home && home.encaisseMois.moisPrecedent > 0
+    ? Math.round((home.encaisseMois.montant - home.encaisseMois.moisPrecedent) / home.encaisseMois.moisPrecedent * 100)
+    : null
 
   return (
     <div className="p-4 md:p-6 animate-page-enter space-y-5">
@@ -50,18 +54,29 @@ export function DashboardCollecteur() {
 
       <TodoCard />
 
-      {/* KPIs */}
-      {isLoading ? (
+      {/* Indicateurs (EF-M10-01) : fonds détenus, à valider, transferts à recevoir, encaissé ce mois */}
+      {homeLoading || !home ? (
         <div className="grid grid-cols-2 gap-4">
           {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-4">
-          <KpiCard icon={Clock} label="En attente" value={String(pending.length)} color="#F5C400" bg="#FEFCE8" />
-          <KpiCard icon={CheckCircle2} label="Confirmées" value={String(confirmed.length)} color="#1A6B1A" bg="#E8F5E8" />
-          <KpiCard icon={TrendingUp} label="Litiges" value={String(litiges.length)} color="#DC2626" bg="#FEF2F2" />
-          <KpiCard icon={Wallet} label="Total confirmé" value={formatAmount(totalMontant)} color="#2563EB" bg="#EFF6FF" />
+          <KpiCard icon={Wallet} label="Fonds détenus" value={formatAmount(home.fondsDetenus.montant)}
+            hint={home.fondsDetenus.aRemettre > 0 ? `${home.fondsDetenus.aRemettre} à remettre (plus de ${home.fondsDetenus.delaiJours} j)` : `${home.fondsDetenus.nombre} contribution(s)`}
+            alert={home.fondsDetenus.aRemettre > 0} color="#1A6B1A" bg="#E8F5E8" onClick={() => setActiveView('collecteurs')} />
+          <KpiCard icon={UserCheck} label="À valider" value={String(home.aValider.nombre)}
+            hint={home.aValider.nombre ? formatAmount(home.aValider.montant) : 'Rien en attente'} color="#B45309" bg="#FEFCE8" onClick={() => setActiveView('validations')} />
+          <KpiCard icon={Inbox} label="Transferts à recevoir" value={String(home.transfertsARecevoir)}
+            hint={home.transfertsARecevoir ? 'Confirmer ou refuser' : 'Aucun'} color="#2563EB" bg="#EFF6FF" onClick={() => setActiveView('transfer-validations')} />
+          <KpiCard icon={HandCoins} label="Encaissé ce mois" value={formatAmount(home.encaisseMois.montant)}
+            hint={variation === null ? `${home.encaisseMois.nombre} confirmée(s)` : `${variation >= 0 ? '▲ +' : '▼ −'}${Math.abs(variation)} % vs mois précédent`}
+            color="#0F4A0F" bg="#F0FDF4" onClick={() => setActiveView('contributions')} />
         </div>
+      )}
+      {home && home.litiges > 0 && (
+        <p className="flex items-center gap-2 rounded-[12px] border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <AlertTriangle size={15} /> {home.litiges} de vos encaissements sont en litige.
+        </p>
       )}
 
       {/* Dernières contributions */}
@@ -105,16 +120,25 @@ export function DashboardCollecteur() {
   )
 }
 
-function KpiCard({ icon: Icon, label, value, color, bg }: {
-  icon: React.ElementType; label: string; value: string; color: string; bg: string
+function KpiCard({ icon: Icon, label, value, hint, alert, color, bg, onClick }: {
+  icon: React.ElementType; label: string; value: string; hint?: string; alert?: boolean; color: string; bg: string; onClick?: () => void
 }) {
   return (
-    <div className="bg-white rounded-[18px] border border-gray-100 p-4">
+    <button type="button" onClick={onClick} className="bg-white rounded-[18px] border border-gray-100 p-4 text-left transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1A6B1A]">
       <div className="w-9 h-9 rounded-[10px] flex items-center justify-center mb-3" style={{ background: bg, color }}>
         <Icon size={17} />
       </div>
       <p className="font-display font-bold text-[#0F4A0F] text-2xl leading-tight">{value}</p>
       <p className="text-xs text-gray-500 mt-1">{label}</p>
-    </div>
+      {hint && <p className={`text-[11px] mt-1 ${alert ? 'font-semibold text-red-600' : 'text-gray-400'}`}>{hint}</p>}
+    </button>
   )
+}
+
+interface CollecteurHome {
+  fondsDetenus: { montant: number; nombre: number; aRemettre: number; delaiJours: number }
+  aValider: { nombre: number; montant: number }
+  transfertsARecevoir: number
+  encaisseMois: { montant: number; nombre: number; moisPrecedent: number }
+  litiges: number
 }

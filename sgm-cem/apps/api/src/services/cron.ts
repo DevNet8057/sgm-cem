@@ -2,6 +2,7 @@ import { alertTresoriers, sendMonthlyStatement } from './notification'
 import { getPrisma } from '../lib/prisma'
 import { checkLedger } from './fund-ledger.service'
 import { logger } from '../lib/logger'
+import { recordIncident } from './incident.service'
 
 const prisma = getPrisma()
 
@@ -16,6 +17,7 @@ export async function runLedgerCheck(): Promise<number> {
       return 0
     }
     logger.error({ mismatches: result.mismatches.slice(0, 20), count: result.mismatches.length }, 'Grand livre des fonds : écarts détectés')
+    await recordIncident('TACHE', 'grand-livre-controle', `${result.mismatches.length} contribution(s) dont l'emplacement ne correspond pas au grand livre`)
     await alertTresoriers(
       'Écart dans le suivi des fonds',
       `${result.mismatches.length} contribution(s) dont l'emplacement ne correspond pas au grand livre. Contrôle : /api/funds/ledger/check`,
@@ -25,6 +27,7 @@ export async function runLedgerCheck(): Promise<number> {
     return result.mismatches.length
   } catch (e) {
     logger.error({ err: e }, 'Grand livre des fonds : contrôle quotidien impossible')
+    await recordIncident('TACHE', 'grand-livre-controle', e)
     return -1
   }
 }

@@ -27,11 +27,15 @@ export function Litiges() {
     rubriqueLabel?: string
   } | null>(null)
 
-  const { data, isLoading } = useQuery<Contribution[]>({
-    queryKey: ['litiges'],
-    queryFn: async () => (await api.get('/contributions/litiges')).data.data,
+  // Liste paginée ; nombre et montant calculés par le serveur sur tous les litiges
+  const [page, setPage] = useState(1)
+  const { data: litigesPage, isLoading } = useQuery<{ data: Contribution[]; pagination: { page: number; total: number; totalPages: number; totalAmount: number } }>({
+    queryKey: ['litiges', page],
+    queryFn: async () => (await api.get('/contributions/litiges', { params: { page, limit: 50 } })).data,
     refetchInterval: 30000,
   })
+  const data = litigesPage?.data
+  const pagination = litigesPage?.pagination
 
   const resolve = useMutation({
     mutationFn: async ({ id, resolution, note }: { id: string; resolution: Resolution; note?: string }) =>
@@ -88,15 +92,15 @@ export function Litiges() {
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-red-700">À résoudre</p>
             <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Litiges</h2>
-            <p className="text-gray-500 text-sm mt-0.5">{litiges.length} contribution(s) contestée(s)</p>
+            <p className="text-gray-500 text-sm mt-0.5">{pagination?.total ?? litiges.length} contribution(s) contestée(s)</p>
           </div>
-          {litiges.length > 0 && (
+          {(pagination?.total ?? 0) > 0 && (
             <div className="flex items-center gap-2 rounded-[14px] bg-red-50 border border-red-200 px-4 py-3">
               <AlertTriangle size={16} className="text-red-500" />
               <div>
                 <p className="text-xs text-red-700 font-medium">Montant en litige</p>
                 <p className="font-mono font-bold text-red-800">
-                  {formatAmount(litiges.reduce((s, c) => s + c.montant, 0))}
+                  {formatAmount(pagination?.totalAmount ?? 0)}
                 </p>
               </div>
             </div>
@@ -191,6 +195,22 @@ export function Litiges() {
             </tbody>
           </table>
         </div>
+
+        {pagination && pagination.totalPages > 1 && (
+          <div className="flex items-center justify-between px-5 py-4 border-t border-gray-100">
+            <p className="text-xs text-gray-500">Page {pagination.page} sur {pagination.totalPages} — {pagination.total} litige(s)</p>
+            <div className="flex gap-2">
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-[8px] disabled:opacity-40 hover:bg-gray-100 transition-colors">
+                ← Précédent
+              </button>
+              <button onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))} disabled={page === pagination.totalPages}
+                className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-[8px] disabled:opacity-40 hover:bg-gray-100 transition-colors">
+                Suivant →
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modal résolution */}

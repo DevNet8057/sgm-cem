@@ -106,18 +106,21 @@ router.get('/storage-mode', authenticate, requireLevel(2), (_req, res) => {
 // ── GET documents ─────────────────────────────────────────────────────
 router.get('/documents', authenticate, requireLevel(2), async (req, res) => {
   const { commissionId, statut, q } = req.query as Record<string, string>
+  const where: Prisma.DocumentWhereInput = {
+    ...documentScope(req.user!),
+    ...(commissionId ? { commissionId } : {}),
+    ...(statut ? { statut: statut as never } : {}),
+    ...(q ? {
+      OR: [
+        { titre: { contains: q, mode: 'insensitive' } },
+        { fileName: { contains: q, mode: 'insensitive' } },
+      ],
+    } : {}),
+  }
+  // Compteurs sur tout le périmètre filtré, pas seulement les 200 lignes renvoyées (EF-M10-05)
+  const counts = await prisma.document.groupBy({ by: ['statut'], where, _count: true })
   const documents = await prisma.document.findMany({
-    where: {
-      ...documentScope(req.user!),
-      ...(commissionId ? { commissionId } : {}),
-      ...(statut ? { statut: statut as never } : {}),
-      ...(q ? {
-        OR: [
-          { titre: { contains: q, mode: 'insensitive' } },
-          { fileName: { contains: q, mode: 'insensitive' } },
-        ],
-      } : {}),
-    },
+    where,
     include: {
       commission: { select: { nom: true } },
       typeDocument: true,
@@ -126,7 +129,8 @@ router.get('/documents', authenticate, requireLevel(2), async (req, res) => {
     orderBy: { createdAt: 'desc' },
     take: 200,
   })
-  res.json({ success: true, data: documents })
+  const parStatut = Object.fromEntries(counts.map(c => [c.statut, c._count]))
+  res.json({ success: true, data: documents, meta: { total: counts.reduce((sum, c) => sum + c._count, 0), parStatut } })
 })
 
 router.get('/:id/documents', authenticate, requireLevel(2), async (req, res) => {

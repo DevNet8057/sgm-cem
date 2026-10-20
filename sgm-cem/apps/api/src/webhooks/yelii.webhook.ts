@@ -3,6 +3,7 @@ import express from 'express'
 import { verifyYeliiSignature } from '../services/yelii.service'
 import { applyProviderOutcome } from '../services/payment-status.service'
 import { linkOrphanYeliiTransaction } from '../services/payment-attempt.service'
+import { recordIncident } from '../services/incident.service'
 
 const router = Router()
 
@@ -27,6 +28,7 @@ router.post('/yelii', express.json(), async (req, res) => {
   )
   if (!isValid) {
     console.error('[Yelii Webhook] Signature invalide — rejeté')
+    void recordIncident('WEBHOOK', 'yelii', 'Signature invalide : secret YELII_WEBHOOK_SECRET à vérifier')
     return res.status(401).json({ error: 'Signature invalide' })
   }
 
@@ -83,6 +85,7 @@ async function processYeliiWebhook(envelope: YeliiEnvelope) {
     console.info(`[Yelii] ${transactionId} — ${result}`)
   } catch (e) {
     console.error(`[Yelii] Échec du traitement de ${transactionId}`, e)
+    await recordIncident('WEBHOOK', 'yelii', e)
   }
 }
 

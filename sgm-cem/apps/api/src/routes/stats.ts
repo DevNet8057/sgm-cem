@@ -6,9 +6,33 @@ import { generateFinancialReportPdf } from '../services/financial-report'
 import { getPrisma } from '../lib/prisma'
 import { refundsByRubrique, refundsTotal } from '../services/refund.service'
 import { monthBounds, periodBounds } from '../services/closure.service'
+import { computeTodo } from './contributions'
 
 const router = Router()
 const prisma = getPrisma()
+
+/** Les 4 indicateurs de l'accueil pour une période : servent à la tendance. */
+async function periodKpis(filter: { gte: Date; lte: Date }) {
+  const [confirmed, refunded, byStatus] = await Promise.all([
+    prisma.contribution.aggregate({ where: { statut: 'CONFIRME', createdAt: filter }, _sum: { montant: true }, _count: true }),
+    refundsTotal(filter),
+    prisma.contribution.groupBy({ by: ['statut'], where: { createdAt: filter }, _count: true }),
+  ])
+  const count = (statut: string) => byStatus.find(g => g.statut === statut)?._count ?? 0
+  const total = byStatus.reduce((sum, g) => sum + g._count, 0)
+  return {
+    totalCollectedPeriod: (confirmed._sum.montant ?? 0) - refunded,
+    totalConfirmedContributions: confirmed._count,
+    globalConfirmationRate: total ? Math.round((count('CONFIRME') / total) * 100) : 0,
+    litiges: count('LITIGE'),
+  }
+}
+
+/** Période précédente : mois précédent, ou année précédente pour une année entière. */
+function previousPeriod(year: number, month?: number) {
+  if (!month) return periodBounds(year - 1)
+  return month === 1 ? periodBounds(year - 1, 12) : periodBounds(year, month - 1)
+}
 
 export async function computeDashboardStats(requestedYear?: number, requestedMonth?: number) {
   const now = new Date()
@@ -147,6 +171,9 @@ export async function computeDashboardStats(requestedYear?: number, requestedMon
     .sort((a, b) => (b.rate ?? 0) - (a.rate ?? 0))
     .slice(0, 8)
 
+  const prev = previousPeriod(year, month)
+  const previous = await periodKpis({ gte: prev.start, lte: prev.end })
+
   const totalContributions = allYearContributions.length
   const confirmedCount = allYearContributions.filter(c => c.statut === 'CONFIRME').length
   const pendingCount = allYearContributions.filter(c => c.statut === 'EN_ATTENTE_CONFIRMATION').length
@@ -182,6 +209,8 @@ export async function computeDashboardStats(requestedYear?: number, requestedMon
     contributionRates,
     recentContributions,
     rubriquesActives,
+    // Même indicateurs sur la période précédente : tendance affichée à l'accueil
+    previous,
   }
 }
 
@@ -210,6 +239,41 @@ router.get('/financial-report.pdf', authenticate, requireLevel(3), async (req, r
   res.setHeader('Content-Type', 'application/pdf')
   res.setHeader('Content-Disposition', `${disposition}; filename="Rapport-financier-${year}${month ? `-${String(month).padStart(2, '0')}` : ''}.pdf"`)
   res.send(pdf)
+})
+
+/**
+ * GET /api/stats/collecteur — accueil du collecteur (EF-M10-01, EF-M10-05),
+ * calculé sur tout son périmètre : fonds détenus, à valider, transferts à
+ * recevoir, encaissé ce mois (et le mois précédent), litiges.
+ */
+router.get('/collecteur', authenticate, requireLevel(2), async (req, res) => {
+  const actor = { userId: req.user!.userId, role: req.user!.role }
+  const now = new Date()
+  const year = Number(now.toLocaleString('en-CA', { timeZone: 'Africa/Douala', year: 'numeric' }))
+  const month = Number(now.toLocaleString('en-CA', { timeZone: 'Africa/Douala', month: 'numeric' }))
+  const current = periodBounds(year, month)
+  const previous = previousPeriod(year, month)
+  const retentionDays = (await prisma.systemSettings.findFirst({ select: { maxFundsRetentionDays: true } }))?.maxFundsRetentionDays ?? 7
+  const heldWhere = { statut: 'CONFIRME' as const, detenteurId: actor.userId, localisationFonds: { in: ['CHEZ_COLLECTEUR', 'CHEZ_RESPONSABLE'] as Array<'CHEZ_COLLECTEUR' | 'CHEZ_RESPONSABLE'> } }
+  const mine = { collecteurId: actor.userId, statut: 'CONFIRME' as const }
+  const [held, overdue, thisMonth, lastMonth, litiges, todo] = await Promise.all([
+    prisma.contribution.aggregate({ where: heldWhere, _sum: { montant: true }, _count: true }),
+    prisma.contribution.count({ where: { ...heldWhere, confirmedAt: { lt: new Date(now.getTime() - retentionDays * 24 * 3600_000) } } }),
+    prisma.contribution.aggregate({ where: { ...mine, confirmedAt: { gte: current.start, lte: current.end } }, _sum: { montant: true }, _count: true }),
+    prisma.contribution.aggregate({ where: { ...mine, confirmedAt: { gte: previous.start, lte: previous.end } }, _sum: { montant: true } }),
+    prisma.contribution.count({ where: { collecteurId: actor.userId, statut: 'LITIGE' } }),
+    computeTodo(actor),
+  ])
+  res.json({
+    success: true,
+    data: {
+      fondsDetenus: { montant: held._sum.montant ?? 0, nombre: held._count, aRemettre: overdue, delaiJours: retentionDays },
+      aValider: { nombre: todo.toConfirmCount, montant: todo.toConfirmAmount },
+      transfertsARecevoir: todo.transfersToReceive,
+      encaisseMois: { montant: thisMonth._sum.montant ?? 0, nombre: thisMonth._count, moisPrecedent: lastMonth._sum.montant ?? 0 },
+      litiges,
+    },
+  })
 })
 
 router.get('/monthly', authenticate, requireLevel(3), async (req, res) => {

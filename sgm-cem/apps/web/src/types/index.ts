@@ -319,7 +319,16 @@ export interface ApiResponse<T> {
   pagination?: { page: number; limit: number; total: number; totalPages: number }
 }
 
+export interface PeriodKpis {
+  totalCollectedPeriod: number
+  totalConfirmedContributions: number
+  globalConfirmationRate: number
+  litiges: number
+}
+
 export interface DashboardStats {
+  /** Mêmes indicateurs sur la période précédente (tendance) */
+  previous?: PeriodKpis
   year: number
   month: number | null
   totalMembres: number
