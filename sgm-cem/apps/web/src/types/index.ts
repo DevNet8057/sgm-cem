@@ -105,6 +105,7 @@ export interface Contribution {
   membre?: { user: { fullName: string } } | null
   // Donateur d'une collecte publique (sans compte membre)
   contributeurExterne?: { nom: string } | null
+  nomDonateur?: string | null
   rubrique?: { title: string; code: string }
   collecteur?: { fullName: string } | null
   // Détenteur courant de l'argent (grand livre des fonds)

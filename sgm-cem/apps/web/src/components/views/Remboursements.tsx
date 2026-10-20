@@ -39,6 +39,7 @@ interface Refund {
     createdAt: string
     membre: { user: { fullName: string } } | null
     contributeurExterne: { nom: string } | null
+    nomDonateur?: string | null
     rubrique: { code: string; title: string }
   }
 }
@@ -155,7 +156,7 @@ export function Remboursements() {
         ) : data.length === 0 ? (
           <EmptyState icon={Undo2} title="Aucun remboursement" description="Un remboursement se demande depuis la fiche d'une contribution confirmée (trésorier)." />
         ) : data.map(r => {
-          const name = r.contribution.membre?.user.fullName ?? r.contribution.contributeurExterne?.nom ?? 'Contributeur'
+          const name = r.contribution.membre?.user.fullName ?? r.contribution.nomDonateur ?? r.contribution.contributeurExterne?.nom ?? 'Contributeur'
           return (
             <article key={r.id} className="rounded-[16px] border border-gray-100 bg-white p-4">
               <div className="flex items-start justify-between gap-3">

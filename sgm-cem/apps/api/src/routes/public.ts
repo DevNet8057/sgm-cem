@@ -33,8 +33,10 @@ import { calculateAmountWithCommission, YELII_COMMISSION_RATE } from '@sgm-cem/s
 import { timingSafeEqual } from 'crypto'
 import { loadIdentity, verificationSignature, type VerifiableKind } from '../services/documents/document-kit'
 import { receiptNumber } from '../services/receipt'
+import { cleanDonorName, resolveExternalContributor } from '../services/contributeur-externe.service'
 import { borderauNumber } from '../services/borderau'
 import { invoiceNumber, refundNumber } from '../services/documents/extra-documents'
+import { payerName } from '../services/contributeur-externe.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -335,15 +337,8 @@ router.post('/collectes/:slug/initiate', publicLimiter, async (req, res) => {
 
   const phone = normalizePhone(data.phone)
 
-  const existing = await prisma.contributeurExterne.findFirst({ where: { phone } })
-  const contributeur = existing
-    ? await prisma.contributeurExterne.update({
-        where: { id: existing.id },
-        data: { nom: data.nom, email: data.email ?? existing.email, consentAt: new Date(), consentVersion: CONSENT_VERSION },
-      })
-    : await prisma.contributeurExterne.create({
-        data: { nom: data.nom, phone, email: data.email, consentAt: new Date(), consentVersion: CONSENT_VERSION },
-      })
+  // EF-M08-06 : un contributeur déjà connu garde son nom ; le nom saisi reste sur le don
+  const contributeur = await resolveExternalContributor(prisma, { phone, nom: data.nom, email: data.email, consentVersion: CONSENT_VERSION })
 
   const storedMode: 'MTN_MOMO' | 'ORANGE_MONEY' | 'CARTE_VISA' = data.modePaiement === 'YELII'
     ? (data.channel === 'orange_money' ? 'ORANGE_MONEY' : 'MTN_MOMO')
@@ -356,6 +351,7 @@ router.post('/collectes/:slug/initiate', publicLimiter, async (req, res) => {
       data: {
         membreId: null,
         contributeurExterneId: contributeur.id,
+        nomDonateur: cleanDonorName(data.nom),
         rubriqueId: collecte.rubriqueId,
         montant: data.montant,
         valeursChamps: valeursChamps as Prisma.InputJsonValue,
@@ -549,9 +545,9 @@ router.get('/verifier/:type/:id', publicLimiter, async (req, res) => {
   const { name: community } = await loadIdentity()
 
   if (type === 'recu') {
-    const c = await prisma.contribution.findUnique({ where: { id }, select: { id: true, createdAt: true, confirmedAt: true, montant: true, statut: true, rubrique: { select: { title: true } }, membre: { select: { user: { select: { fullName: true } } } }, contributeurExterne: { select: { nom: true } } } })
+    const c = await prisma.contribution.findUnique({ where: { id }, select: { id: true, createdAt: true, confirmedAt: true, montant: true, statut: true, rubrique: { select: { title: true } }, membre: { select: { user: { select: { fullName: true } } } }, nomDonateur: true, contributeurExterne: { select: { nom: true } } } })
     if (!c) return notFound()
-    return res.json({ success: true, data: { type: 'Reçu', numero: receiptNumber(c), communaute: community, montant: c.montant, date: c.confirmedAt ?? c.createdAt, statut: c.statut, objet: c.rubrique.title, payeur: initials(c.membre?.user.fullName ?? c.contributeurExterne?.nom) } })
+    return res.json({ success: true, data: { type: 'Reçu', numero: receiptNumber(c), communaute: community, montant: c.montant, date: c.confirmedAt ?? c.createdAt, statut: c.statut, objet: c.rubrique.title, payeur: initials(payerName(c)) } })
   }
   if (type === 'facture') {
     const p = await prisma.prestation.findUnique({ where: { id }, select: { reference: true, createdAt: true, tarifFinal: true, totalEntrees: true, titre: true, commanditaire: true } })

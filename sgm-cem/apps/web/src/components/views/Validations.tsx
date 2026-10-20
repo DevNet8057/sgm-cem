@@ -31,11 +31,19 @@ export function Validations() {
     rubriqueLabel?: string
   } | null>(null)
 
-  const { data, isLoading } = useQuery<Contribution[]>({
-    queryKey: ['validations'],
-    queryFn: async () => (await api.get('/contributions/validations')).data.data,
+  // File paginée côté serveur, des plus anciennes aux plus récentes (EF-M06-01)
+  const [page, setPage] = useState(1)
+  const { data: queue, isLoading } = useQuery<{
+    data: Contribution[]
+    pagination: { page: number; total: number; totalPages: number; totalAmount: number }
+    meta: { electronicPending: number }
+  }>({
+    queryKey: ['validations', page],
+    queryFn: async () => (await api.get('/contributions/validations', { params: { page, limit: 20 } })).data,
     refetchInterval: 30000,
   })
+  const data = queue?.data
+  const pagination = queue?.pagination
 
   // Autorisation de substitution (EF-M06-06) : un administrateur désigne un
   // trésorier pour confirmer UN paiement d'un collecteur absent
@@ -114,6 +122,8 @@ export function Validations() {
   })
 
   async function refreshCore() {
+    // Dernière ligne d'une page traitée : revenir à la page précédente
+    if (validations.length === 1 && page > 1) setPage(page - 1)
     await queryClient.invalidateQueries({ queryKey: ['validations'] })
     await queryClient.invalidateQueries({ queryKey: ['contributions'] })
     await queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
@@ -150,7 +160,8 @@ export function Validations() {
   }
 
   const validations = data ?? []
-  const total = validations.reduce((sum, c) => sum + c.montant, 0)
+  const pendingCount = pagination?.total ?? validations.length
+  const total = pagination?.totalAmount ?? 0
   const highlightedId = useFocusHighlight(validations.map(c => c.id))
 
   return (
@@ -162,7 +173,12 @@ export function Validations() {
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-yellow-800">File d&apos;attente</p>
             <h2 className="font-display font-semibold text-[#0F4A0F] text-2xl">Validations</h2>
-            <p className="text-gray-500 text-sm mt-0.5">{validations.length} paiement(s) en attente de confirmation</p>
+            <p className="text-gray-500 text-sm mt-0.5">{pendingCount} déclaration(s) d&apos;espèces ou de virement à confirmer, des plus anciennes aux plus récentes</p>
+            {(queue?.meta.electronicPending ?? 0) > 0 && (
+              <p className="text-xs text-gray-400 mt-1">
+                {queue!.meta.electronicPending} paiement(s) électronique(s) en attente du prestataire : ils se confirment seuls (voir Contributions).
+              </p>
+            )}
           </div>
           {total > 0 && (
             <div className="flex items-center gap-2 rounded-[14px] bg-yellow-50 border border-yellow-200 px-4 py-3">
@@ -314,6 +330,22 @@ export function Validations() {
             </tbody>
           </table>
         </div>
+
+        {pagination && pagination.totalPages > 1 && (
+          <div className="flex items-center justify-between px-5 py-4 border-t border-gray-100">
+            <p className="text-xs text-gray-500">Page {pagination.page} sur {pagination.totalPages} — {pagination.total} déclaration(s)</p>
+            <div className="flex gap-2">
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-[8px] disabled:opacity-40 hover:bg-gray-100 transition-colors">
+                ← Précédent
+              </button>
+              <button onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))} disabled={page === pagination.totalPages}
+                className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-[8px] disabled:opacity-40 hover:bg-gray-100 transition-colors">
+                Suivant →
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modal litige */}
@@ -419,7 +451,7 @@ export function Validations() {
       {validations.length > 0 && (
         <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { icon: CreditCard, label: 'En attente', value: String(validations.length), color: 'bg-yellow-50 text-yellow-700' },
+            { icon: CreditCard, label: 'En attente', value: String(pendingCount), color: 'bg-yellow-50 text-yellow-700' },
             { icon: Clock, label: 'Montant total', value: formatAmount(total), color: 'bg-green-50 text-[#1A6B1A]' },
           ].map(item => (
             <div key={item.label} className={`rounded-[14px] border border-gray-100 bg-white p-3 flex items-center gap-3`}>

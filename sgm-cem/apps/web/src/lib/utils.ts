@@ -123,6 +123,7 @@ export const FUND_TRANSFER_STATUS_LABELS: Record<string, string> = {
 type ContributorSource = {
   membre?: { user: { fullName: string } } | null
   contributeurExterne?: { nom: string } | null
+  nomDonateur?: string | null
   collecteur?: { fullName: string } | null
 }
 
@@ -135,6 +136,7 @@ export function contributorKind(c: ContributorSource): 'MEMBRE' | 'DON_PUBLIC' |
 /** Nom à afficher, jamais « Membre inconnu ». */
 export function contributorName(c: ContributorSource): string {
   if (c.membre) return c.membre.user.fullName
-  if (c.contributeurExterne) return c.contributeurExterne.nom
+  // Nom saisi pour ce don (un même téléphone peut servir à plusieurs personnes)
+  if (c.contributeurExterne) return c.nomDonateur ?? c.contributeurExterne.nom
   return c.collecteur ? `Remise groupée (déclarée par ${c.collecteur.fullName})` : 'Remise groupée'
 }

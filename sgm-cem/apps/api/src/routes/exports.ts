@@ -11,6 +11,7 @@ import { refundsByRubrique } from '../services/refund.service'
 import { audit } from '../services/audit.service'
 import { buildXlsx, dateFr, LABELS, XLSX_MIME, type XlsxColumn, type XlsxRow } from '../services/xlsx-export.service'
 import { contributionListWhere } from './contributions'
+import { payerName } from '../services/contributeur-externe.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -133,7 +134,7 @@ router.get('/contributions.xlsx', authenticate, requireLevel(3), async (req, res
     ],
     rows: contributions.map(c => ({
       date: dateFr(c.createdAt, true),
-      membre: c.membre?.user.fullName ?? c.contributeurExterne?.nom ?? '',
+      membre: payerName(c) ?? '',
       rubrique: c.rubrique.code,
       montant: c.montant,
       mode: LABELS.mode[c.modePaiement] ?? c.modePaiement,
@@ -174,7 +175,7 @@ router.get('/collectes/:id.xlsx', authenticate, requireLevel(4), async (req, res
       const valeurs = (c.valeursChamps ?? {}) as Record<string, unknown>
       return {
         date: dateFr(c.createdAt, true),
-        nom: c.membre?.user.fullName ?? c.contributeurExterne?.nom ?? 'Inconnu',
+        nom: payerName(c) ?? 'Inconnu',
         type: c.membre ? 'Membre' : 'Externe',
         phone: c.contributeurExterne?.phone ?? '',
         montant: c.montant,

@@ -15,6 +15,7 @@ import { generatePublicSlug } from '../services/collecte.service'
 import { notifyPublicCollecteCreated, notifyPublicCollecteUrgencyChanged } from '../services/notification'
 import { getPrisma } from '../lib/prisma'
 import { refundsTotal } from '../services/refund.service'
+import { payerName } from '../services/contributeur-externe.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -249,7 +250,7 @@ router.get('/:id/contributions', authenticate, requireLevel(4), async (req, res)
   const rows = contributions.map(c => ({
     id: c.id,
     date: c.createdAt,
-    nom: c.membre?.user.fullName ?? c.contributeurExterne?.nom ?? 'Inconnu',
+    nom: payerName(c) ?? 'Inconnu',
     type: c.membre ? 'MEMBRE' : 'EXTERNE',
     phone: c.contributeurExterne?.phone ?? null,
     montant: c.montant,

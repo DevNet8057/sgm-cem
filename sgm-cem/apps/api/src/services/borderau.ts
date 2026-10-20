@@ -2,6 +2,7 @@ import { renderPdf } from './pdf-render'
 import { storeFile } from './storage'
 import { e, formatDate, formatDateTime, loadIdentity, money, pdfOptions, qrSvg, renderDocument, verificationUrl, type Tone } from './documents/document-kit'
 import { getPrisma } from '../lib/prisma'
+import { payerName } from './contributeur-externe.service'
 
 const prisma = getPrisma()
 
@@ -53,7 +54,7 @@ export async function generateBorderauHtml(transferId: string): Promise<string> 
   const url = verificationUrl('bordereau', transfer.id)
   const rows = transfer.contributions.map((c, i) => `
       <tr><td class="num">${i + 1}</td>
-        <td>${e(c.membre?.user.fullName ?? (c.contributeurExterne ? `${c.contributeurExterne.nom} (don public)` : 'Remise groupée'))}</td>
+        <td>${e(c.membre?.user.fullName ?? (c.contributeurExterne ? `${payerName(c)} (don public)` : 'Remise groupée'))}</td>
         <td>${e(c.rubrique?.title ?? '-')}<span class="sub">${e(c.rubrique?.code ?? '')}</span></td>
         <td>${formatDate(c.createdAt)}</td>
         <td class="num">${money(c.montant)}</td></tr>`).join('')

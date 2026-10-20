@@ -5,6 +5,7 @@ import { renderPdf } from '../pdf-render'
 import { MODE_LABELS, receiptNumber } from '../receipt'
 import { monthBounds } from '../closure.service'
 import { e, formatDate, formatDateTime, loadIdentity, money, pdfOptions, qrSvg, renderDocument, verificationUrl, type Tone } from './document-kit'
+import { payerName } from '../contributeur-externe.service'
 
 const prisma = getPrisma()
 
@@ -136,13 +137,13 @@ const MEANS: Record<string, string> = { ESPECES: 'Espèces', MOBILE_MONEY: 'Mobi
 export async function generateRefundNoticePdf(refundId: string): Promise<Buffer> {
   const r = await prisma.remboursement.findUnique({
     where: { id: refundId },
-    include: { contribution: { select: { id: true, createdAt: true, montant: true, rubrique: { select: { title: true, code: true } }, membre: { select: { memberId: true, user: { select: { fullName: true } } } }, contributeurExterne: { select: { nom: true } } } } },
+    include: { contribution: { select: { id: true, createdAt: true, montant: true, rubrique: { select: { title: true, code: true } }, membre: { select: { memberId: true, user: { select: { fullName: true } } } }, nomDonateur: true, contributeurExterne: { select: { nom: true } } } } },
   })
   if (!r) throw new Error('Remboursement introuvable')
   const identity = await loadIdentity()
   const docNumber = refundNumber(r)
   const url = verificationUrl('remboursement', r.id)
-  const who = r.beneficiaire ?? r.contribution.membre?.user.fullName ?? r.contribution.contributeurExterne?.nom ?? '—'
+  const who = r.beneficiaire ?? payerName(r.contribution) ?? '—'
 
   const body = `
   <section>

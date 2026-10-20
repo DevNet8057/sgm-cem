@@ -67,8 +67,8 @@ async function anonymizeOldDonors(before: Date): Promise<number> {
   })
   for (const d of donors) {
     await prisma.$transaction([
-      prisma.contributeurExterne.update({ where: { id: d.id }, data: { nom: 'Donateur anonymisé', phone: `anonymise-${d.id}`, email: null } }),
-      prisma.contribution.updateMany({ where: { contributeurExterneId: d.id }, data: { mobileMoneyPhone: null } }),
+      prisma.contributeurExterne.update({ where: { id: d.id }, data: { nom: 'Donateur anonymisé', aliases: [], phone: `anonymise-${d.id}`, email: null } }),
+      prisma.contribution.updateMany({ where: { contributeurExterneId: d.id }, data: { mobileMoneyPhone: null, nomDonateur: null } }),
     ])
   }
   return donors.length

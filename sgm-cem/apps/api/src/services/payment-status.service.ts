@@ -8,6 +8,7 @@ import { broadcastToAll } from '../lib/socket'
 import { sendWhatsAppDocument, alertTresoriers, notifyMemberConfirmed } from './notification'
 import { deliverMessage } from './outbox.service'
 import { audit } from './audit.service'
+import { payerName } from './contributeur-externe.service'
 
 /**
  * Synchronisation du statut d'une contribution digitale avec son fournisseur —
@@ -369,6 +370,7 @@ async function notifyContributeur(
   try {
     const userId = contribution.membre?.user.id ?? await getPublicAuditUserId()
     const userName = contribution.membre?.user.fullName
+      ?? contribution.nomDonateur
       ?? contribution.contributeurExterne?.nom
       ?? 'Contributions publiques'
     await audit({
@@ -385,7 +387,7 @@ async function notifyContributeur(
 
   if (!options.notify) return
   const phone = contribution.membre?.user.whatsappPhone ?? contribution.membre?.user.phone ?? contribution.contributeurExterne?.phone
-  const memberName = contribution.membre?.user.fullName ?? contribution.contributeurExterne?.nom ?? 'Contributeur'
+  const memberName = payerName(contribution) ?? 'Contributeur'
   const montant = options.batchTotal ?? contribution.montant
   const rubriqueLabel = options.batchTotal ? 'paiement réparti sur plusieurs rubriques' : contribution.rubrique.title
 

@@ -27,6 +27,7 @@ import {
   withActions,
   type ContributionActor,
 } from '../services/contribution-access.service'
+import { payerName } from '../services/contributeur-externe.service'
 
 const router = Router()
 const prisma = getPrisma()
@@ -114,6 +115,7 @@ export function contributionListWhere(actor: ContributionActor, q: {
         OR: [
           { membre: { user: { fullName: { contains: term, mode: 'insensitive' as const } } } },
           { contributeurExterne: { nom: { contains: term, mode: 'insensitive' as const } } },
+          { nomDonateur: { contains: term, mode: 'insensitive' as const } },
           { rubrique: { title: { contains: term, mode: 'insensitive' as const } } },
           { rubrique: { code: { contains: term, mode: 'insensitive' as const } } },
         ],
@@ -155,23 +157,50 @@ router.get('/', authenticate, requireLevel(2), async (req, res) => {
   })
 })
 
+/**
+ * GET /api/contributions/validations — file « À valider » (EF-M06-01)
+ * Déclarations d'espèces et virements en attente, dans le périmètre de
+ * l'utilisateur, des plus anciennes aux plus récentes, paginées. Les paiements
+ * électroniques n'y figurent pas : le prestataire les confirme (seul leur nombre
+ * est renvoyé, pour information).
+ */
 router.get('/validations', authenticate, requireLevel(2), async (req, res) => {
-  const contributions = await prisma.contribution.findMany({
-    where: {
-      ...getContributionScope(actorOf(req)),
-      statut: 'EN_ATTENTE_CONFIRMATION',
-    },
-    include: {
-      membre: { include: { user: { select: { fullName: true } } } },
-      contributeurExterne: { select: { nom: true } },
-      rubrique: { select: { title: true, code: true } },
-      collecteur: { select: { fullName: true } },
-    },
-    orderBy: { createdAt: 'asc' },
-    take: 100,
-  })
+  const { page, limit } = z.object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+  }).parse(req.query)
+  const scope = getContributionScope(actorOf(req))
+  const where: Prisma.ContributionWhereInput = {
+    ...scope,
+    statut: 'EN_ATTENTE_CONFIRMATION',
+    modePaiement: { in: ['ESPECES', 'VIREMENT'] },
+    externalTransactionId: null,
+    momoTransactionId: null,
+  }
+  const [contributions, total, sum, electronicPending] = await Promise.all([
+    prisma.contribution.findMany({
+      where,
+      include: {
+        membre: { include: { user: { select: { fullName: true } } } },
+        contributeurExterne: { select: { nom: true } },
+        rubrique: { select: { title: true, code: true } },
+        collecteur: { select: { fullName: true } },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.contribution.count({ where }),
+    prisma.contribution.aggregate({ where, _sum: { montant: true } }),
+    prisma.contribution.count({ where: { ...scope, statut: 'EN_ATTENTE_CONFIRMATION', NOT: { AND: [{ modePaiement: { in: ['ESPECES', 'VIREMENT'] } }, { externalTransactionId: null }, { momoTransactionId: null }] } } }),
+  ])
 
-  res.json({ success: true, data: await actionsFor(actorOf(req), contributions) })
+  res.json({
+    success: true,
+    data: await actionsFor(actorOf(req), contributions),
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit), totalAmount: sum._sum.montant ?? 0 },
+    meta: { electronicPending },
+  })
 })
 
 /**
@@ -703,7 +732,7 @@ router.post('/:id/confirmation-authorization', authenticate, requireLevel(5), as
     entityType: 'AutorisationConfirmation', entityId: id,
     details: { ...authorization, treasurerName: treasurer.fullName, montant: contribution.montant, precedente: contribution.confirmationAuthorization ?? null },
   })
-  const contributor = contribution.membre?.user.fullName ?? contribution.contributeurExterne?.nom ?? 'un contributeur'
+  const contributor = payerName(contribution) ?? 'un contributeur'
   await notifyInApp(treasurerId, 'Confirmation autorisée',
     `Vous pouvez confirmer le paiement de ${contributor} (${formatAmount(contribution.montant)}) jusqu'au ${dateFr(authorization.expiresAt)}. Motif : ${motif}`,
     'INFO', { kind: 'autorisation-confirmation', contributionId: id }, { view: 'validations', id })

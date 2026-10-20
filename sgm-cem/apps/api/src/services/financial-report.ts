@@ -8,6 +8,7 @@ import { positionAt } from './fund-ledger.service'
 import { MOIS, monthBounds } from './closure.service'
 import { MODE_LABELS } from './receipt'
 import { e, formatDate, loadIdentity, money, pdfOptions, renderDocument } from './documents/document-kit'
+import { payerName } from './contributeur-externe.service'
 
 const prisma = getPrisma()
 
@@ -62,7 +63,7 @@ export async function generateFinancialReportHtml(period: ReportPeriod): Promise
     prisma.contribution.groupBy({ by: ['rubriqueId'], where: { statut: 'CONFIRME', createdAt: inPeriod }, _sum: { montant: true }, _count: true }),
     prisma.remboursement.findMany({
       where: { statut: 'EXECUTE', executedAt: inPeriod },
-      select: { montant: true, moyen: true, executedAt: true, rubriqueId: true, motif: true, contribution: { select: { membre: { select: { user: { select: { fullName: true } } } }, contributeurExterne: { select: { nom: true } } } } },
+      select: { montant: true, moyen: true, executedAt: true, rubriqueId: true, motif: true, contribution: { select: { membre: { select: { user: { select: { fullName: true } } } }, nomDonateur: true, contributeurExterne: { select: { nom: true } } } } },
       orderBy: { executedAt: 'asc' },
     }),
     prisma.bankDeposit.findMany({ where: { createdAt: inPeriod }, select: { referenceBordereau: true, dateBordereau: true, createdAt: true, totalAmount: true, depositedByName: true }, orderBy: { createdAt: 'asc' } }),
@@ -178,7 +179,7 @@ export async function generateFinancialReportHtml(period: ReportPeriod): Promise
     <h2>Remboursements exécutés</h2>
     <table>
       <thead><tr><th>Date</th><th>Bénéficiaire</th><th>Motif</th><th>Moyen</th><th class="num">Montant</th></tr></thead>
-      <tbody>${refunds.map(r => `<tr><td>${formatDate(r.executedAt!)}</td><td>${e(r.contribution.membre?.user.fullName ?? r.contribution.contributeurExterne?.nom ?? '—')}</td><td>${e(r.motif.slice(0, 70))}</td><td>${e(REFUND_MEANS[r.moyen] ?? r.moyen)}</td><td class="num">${money(r.montant)}</td></tr>`).join('') || '<tr class="muted"><td colspan="5">Aucun remboursement sur la période</td></tr>'}</tbody>
+      <tbody>${refunds.map(r => `<tr><td>${formatDate(r.executedAt!)}</td><td>${e(payerName(r.contribution) ?? '—')}</td><td>${e(r.motif.slice(0, 70))}</td><td>${e(REFUND_MEANS[r.moyen] ?? r.moyen)}</td><td class="num">${money(r.montant)}</td></tr>`).join('') || '<tr class="muted"><td colspan="5">Aucun remboursement sur la période</td></tr>'}</tbody>
     </table>
   </section>
   <section>

@@ -41,6 +41,7 @@ router.get('/', authenticate, requireLevel(3), async (req, res) => {
         select: {
           id: true, montant: true, modePaiement: true, createdAt: true,
           membre: { select: { user: { select: { fullName: true } } } },
+          nomDonateur: true,
           contributeurExterne: { select: { nom: true } },
           rubrique: { select: { code: true, title: true } },
         },

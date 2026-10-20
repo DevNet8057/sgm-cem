@@ -389,7 +389,8 @@ model CollectePublique {
 
 model ContributeurExterne {
   id             String    @id @default(cuid())
-  nom            String
+  nom            String // premier nom saisi : jamais écrasé par un don suivant (EF-M08-06)
+  aliases        String[] @default([]) // autres noms saisis plus tard avec le même téléphone
   phone          String // E.164 normalisé (+237…)
   email          String?
   // Consentement explicite au traitement (loi n° 2024/017) : date et version du texte accepté
@@ -438,6 +439,7 @@ model Contribution {
   periodeLabel      String?
   referencePaiement String?
   mobileMoneyPhone  String?
+  nomDonateur       String? // nom saisi pour ce don public (imprimé sur son reçu)
   momoTransactionId String?
   // Clé d'idempotence fournie par le client (saisie hors ligne rejouée) : un
   // même envoi ne crée jamais deux contributions.

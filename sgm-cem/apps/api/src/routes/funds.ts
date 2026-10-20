@@ -300,7 +300,7 @@ router.get('/transfers', authenticate, requireLevel(2), async (req, res) => {
     include: {
       contributions: {
         select: {
-          id: true, montant: true, modePaiement: true,
+          id: true, montant: true, modePaiement: true, nomDonateur: true,
           membre: { include: { user: { select: { fullName: true } } } },
           contributeurExterne: { select: { nom: true } },
           rubrique: { select: { code: true, title: true } },
@@ -805,7 +805,7 @@ router.get('/bank-deposits', authenticate, requireLevel(4), async (_req, res) =>
     include: {
       contributions: {
         select: {
-          id: true, montant: true, modePaiement: true,
+          id: true, montant: true, modePaiement: true, nomDonateur: true,
           membre: { include: { user: { select: { fullName: true } } } },
           contributeurExterne: { select: { nom: true } },
           rubrique: { select: { code: true, title: true } },

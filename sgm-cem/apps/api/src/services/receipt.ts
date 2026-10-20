@@ -3,6 +3,7 @@ import { storeFile } from './storage'
 import { renderPdf } from './pdf-render'
 import { getPrisma } from '../lib/prisma'
 import { e, formatDateTime, loadIdentity, money, pdfOptions, qrSvg, renderDocument, verificationUrl, type Tone } from './documents/document-kit'
+import { payerName } from './contributeur-externe.service'
 
 const prisma = getPrisma()
 
@@ -37,7 +38,7 @@ export async function generateReceiptHtml(contributionId: string): Promise<strin
 
   const identity = await loadIdentity()
   const numero = receiptNumber(c)
-  const payer = c.membre?.user.fullName ?? c.contributeurExterne?.nom ?? 'Contributeur'
+  const payer = payerName(c) ?? 'Contributeur'
   const payerPhone = c.membre?.user.phone ?? c.contributeurExterne?.phone
   const fees = c.commissionPaidByPayer && c.commissionPaidByPayer > 0 ? c.commissionPaidByPayer : 0
   const total = c.amountChargedToPayer ?? c.montant
