@@ -180,14 +180,14 @@ Légende : ● = autorisé · ◐ = autorisé sur son propre périmètre · ○ 
 | ID | Exigence | Prio. | Statut |
 |---|---|---|---|
 | EF-M01-01 | Connexion par e-mail et mot de passe. | M | ✅ |
-| EF-M01-02 | Connexion par code à usage unique (OTP) à 6 chiffres envoyé par WhatsApp, avec repli SMS, valable 5 minutes et limité à 3 essais. Le numéro DOIT être unique et normalisé E.164 (+237…) sur l'ensemble des comptes. | M | 🟡 (code complet : 6 chiffres aléatoires, haché, 5 min, 3 essais, 5 codes/h ; manque l'unicité et le format E.164 de `whatsappPhone` en base, et un **modèle WhatsApp** Meta — non testé en réel) |
+| EF-M01-02 | Connexion par code à usage unique (OTP) à 6 chiffres envoyé par WhatsApp, avec repli SMS, valable 5 minutes et limité à 3 essais. Le numéro DOIT être unique et normalisé E.164 (+237…) sur l'ensemble des comptes. | M | ✅ code (20/10/2026) : numéros E.164 uniques, limites par numéro dans Redis, 3 essais atomiques (`e821dcc`) ; **modèle WhatsApp Meta à créer** — non testé en réel |
 | EF-M01-03 | Connexion Google réservée aux comptes existants dont l'e-mail Google est **vérifié**. | S | ✅ (`email_verified` exigé et compte rattaché à l'identifiant Google, 18/10/2026 ; à valider avec un vrai compte Google) |
 | EF-M01-04 | À la première connexion ou après une réinitialisation, l'utilisateur DOIT changer son mot de passe avant toute autre action. Contrôle **côté serveur**. | M | ✅ (contrôle serveur, `PASSWORD_CHANGE_REQUIRED`) |
-| EF-M01-05 | Politique de mot de passe : 10 caractères minimum, au moins une majuscule et un chiffre ; refus des mots de passe connus compromis et du mot de passe par défaut. | M | 🟡 (8 caractères au lieu de 10, pas de liste noire ; mot de passe imposé par l'admin sans règle) |
+| EF-M01-05 | Politique de mot de passe : 10 caractères minimum, au moins une majuscule et un chiffre ; refus des mots de passe connus compromis et du mot de passe par défaut. | M | ✅ (20/10/2026) : 10 caractères, une majuscule et un chiffre, liste des mots de passe courants, sans l'adresse e-mail ; aussi pour un mot de passe imposé par l'admin |
 | EF-M01-06 | Session : jeton d'accès de 15 min et de rafraîchissement de 7 jours, **renouvelé à chaque usage** (rotation). Révocation immédiate à la déconnexion, à la désactivation du compte, au changement ou à la réinitialisation du mot de passe et au changement de rôle. | M | ✅ (15 min / 7 j, rotation avec détection de rejeu, révocation à la désactivation) |
-| EF-M01-07 | « Mot de passe oublié » : la réponse ne DOIT révéler ni l'existence du compte, ni son rôle, ni des coordonnées personnelles. Le membre reçoit un **lien ou un code de réinitialisation** par WhatsApp ou e-mail (🆕 libre-service). | M | 🟡 (n'indique plus l'existence du compte, mais affiche les coordonnées du premier administrateur ; pas de réinitialisation en libre-service) |
+| EF-M01-07 | « Mot de passe oublié » : la réponse ne DOIT révéler ni l'existence du compte, ni son rôle, ni des coordonnées personnelles. Le membre reçoit un **lien ou un code de réinitialisation** par WhatsApp ou e-mail (🆕 libre-service). | M | 🟡 (sans coordonnées personnelles : contact générique réglable `SUPPORT_CONTACT_*`, `2973da7` ; réinitialisation en libre-service à faire) |
 | EF-M01-08 | Liste « Mes appareils et sessions », avec déconnexion à distance. | C | ❌ |
-| EF-M01-09 | Verrouillage progressif après échecs répétés, par compte **et** par adresse IP. | M | 🟡 (par IP et par numéro pour l'OTP ; pas de verrouillage par compte sur la connexion) |
+| EF-M01-09 | Verrouillage progressif après échecs répétés, par compte **et** par adresse IP. | M | ✅ (verrouillage par compte 15 min après 5 échecs, par IP et par numéro pour l'OTP, `2973da7`) |
 | EF-M01-10 | Impersonation DEVELOPER : 1 h maximum, bandeau permanent, retour en un clic, audit au début et à la fin. Interdite vers un autre compte DEVELOPER. | S | ✅ |
 
 **CA-M01-A** — *Étant donné* un collecteur désactivé par l'admin, *quand* son application tente un rafraîchissement de session, *alors* l'API répond 401 et toutes ses sessions sont supprimées.
@@ -240,13 +240,13 @@ Légende : ● = autorisé · ◐ = autorisé sur son propre périmètre · ○ 
 | EF-M05-05 | Déclarer une remise d'espèces à un collecteur choisi dans la liste des collecteurs actifs, sur une ou plusieurs rubriques. La déclaration reste « en attente » jusqu'à la confirmation du collecteur. | M | ✅ |
 | EF-M05-06 | Historique paginé de **toutes** ses contributions, avec détail (date, rubrique, montant, frais, mode, collecteur, statut, date de confirmation, référence, motif de litige) et **téléchargement du reçu**. Les totaux sont calculés sur l'ensemble, pas sur la page. | M | 🟡 (historique paginé, totaux serveur, reçu ; pas de fiche de détail pour le membre) |
 | EF-M05-07 | Protection contre le double paiement : un double clic, une nouvelle tentative réseau ou deux onglets ne déclenchent **jamais** deux débits (clé d'idempotence). | M | ✅ |
-| EF-M05-08 | Initialisation incertaine (délai dépassé chez le fournisseur) : le payeur est averti « Ne relancez pas, vérification en cours ». Le système retrouve la transaction et la réconcilie automatiquement (RG-10). | M | 🟡 (message et rattachement du webhook orphelin ; pas de recherche active ni d'expiration) |
+| EF-M05-08 | Initialisation incertaine (délai dépassé chez le fournisseur) : le payeur est averti « Ne relancez pas, vérification en cours ». Le système retrouve la transaction et la réconcilie automatiquement (RG-10). | M | 🟡 (message, rattachement du webhook orphelin ; une demande sans réponse depuis 30 min ne bloque plus un nouvel essai et reste suivie par la réconciliation, `57c57b6`) |
 
 #### M05-B Paiements saisis par le staff
 
 | ID | Exigence | Prio. | Statut |
 |---|---|---|---|
-| EF-M05-10 | **Encaisser des espèces** pour un membre (une ou plusieurs rubriques). Les espèces reçues en main propre sont confirmées immédiatement, avec génération du reçu et notification du membre. | M | 🟡 (reçu produit ; **le membre n'est pas notifié**) |
+| EF-M05-10 | **Encaisser des espèces** pour un membre (une ou plusieurs rubriques). Les espèces reçues en main propre sont confirmées immédiatement, avec génération du reçu et notification du membre. | M | ✅ (le membre est prévenu et reçoit son reçu, `8cc1146`) |
 | EF-M05-11 | Initier un Mobile Money pour un membre présent (USSD sur son téléphone). La confirmation est **uniquement automatique** (RG-13). | M | ✅ |
 | EF-M05-12 | Remise groupée : un collecteur déclare à un autre collecteur ou au trésorier un montant reçu de plusieurs personnes non identifiées. Ce cas est **exceptionnel**, avec note obligatoire et libellé « Remise groupée ». | C | 🟡 (note facultative ; destinataire limité au trésorier ou à un collecteur) |
 | EF-M05-13 | Un **seul** point d'entrée « Encaisser » pour le collecteur, qui demande d'abord « Espèces reçues en main / Déclaration à confirmer / Mobile Money ». Les trois formulaires actuels (« Rapide », « Guidé », « Déclarer ») sont fusionnés. | S | 🟡 (bouton unique « Encaisser » avec choix ; pas d'entrée Mobile Money directe) |
@@ -257,7 +257,7 @@ Légende : ● = autorisé · ◐ = autorisé sur son propre périmètre · ○ 
 | ID | Exigence | Prio. | Statut |
 |---|---|---|---|
 | EF-M05-20 | Chaque contribution confirmée produit un **reçu PDF** numéroté `REC-AAAA-XXXXXXXX`. Il mentionne : communauté, payeur, matricule, rubrique, période, montant dû, frais, total débité, mode, référence, collecteur, date de confirmation, statut. | M | ✅ |
-| EF-M05-21 | Le reçu est envoyé automatiquement (WhatsApp avec document, sinon texte et lien ; e-mail si disponible) selon `AUTO_SEND_RECEIPT_WHATSAPP`. | M | 🟡 (envoi seulement pour les confirmations électroniques ; rien pour les espèces et virements) |
+| EF-M05-21 | Le reçu est envoyé automatiquement (WhatsApp avec document, sinon texte et lien ; e-mail si disponible) selon `AUTO_SEND_RECEIPT_WHATSAPP`. | M | ✅ (espèces et virements compris, via la file des envois avec nouveaux essais, `8cc1146`, `efd3eb1`) |
 | EF-M05-22 | Le lien de reçu partagé DOIT être **signé et temporaire** (30 jours) ; le reçu reste téléchargeable à tout moment depuis l'application par son propriétaire et le staff habilité. | S | ⚠️ (lien de reçu public et permanent) |
 | EF-M05-23 | Un reçu annulé (litige résolu « ANNULE », remboursement) porte la mention « ANNULÉ ». Un reçu ne doit jamais être réémis à l'identique avec un statut différent. | S | 🟡 (mention prévue dans le modèle, jamais régénérée après annulation ou remboursement) |
 
@@ -265,8 +265,8 @@ Légende : ● = autorisé · ◐ = autorisé sur son propre périmètre · ○ 
 
 | ID | Exigence | Prio. | Statut |
 |---|---|---|---|
-| EF-M06-01 | File « À valider » : déclarations d'espèces et virements en attente, dans le périmètre de l'utilisateur, triés par ancienneté, paginés, chacun avec son montant et son payeur. | M | 🟡 (paiements électroniques inclus dans la file ; limitée à 100 lignes) |
-| EF-M06-02 | **Confirmer** une déclaration : action explicite, avec récapitulatif « Je confirme avoir reçu X FCFA de Y pour Z ». Elle est **atomique** (une seule confirmation même en cas de double clic). Un reçu est produit et le payeur notifié. | M | 🟡 (récapitulatif et transition conditionnelle ; payeur non notifié) |
+| EF-M06-01 | File « À valider » : déclarations d'espèces et virements en attente, dans le périmètre de l'utilisateur, triés par ancienneté, paginés, chacun avec son montant et son payeur. | M | ✅ (20/10/2026) : espèces et virements seulement, du plus ancien au plus récent, paginée ; paiements électroniques comptés à part |
+| EF-M06-02 | **Confirmer** une déclaration : action explicite, avec récapitulatif « Je confirme avoir reçu X FCFA de Y pour Z ». Elle est **atomique** (une seule confirmation même en cas de double clic). Un reçu est produit et le payeur notifié. | M | ✅ (payeur notifié, `8cc1146`) |
 | EF-M06-03 | **Refuser** une déclaration (« je n'ai pas reçu cet argent ») avec motif de 10 à 500 caractères ; la déclaration passe à `ANNULE`. Le refus est distinct du litige. | M | ✅ |
 | EF-M06-04 | **Litige** : ouvert par un superviseur (niveau ≥ 3) sur une contribution en attente ou confirmée **dont les fonds n'ont pas encore été transférés ni déposés**, avec motif. Les fonds sont bloqués. | M | ✅ |
 | EF-M06-05 | **Résolution** : « Confirmer » (réapplique les droits de confirmation, RG-15) ou « Annuler ». Si un paiement électronique est annulé, une **procédure de remboursement** est ouverte (M16). | M | 🟡 (annulation : l'argent sort du grand livre et le contrôle quotidien le vérifie, litige refusé si un remboursement existe, 18/10/2026 ; pas d'ouverture automatique d'un remboursement pour un paiement électronique annulé) |
@@ -299,7 +299,7 @@ Légende : ● = autorisé · ◐ = autorisé sur son propre périmètre · ○ 
 | EF-M08-03 | Brouillon reprenable pendant 7 jours (jeton secret, haché en base). | S | ✅ |
 | EF-M08-04 | Paiement Mobile Money ou carte, avec **protection contre le double débit** (réservation atomique du brouillon avant l'appel au fournisseur). | M | ✅ |
 | EF-M08-05 | Le donateur reçoit son reçu par WhatsApp ou e-mail ; le back-office voit les contributions de la collecte avec le nom du donateur (jamais « Membre inconnu ») et exporte en Excel. | M | 🟡 (donateur externe : texte WhatsApp seulement, ni PDF par défaut ni e-mail) |
-| EF-M08-06 | Un contributeur externe déjà connu (même téléphone) n'est **pas écrasé** par une nouvelle saisie : on ajoute un alias ou on conserve le premier nom. | S | ⚠️ (le nom d'un contributeur connu est écrasé à chaque don) |
+| EF-M08-06 | Un contributeur externe déjà connu (même téléphone) n'est **pas écrasé** par une nouvelle saisie : on ajoute un alias ou on conserve le premier nom. | S | ✅ (20/10/2026) : premier nom conservé, alias pour un autre nom, nom saisi gardé sur chaque don (reçu, exports) |
 | EF-M08-07 | Désactiver le lien sans supprimer la rubrique ; signaler ou retirer l'urgence (avec notification interne). | M | ✅ |
 | EF-M08-08 | Partage en un geste (WhatsApp, copie du lien, QR code imprimable). | S | 🟡 (copie du lien seulement ; ni WhatsApp ni QR code) |
 
@@ -311,7 +311,7 @@ Voir la matrice détaillée au §8.
 |---|---|---|---|
 | EF-M09-01 | Centre de notifications in-app (non lues, tout marquer comme lu, clic qui ouvre l'écran ciblé grâce à une **URL**). | M | ✅ |
 | EF-M09-02 | Notifications push web (PWA) avec permission demandée **en contexte** (après un premier paiement ou une première déclaration), jamais par un bandeau permanent. | S | 🟡 (bandeau sur l'accueil et Mon profil ; pas de demande en contexte) |
-| EF-M09-03 | WhatsApp (360dialog) pour les confirmations, reçus et OTP, avec **modèles validés par Meta** ; repli SMS (Twilio) pour l'OTP ; e-mail en complément. Interrupteurs par canal (`WHATSAPP_ENABLED`…). | M | 🟡 (API Cloud 360dialog `waba-v2` et envoi par modèle dont le nom est réglable, 18/10/2026 ; modèles à créer et faire valider par Meta ; pas de file d'attente ; non testé en réel) |
+| EF-M09-03 | WhatsApp (360dialog) pour les confirmations, reçus et OTP, avec **modèles validés par Meta** ; repli SMS (Twilio) pour l'OTP ; e-mail en complément. Interrupteurs par canal (`WHATSAPP_ENABLED`…). | M | 🟡 (API Cloud 360dialog `waba-v2`, modèles réglables, file d'attente avec nouveaux essais `efd3eb1` ; **modèles à créer et faire valider par Meta** ; non testé en réel) |
 | EF-M09-04 | Diffusion (broadcast) par un responsable : titre, message, cible (rôle ou liste), avec push. | S | 🟡 (API présente, aucun écran) |
 | EF-M09-05 | Relevé mensuel automatique de chaque membre actif ayant contribué, le 1er du mois à 08:00 (heure de Douala). | S | ✅ (code ; SMS de secours résumé, compté « envoyé » seulement si un canal a abouti, 18/10/2026) |
 | EF-M09-06 | Préférences de notification par utilisateur (canaux, sons, heures calmes). | C | 🟡 (son seulement) |
@@ -320,11 +320,11 @@ Voir la matrice détaillée au §8.
 
 | ID | Exigence | Prio. | Statut |
 |---|---|---|---|
-| EF-M10-01 | **Accueil par rôle** (mobile-first) :<br>• Membre → reste à payer et 3 derniers paiements ;<br>• Collecteur → fonds détenus, « À valider (n) », « Transferts à recevoir (n) » ;<br>• Trésorier et responsables → liste « À traiter aujourd'hui » (validations, transferts, litiges, paiements bloqués), puis 4 indicateurs en grille 2×2 avec tendance par rapport au mois précédent ;<br>• Admin → santé du système. | M | 🟡 (membre conforme ; manquent fonds détenus du collecteur, tendance et paiements bloqués du trésorier, santé du système pour l'admin) |
-| EF-M10-02 | Statistiques filtrables par mois et par année : collecte mensuelle, statut des contributions, répartition par moyen, taux de recouvrement par rubrique. | S | ✅ (mois découpés à l'heure du serveur : fixer `TZ`) |
+| EF-M10-01 | **Accueil par rôle** (mobile-first) :<br>• Membre → reste à payer et 3 derniers paiements ;<br>• Collecteur → fonds détenus, « À valider (n) », « Transferts à recevoir (n) » ;<br>• Trésorier et responsables → liste « À traiter aujourd'hui » (validations, transferts, litiges, paiements bloqués), puis 4 indicateurs en grille 2×2 avec tendance par rapport au mois précédent ;<br>• Admin → santé du système. | M | ✅ (20/10/2026) : membre ; collecteur (fonds détenus, à valider, transferts à recevoir, encaissé du mois) ; trésorier (« À traiter » avec paiements bloqués, 4 indicateurs avec tendance) ; admin (santé du système) |
+| EF-M10-02 | Statistiques filtrables par mois et par année : collecte mensuelle, statut des contributions, répartition par moyen, taux de recouvrement par rubrique. | S | ✅ (mois à l'heure de Yaoundé, `TZ=Africa/Douala` fixé) |
 | EF-M10-03 | Rapport financier annuel PDF : synthèse, rubriques, top contributeurs, moyens de paiement. | S | ✅ |
 | EF-M10-04 | Exports Excel des membres, rubriques, contributions (filtrés) et collectes. Ils sont générés **côté serveur** et ne sont pas limités à 500 lignes. | S | ✅ (lot 4.6) |
-| EF-M10-05 | Tous les indicateurs sont calculés **côté serveur** sur l'ensemble du périmètre autorisé, jamais sur une page chargée. | M | 🟡 (tableau de bord serveur ; restent calculés dans le navigateur : collecteur, litiges, validations, GED, comptes) |
+| EF-M10-05 | Tous les indicateurs sont calculés **côté serveur** sur l'ensemble du périmètre autorisé, jamais sur une page chargée. | M | ✅ (20/10/2026) : accueils, file « À valider », litiges et GED calculés par le serveur ; la liste des comptes est chargée en entier (compteurs exacts) |
 
 ### M11 — GED des commissions
 
@@ -349,7 +349,7 @@ Voir la matrice détaillée au §8.
 
 | ID | Exigence | Prio. | Statut |
 |---|---|---|---|
-| EF-M13-01 | Toute action sensible est journalisée avec : auteur réel (y compris sous impersonation), action, entité, détails, IP, agent utilisateur, horodatage serveur. Le journal est **inaltérable** (aucune route de modification ou de suppression ; rôle SQL en ajout seul 🆕). | M | 🟡 (33 écritures d'audit sans IP ni navigateur ; auteur réel non noté sous impersonation ; 5 actions non auditées ; aucune protection en base) |
+| EF-M13-01 | Toute action sensible est journalisée avec : auteur réel (y compris sous impersonation), action, entité, détails, IP, agent utilisateur, horodatage serveur. Le journal est **inaltérable** (aucune route de modification ou de suppression ; rôle SQL en ajout seul 🆕). | M | ✅ (IP, navigateur et auteur réel sur toutes les écritures ; 5 actions ajoutées ; journal inaltérable en base, `4c04fcc`) |
 | EF-M13-02 | Consultation filtrée par rôle (voir la matrice §4) : action, entité, utilisateur, période, recherche. | M | ✅ |
 | EF-M13-03 | Traçabilité d'une contribution : chronologie complète (création, confirmation, transfert, réception, dépôt, litige). | M | ✅ |
 | EF-M13-04 | Observabilité administrateur : présence en ligne, sessions, temps actif par page, actions par utilisateur, avec rétention limitée. | C | ✅ (performance à revoir) |
@@ -663,7 +663,7 @@ Comptes mis à jour après les corrections du 18/10/2026 (8 points bloquants de 
 | ENF-07 | 🟡 | Couverture d'audit incomplète (EF-M13-01) ; IP jamais purgées |
 | ENF-08 | ✅ | axe : 0 violation sérieuse sur 24 écrans |
 | ENF-09 | 🟡 | Pas de validation sur appareils réels |
-| ENF-10 | 🟡 | Fuseau `TZ` non fixé côté serveur ; quelques textes sans accents |
+| ENF-10 | 🟡 | Fuseau `TZ=Africa/Douala` fixé (20/10/2026) ; quelques textes sans accents (prestations, GED) |
 | ENF-11 | 🟡 | Registres rédigés ; avis juridique et démarches APDP en attente |
 | ENF-12 | 🟡 | Journaux JSON, suivi d'erreurs facultatif ; pas de métriques |
 | ENF-13 | 🟡 | Migrations versionnées ; couverture 45 % au lieu de 70 % sur les services financiers |

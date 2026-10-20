@@ -21,7 +21,21 @@ Ce document liste ce qui manque encore, par ordre de priorité. Le détail exige
 | 7 | Durées de conservation | ✅ | `cd347d1` | Faire valider les durées et les bases légales par l'avis juridique |
 | 8 | Totaux globaux | ✅ | `faae6ba` | — |
 
-Les points « Important » et « Confort » (§3) sont la suite.
+**Important : 9 sur 9 faits** (20/10/2026). Suite complète de l'API : 502 tests ; audit des écrans (4 rôles, bureau et mobile) : 108 écrans sans défaut.
+
+| N° | Point | État | Commit | Reste à faire |
+|---|---|---|---|---|
+| 9 | Membre averti et reçu envoyé après confirmation manuelle | ✅ | `8cc1146` | — |
+| 10 | File des envois avec nouveaux essais et état de livraison | ✅ | `efd3eb1` | Essai réel WhatsApp / SMS / e-mail |
+| 11 | Connexion par téléphone : E.164, limites Redis, essais atomiques | ✅ | `e821dcc` | Modèle WhatsApp du code à faire valider par Meta |
+| 12 | Audit complet (IP, navigateur, auteur réel, 5 actions) | ✅ | `4c04fcc` | — |
+| 13 | Délai CinetPay ; paiement bloqué qui n'empêche plus un nouvel essai | ✅ | `57c57b6` | **Taux Yelii laissé à 2,5 %** : à confirmer avec le contrat (réglable `YELII_COMMISSION_RATE`) |
+| 14 | Mot de passe oublié sans coordonnées ; règles ; verrouillage par compte | ✅ | `2973da7` + 20/10 | Majuscule exigée ajoutée le 20/10 (EF-M01-05) ; réinitialisation en libre-service (🆕) à faire |
+| 15 | Indicateurs côté serveur ; accueils collecteur, trésorier, administrateur | ✅ | `954b10a` | — |
+| 16 | Contributeur externe non écrasé ; file « À valider » paginée | ✅ | `2be17d6` | — |
+| 17 | Suivi d'erreurs (tâches, webhooks, envois) ; `TZ` ; `.env.example` | ✅ | `954b10a` | Renseigner `SENTRY_DSN` en production (facultatif) |
+
+Les points « Confort » (§3) sont la suite.
 
 ---
 
@@ -91,27 +105,27 @@ L'image API officielle (`apps/api/Dockerfile`, avec `apt` et Chromium) reste don
 | E-mail | SMTP (nodemailer) | 🟡 | Sert seulement aux reçus ; pas de `requireTLS` ; adresse du destinataire écrite dans les journaux ; pas de bouton « tester » ; aucun test |
 
 **Manques transversaux.**
-- Aucune file d'attente : un envoi qui échoue est perdu. Il faut une file BullMQ avec nouvel essai.
-- **Le membre n'est pas averti** quand on confirme, refuse ou met en litige un paiement en espèces ou un virement. Seuls les paiements électroniques le préviennent.
-- Le reçu PDF part seulement pour les paiements électroniques.
+- ~~Aucune file d'attente : un envoi qui échoue est perdu.~~ → corrigé (point 10, file des envois avec nouveaux essais).
+- ~~**Le membre n'est pas averti** quand on confirme, refuse ou met en litige un paiement en espèces ou un virement.~~ → corrigé (point 9).
+- ~~Le reçu PDF part seulement pour les paiements électroniques.~~ → corrigé (point 9).
 - Le relevé mensuel compte « envoyé » même quand aucun canal n'a abouti.
 
 ### 2.5 Paiements
 | Service | État | À compléter |
 |---|---|---|
 | Yelii (MTN MoMo, Orange Money) | ✅ Code complet : signature et anti-rejeu du webhook, réconciliation, protection contre le double paiement | Valider la signature d'un **vrai** webhook (calculée sur un JSON re-sérialisé) ; Orange Money échouait chez Yelii lors des essais ; taux de commission réglé à 2,5 % alors que 3 % a été constaté ; aucun test de la route webhook |
-| CinetPay (carte) | ✅ Code complet, jamais testé de bout en bout | **Ajouter un délai d'expiration** aux appels ; données client figées (Yaoundé, 00000) ; compte marchand à ouvrir |
-| Réconciliation | ✅ | Pas d'expiration : un paiement jamais finalisé reste « en cours » indéfiniment et bloque une nouvelle tentative du même montant |
+| CinetPay (carte) | ✅ Code complet, jamais testé de bout en bout | ~~Ajouter un délai d'expiration~~ (15 s, point 13) ; données client figées (Yaoundé, 00000) ; compte marchand à ouvrir |
+| Réconciliation | ✅ | ~~Un paiement jamais finalisé bloque une nouvelle tentative~~ → corrigé (point 13 : au-delà de 30 min, nouvel essai possible ; signalé « bloqué » à l'accueil du trésorier) |
 
 **Réglages inutiles à retirer** (jamais lus par le code) : `MTN_*`, `ORANGE_*`, `CRON_SECRET`, `YELII_WEBHOOK_SECRET`.
 
 ### 2.6 Socle technique
-- **Cache de configuration (bloquant).** Chaque processus lit la configuration une seule fois, à son démarrage. En production, le worker (réconciliation, relances, relevés) ne voit **aucune** modification faite dans le panneau développeur avant d'être redémarré. Il faut une relecture périodique ou une notification entre processus.
-- **Réglages absents (bloquant).** Une clé vide dans le `.env` au premier démarrage n'est pas créée en base : 32 clés ignorées lors du démarrage vérifié. Le panneau répond ensuite 404 pour ces clés. Il faut soit les créer vides, soit documenter qu'elles passent obligatoirement par le `.env`.
-- **Stockage (bloquant si S3).** Un seul espace de stockage sert à la fois les reçus et avatars (publics) et la GED et les preuves (privés). Il faut des espaces séparés ou des liens signés. Le lien d'un reçu est public et permanent (EF-M05-22).
+- ✅ *(corrigé, point 4)* **Cache de configuration (bloquant).** Chaque processus lit la configuration une seule fois, à son démarrage. En production, le worker (réconciliation, relances, relevés) ne voit **aucune** modification faite dans le panneau développeur avant d'être redémarré. Il faut une relecture périodique ou une notification entre processus.
+- ✅ *(corrigé, point 4)* **Réglages absents (bloquant).** Une clé vide dans le `.env` au premier démarrage n'est pas créée en base : 32 clés ignorées lors du démarrage vérifié. Le panneau répond ensuite 404 pour ces clés. Il faut soit les créer vides, soit documenter qu'elles passent obligatoirement par le `.env`.
+- ✅ *(corrigé, point 5 ; lien de reçu signé et temporaire encore à faire)* **Stockage (bloquant si S3).** Un seul espace de stockage sert à la fois les reçus et avatars (publics) et la GED et les preuves (privés). Il faut des espaces séparés ou des liens signés. Le lien d'un reçu est public et permanent (EF-M05-22).
 - **Temps réel.** Un seul événement est émis, à tous les connectés. Les événements écoutés par l'écran ne sont jamais envoyés, et le worker n'émet rien.
-- **Suivi d'erreurs.** Les erreurs des webhooks, des tâches planifiées et des envois ne remontent pas à Sentry. Environ 60 `console.*` échappent aux journaux structurés.
-- **Fuseau horaire.** Fixer `TZ=Africa/Douala` sur l'API et le worker : les statistiques découpent aujourd'hui les mois en UTC.
+- ✅ *(corrigé, point 17 : incidents enregistrés, Sentry si configuré, carte « Santé du système »)* **Suivi d'erreurs.** Les erreurs des webhooks, des tâches planifiées et des envois ne remontaient pas à Sentry. Environ 60 `console.*` échappent aux journaux structurés.
+- ✅ *(corrigé, point 17)* **Fuseau horaire.** `TZ=Africa/Douala` fixé sur web, API et worker ; statistiques découpées à l'heure de Yaoundé.
 
 ---
 
@@ -128,15 +142,15 @@ L'image API officielle (`apps/api/Dockerfile`, avec `apt` et Chromium) reste don
 8. ✅ *(fait)* **Totaux globaux** : ils sont renvoyés à tous les rôles, y compris membres et collecteurs (EF-M04-06).
 
 ### Important
-9. Avertir le membre et lui envoyer son reçu après une confirmation manuelle (EF-M05-10, EF-M05-21, EF-M06-02).
-10. File d'attente avec nouvel essai pour tous les envois ; état de livraison enregistré.
-11. Connexion par téléphone : numéros au format international, limites séparées et stockées dans Redis, essais atomiques, purge des codes (2.2).
-12. Audit complet : IP et navigateur sur toutes les écritures, auteur réel sous impersonation, 5 actions encore non auditées (EF-M13-01).
-13. Délai d'expiration CinetPay ; expiration des paiements bloqués ; taux de commission Yelii à 3 %.
-14. Mot de passe oublié sans coordonnées personnelles (2.3) ; mots de passe de 10 caractères avec liste noire ; verrouillage par compte.
-15. Indicateurs encore calculés dans le navigateur ; accueils incomplets pour le collecteur, le trésorier et l'administrateur (EF-M10-01, EF-M10-05).
-16. Contributeur externe dont le nom est écrasé à chaque don (EF-M08-06) ; file « À valider » sans pagination et mêlée aux paiements électroniques (EF-M06-01).
-17. Suivi d'erreurs sur les webhooks, tâches et envois ; `TZ=Africa/Douala` ; compléter les `.env.example`.
+9. ✅ *(fait, voir §0)* Avertir le membre et lui envoyer son reçu après une confirmation manuelle (EF-M05-10, EF-M05-21, EF-M06-02).
+10. ✅ *(fait, voir §0)* File d'attente avec nouvel essai pour tous les envois ; état de livraison enregistré.
+11. ✅ *(fait, voir §0)* Connexion par téléphone : numéros au format international, limites séparées et stockées dans Redis, essais atomiques, purge des codes (2.2).
+12. ✅ *(fait, voir §0)* Audit complet : IP et navigateur sur toutes les écritures, auteur réel sous impersonation, 5 actions encore non auditées (EF-M13-01).
+13. ✅ *(fait, voir §0)* Délai d'expiration CinetPay ; expiration des paiements bloqués ; taux de commission Yelii à 3 %.
+14. ✅ *(fait, voir §0)* Mot de passe oublié sans coordonnées personnelles (2.3) ; mots de passe de 10 caractères avec liste noire ; verrouillage par compte.
+15. ✅ *(fait, voir §0)* Indicateurs encore calculés dans le navigateur ; accueils incomplets pour le collecteur, le trésorier et l'administrateur (EF-M10-01, EF-M10-05).
+16. ✅ *(fait, voir §0)* Contributeur externe dont le nom est écrasé à chaque don (EF-M08-06) ; file « À valider » sans pagination et mêlée aux paiements électroniques (EF-M06-01).
+17. ✅ *(fait, voir §0)* Suivi d'erreurs sur les webhooks, tâches et envois ; `TZ=Africa/Douala` ; compléter les `.env.example`.
 
 ### Confort
 18. Application mobile : bandeau « Nouvelle version », touche retour qui ferme une feuille, badges des onglets, page hors ligne.
