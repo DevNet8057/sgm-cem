@@ -1,5 +1,5 @@
-// Règles des mots de passe choisis (ENF sécurité) : 10 caractères au moins,
-// lettres et chiffres, pas un mot de passe courant ni l'adresse e-mail du compte.
+// Règles des mots de passe choisis (EF-M01-05) : 10 caractères au moins, au moins
+// une majuscule et un chiffre, pas un mot de passe courant ni l'adresse e-mail du compte.
 import { z } from 'zod'
 
 export const PASSWORD_MIN_LENGTH = 10
@@ -22,7 +22,7 @@ function normalize(p: string): string {
 export function passwordProblem(password: string, context: { email?: string | null } = {}): string | null {
   if (password.length < PASSWORD_MIN_LENGTH) return `Le mot de passe doit contenir au moins ${PASSWORD_MIN_LENGTH} caractères`
   if (password.length > 128) return 'Le mot de passe ne doit pas dépasser 128 caractères'
-  if (!/[A-Za-zÀ-ÿ]/.test(password) || !/[0-9]/.test(password)) return 'Le mot de passe doit contenir des lettres et des chiffres'
+  if (!/[A-ZÀ-ÖØ-Þ]/.test(password) || !/[0-9]/.test(password)) return 'Le mot de passe doit contenir au moins une majuscule et un chiffre'
   if (/^(.)\1+$/.test(password)) return 'Le mot de passe ne doit pas répéter un seul caractère'
   const n = normalize(password)
   if (COMMON.has(n) || COMMON.has(n.replace(/[^a-z0-9]/g, ''))) return 'Ce mot de passe est trop courant : choisissez-en un autre'

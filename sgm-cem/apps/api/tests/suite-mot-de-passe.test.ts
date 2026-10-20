@@ -29,10 +29,11 @@ beforeAll(async () => {
 describe('Règles des mots de passe', () => {
   it('trop court, sans chiffre, courant ou contenant l\'adresse : refusé', () => {
     expect(passwordProblem('Court1')).toMatch(/10 caractères/)
-    expect(passwordProblem('SansAucunChiffre')).toMatch(/lettres et des chiffres/)
+    expect(passwordProblem('SansAucunChiffre')).toMatch(/majuscule et un chiffre/)
+    expect(passwordProblem('sansmajuscule2026')).toMatch(/majuscule et un chiffre/)
     expect(passwordProblem('Azerty123')).toMatch(/10 caractères/)
     expect(passwordProblem('Cameroun123')).toMatch(/courant/)
-    expect(passwordProblem('jean.dupont2026', { email: 'jean.dupont@exemple.cm' })).toMatch(/adresse e-mail/)
+    expect(passwordProblem('Jean.dupont2026', { email: 'jean.dupont@exemple.cm' })).toMatch(/adresse e-mail/)
     expect(passwordProblem(GOOD)).toBeNull()
   })
 

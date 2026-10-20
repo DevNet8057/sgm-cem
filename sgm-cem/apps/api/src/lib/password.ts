@@ -45,7 +45,8 @@ const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
 
 /** Mot de passe temporaire aléatoire (12 caractères + suffixe garantissant la politique). */
 export function generateTemporaryPassword(): string {
-  let out = ''
-  for (let i = 0; i < 12; i++) out += ALPHABET[randomInt(ALPHABET.length)]
+  // Commence par une majuscule : respecte la règle des mots de passe (EF-M01-05)
+  let out = ALPHABET[randomInt(24)]
+  for (let i = 1; i < 12; i++) out += ALPHABET[randomInt(ALPHABET.length)]
   return `${out}-${randomInt(10, 100)}`
 }

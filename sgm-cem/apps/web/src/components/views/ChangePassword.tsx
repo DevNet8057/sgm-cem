@@ -14,7 +14,7 @@ export function ChangePassword() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
 
-  const canSubmit = next.length >= 10 && /[A-Za-z]/.test(next) && /[0-9]/.test(next) && next === confirm && current.length > 0 && !loading
+  const canSubmit = next.length >= 10 && /[A-ZÀ-ÖØ-Þ]/.test(next) && /[0-9]/.test(next) && next === confirm && current.length > 0 && !loading
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -94,7 +94,7 @@ export function ChangePassword() {
             label="Nouveau mot de passe *"
             value={next}
             onChange={e => setNext(e.target.value)}
-            placeholder="10 caractères minimum, lettres et chiffres"
+            placeholder="10 caractères, une majuscule et un chiffre"
             autoComplete="new-password"
             showStrengthIndicator={true}
             required
