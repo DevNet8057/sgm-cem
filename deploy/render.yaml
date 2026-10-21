@@ -1,0 +1,129 @@
+# Blueprint Render — SGM-CEM à partir des images publiées sur GHCR (.github/workflows/images.yml)
+#
+# ⚠ NON TESTÉ sur Render (aucun compte disponible pendant la préparation) : à valider
+#   sur un premier déploiement. Le VPS (deploy/scripts/installer-serveur.sh) reste la
+#   solution recommandée, vérifiée et la moins chère (voir deploy/README.md).
+#
+# Topologie : seule la passerelle est publique (HTTPS fourni par Render) ; elle répartit
+#   /api, /webhooks, /socket.io, /uploads → api   et le reste → web   (deploy/proxy/Caddyfile).
+# Prérequis :
+#   1. Paquets GHCR publics (GitHub → Packages → sgm-cem-* → Package settings → Public),
+#      sinon déclarer des identifiants de registre dans Render.
+#   2. Après la création : renseigner APP_URL et API_URL avec l'adresse publique de la
+#      passerelle (ex. https://sgm-cem.onrender.com ou le domaine personnalisé).
+# Coût : services privés, worker, disque et base ne sont pas couverts par l'offre gratuite.
+# Images : « latest » suit la branche main ; pour figer une version, remplacer par sha-<12>.
+
+services:
+  # ── Passerelle publique ──────────────────────────────────────────────
+  - type: web
+    name: sgm-cem
+    runtime: image
+    image: { url: ghcr.io/devnet8057/sgm-cem-proxy:latest }
+    plan: starter
+    region: frankfurt
+    healthCheckPath: /healthz
+    envVars:
+      - key: WEB_UPSTREAM
+        fromService: { type: pserv, name: sgm-cem-web, property: hostport }
+      - key: API_UPSTREAM
+        fromService: { type: pserv, name: sgm-cem-api, property: hostport }
+
+  # ── Site Next.js (privé) ─────────────────────────────────────────────
+  - type: pserv
+    name: sgm-cem-web
+    runtime: image
+    image: { url: ghcr.io/devnet8057/sgm-cem-web:latest }
+    plan: starter
+    region: frankfurt
+    envVars:
+      - { key: NODE_ENV, value: production }
+      - { key: TZ, value: Africa/Douala }
+      - { key: PORT, value: "3000" }
+      - { key: HOSTNAME, value: 0.0.0.0 }
+
+  # ── API Express (privée) : migrations et sauvegarde au démarrage ─────
+  - type: pserv
+    name: sgm-cem-api
+    runtime: image
+    image: { url: ghcr.io/devnet8057/sgm-cem-api:latest }
+    plan: standard            # 2 Go : Prisma + rendu PDF
+    region: frankfurt
+    disk:                     # fichiers locaux si aucun stockage S3 (recommandé ici : S3/R2)
+      name: uploads
+      mountPath: /app/apps/api/uploads
+      sizeGB: 5
+    envVars:
+      - fromGroup: sgm-cem-commun
+      - key: DATABASE_URL
+        fromDatabase: { name: sgm-cem-db, property: connectionString }
+      - key: REDIS_URL
+        fromService: { type: keyvalue, name: sgm-cem-redis, property: connectionString }
+      - key: GOTENBERG_URL
+        fromService: { type: pserv, name: sgm-cem-gotenberg, property: hostport }
+      - { key: PORT, value: "3001" }
+      - { key: RUN_SCHEDULED_JOBS, value: "false" }
+      # Répartiteur Render + passerelle : 2 relais avant l'API (à confirmer : IP client des journaux)
+      - { key: TRUST_PROXY, value: "2" }
+
+  # ── Tâches planifiées (BullMQ) ───────────────────────────────────────
+  - type: worker
+    name: sgm-cem-worker
+    runtime: image
+    image: { url: ghcr.io/devnet8057/sgm-cem-api:latest }
+    dockerCommand: node /app/apps/api/dist/worker.js
+    plan: starter
+    region: frankfurt
+    envVars:
+      - fromGroup: sgm-cem-commun
+      - key: DATABASE_URL
+        fromDatabase: { name: sgm-cem-db, property: connectionString }
+      - key: REDIS_URL
+        fromService: { type: keyvalue, name: sgm-cem-redis, property: connectionString }
+      - key: GOTENBERG_URL
+        fromService: { type: pserv, name: sgm-cem-gotenberg, property: hostport }
+
+  # ── Rendu PDF isolé (privé) ──────────────────────────────────────────
+  - type: pserv
+    name: sgm-cem-gotenberg
+    runtime: image
+    image: { url: docker.io/gotenberg/gotenberg:8.38.1 }
+    dockerCommand: gotenberg --chromium-disable-javascript=true --chromium-auto-start=true --chromium-start-timeout=60s --api-timeout=60s --log-level=warn
+    plan: starter
+    region: frankfurt
+
+  # ── Redis (Key Value Render), accessible uniquement depuis les services ──
+  - type: keyvalue
+    name: sgm-cem-redis
+    plan: starter
+    region: frankfurt
+    maxmemoryPolicy: noeviction      # files BullMQ : jamais d'éviction
+    ipAllowList: []
+
+databases:
+  - name: sgm-cem-db
+    databaseName: sgm_cem
+    user: sgm_app
+    postgresMajorVersion: "17"
+    plan: basic-1gb
+    region: frankfurt
+    ipAllowList: []
+
+# Variables communes (un groupe ne peut pas référencer un service : voir api et worker)
+envVarGroups:
+  - name: sgm-cem-commun
+    envVars:
+      - { key: NODE_ENV, value: production }
+      - { key: TZ, value: Africa/Douala }
+      # Adresse publique de la passerelle, saisie à la création (CORS, liens, webhooks)
+      - { key: APP_URL, sync: false }
+      - { key: API_URL, sync: false }
+      - { key: JWT_SECRET, generateValue: true }
+      - { key: REFRESH_TOKEN_SECRET, generateValue: true }
+      - { key: CSRF_SECRET, generateValue: true }
+      # À copier dans un coffre : perdue = clés d'intégration à ressaisir
+      - { key: CONFIG_ENCRYPTION_KEY, generateValue: true }
+      - { key: ADMIN_EMAIL, sync: false }
+      - { key: SEED_DEMO, value: "0" }
+      - { key: LOG_LEVEL, value: info }
+      # Intégrations (Yelii, CinetPay, WhatsApp, SMTP, S3…) : panneau développeur, chiffrées en base

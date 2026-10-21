@@ -1,3 +1,4 @@
+import path from 'node:path'
 import type { NextConfig } from 'next'
 
 // Sur Render, le navigateur ne parle qu'au web : /api, /socket.io et /uploads
@@ -13,6 +14,10 @@ const apiProxyTarget = process.env.API_PROXY_URL
     : null)
 
 const nextConfig: NextConfig = {
+  // Serveur autonome (.next/standalone) : l'image Docker n'embarque que le strict
+  // nécessaire à l'exécution (≈ 10 fois plus légère). Racine = monorepo pnpm.
+  output: 'standalone',
+  outputFileTracingRoot: path.join(__dirname, '../..'),
   transpilePackages: ['@sgm-cem/shared'],
   experimental: {
     optimizePackageImports: ['lucide-react', 'recharts'],

@@ -122,7 +122,9 @@ async function renderWithGotenberg(baseUrl: string, html: string, options: PDFOp
     const footer = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;-webkit-print-color-adjust:exact;}</style></head><body>${options.footerTemplate}</body></html>`
     form.append('files', new Blob([footer], { type: 'text/html' }), 'footer.html')
   }
-  const res = await fetch(`${baseUrl.replace(/\/$/, '')}/forms/chromium/convert/html`, {
+  // « hôte:port » seul (plateformes qui ne fournissent que l'adresse interne) → http://
+  const base = (/^https?:\/\//.test(baseUrl) ? baseUrl : `http://${baseUrl}`).replace(/\/$/, '')
+  const res = await fetch(`${base}/forms/chromium/convert/html`, {
     method: 'POST',
     body: form,
     signal: AbortSignal.timeout(60_000),

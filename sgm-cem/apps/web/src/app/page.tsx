@@ -90,6 +90,16 @@ export default function LoginPage() {
   const googleBtnRef   = useRef<HTMLDivElement>(null)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [googleBtnReady, setGoogleBtnReady] = useState(false)
+  // Identifiant client Google lu à l'exécution (panneau développeur) : une même
+  // image web sert toutes les installations ; la variable de build reste un secours.
+  const [googleClientId, setGoogleClientId] = useState<string | null>(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || null)
+  useEffect(() => {
+    let cancelled = false
+    api.get('/public/client-config')
+      .then(res => { if (!cancelled && res.data?.data?.googleClientId) setGoogleClientId(res.data.data.googleClientId) })
+      .catch(() => { /* hors ligne ou ancienne API : on garde la valeur de build */ })
+    return () => { cancelled = true }
+  }, [])
 
   /* Mot de passe oublié */
   const [forgotOpen, setForgotOpen] = useState(false)
@@ -142,7 +152,7 @@ export default function LoginPage() {
 
   /* ── Initialiser Google (sans prompt automatique) ── */
   useEffect(() => {
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+    const clientId = googleClientId
     if (!clientId) return
 
     let disposed = false
@@ -187,7 +197,7 @@ export default function LoginPage() {
         try { googleBtnRef.current.innerHTML = '' } catch {}
       }
     }
-  }, [handleGoogleCredential])
+  }, [handleGoogleCredential, googleClientId])
 
   /* ── Mot de passe oublié ── */
   function openForgotModal() {
@@ -416,7 +426,7 @@ export default function LoginPage() {
           </div>
 
           {/* ── Bouton Google ── */}
-          {process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ? (
+          {googleClientId ? (
             <div>
               <div className="relative">
                 <div

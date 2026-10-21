@@ -6,6 +6,15 @@
 #   deployer.sh --ref v1.2.0     déploie une branche, une étiquette ou un commit précis
 #   deployer.sh --retour         revient à la version précédente (images conservées)
 #   deployer.sh --etat           affiche la version en service et la précédente
+#   deployer.sh --archive F      installe la version contenue dans une archive hors ligne
+#                                (sgm-cem-<version>.tar ou dossier extrait), sans Internet
+#
+# Source des images (dans cet ordre) :
+#   • --archive F                       images chargées depuis l'archive (docker load)
+#   • IMAGE_REGISTRY réglé dans le .env  images publiées par la CI (ex. ghcr.io/devnet8057),
+#                                       téléchargées pour le commit demandé ; construites
+#                                       sur place si elles ne sont pas publiées à temps
+#   • sinon                             construites sur le serveur depuis le code
 #
 # Étapes : récupération du code → construction des images À CÔTÉ de la version en
 # service (le site reste en ligne) → sauvegarde de la base → bascule (l'API applique
@@ -56,7 +65,7 @@ compose() { docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"; }
 # ── Santé des conteneurs ────────────────────────────────────────────────────
 health_of() {
   local id
-  id=$(compose ps -q "$1" 2>/dev/null | head -n1)
+  id=$(compose ps -q "$1" 2>/dev/null | awk 'NR==1')
   [ -n "$id" ] || { echo "absent"; return; }
   docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$id" 2>/dev/null || echo "absent"
 }
@@ -142,11 +151,13 @@ rollback() {
 # ── Arguments ───────────────────────────────────────────────────────────────
 MODE=deploy
 REF=""
+ARCHIVE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --ref) REF="${2:?--ref attend une branche, une étiquette ou un commit}"; shift 2 ;;
     --retour|--rollback) MODE=rollback; shift ;;
     --etat|--status) MODE=state; shift ;;
+    --archive) ARCHIVE="${2:?--archive attend un fichier .tar ou un dossier}"; shift 2 ;;
     -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) die "Option inconnue : $1 (voir --help)" ;;
   esac
@@ -154,7 +165,7 @@ done
 
 cd "$BASE_DIR" 2>/dev/null || { echo "$BASE_DIR introuvable : lancer d'abord installer-serveur.sh" >&2; exit 1; }
 [ -f "$ENV_FILE" ] || die "$ENV_FILE introuvable : lancer d'abord installer-serveur.sh"
-[ -d "$SRC_DIR/.git" ] || die "$SRC_DIR n'est pas un dépôt git : lancer d'abord installer-serveur.sh"
+[ -n "$ARCHIVE" ] || [ -d "$SRC_DIR/.git" ] || die "$SRC_DIR n'est pas un dépôt git : lancer d'abord installer-serveur.sh (ou utiliser --archive)"
 command -v docker > /dev/null || die "Docker n'est pas installé"
 
 # Un seul déploiement à la fois
@@ -168,56 +179,107 @@ esac
 
 log "════ Déploiement SGM-CEM ════"
 
-# 1. Code
-REF="${REF:-$(env_get DEPLOY_REF)}"; REF="${REF:-main}"
-log "1/7 Récupération du code ($REF)…"
-git -C "$SRC_DIR" fetch --prune --tags origin 2>&1 | tee -a "$LOG_FILE" > /dev/null
-if git -C "$SRC_DIR" rev-parse -q --verify "origin/$REF^{commit}" > /dev/null; then
-  TARGET="origin/$REF"
-else
-  TARGET="$REF"
-fi
-git -C "$SRC_DIR" -c advice.detachedHead=false checkout -q --force --detach "$TARGET" || die "Référence introuvable : $REF"
-SHA=$(git -C "$SRC_DIR" rev-parse --short=12 HEAD)
-VERSION="$(date +%Y%m%d)-$SHA"
-ok "Code au commit $SHA ($(git -C "$SRC_DIR" log -1 --format=%s | cut -c1-70))"
+REGISTRY=$(env_get IMAGE_REGISTRY); REGISTRY="${REGISTRY%/}"
+install_ops_files() {   # $1 = dossier contenant docker-compose.prod.yml, Caddyfile, scripts/
+  install -m 644 "$1/docker-compose.prod.yml" "$COMPOSE_FILE"
+  install -m 644 "$1/Caddyfile" "$BASE_DIR/Caddyfile"
+  mkdir -p "$BASE_DIR/scripts" "$BASE_DIR/backups"
+  install -m 755 "$1"/scripts/*.sh "$BASE_DIR/scripts/"
+}
 
-# 2. Fichiers d'exploitation (compose, Caddy, scripts) à la version du code
-log "2/7 Fichiers d'exploitation…"
-install -m 644 "$SRC_DIR/deploy/docker-compose.prod.yml" "$COMPOSE_FILE"
-install -m 644 "$SRC_DIR/deploy/Caddyfile" "$BASE_DIR/Caddyfile"
-mkdir -p "$BASE_DIR/scripts" "$BASE_DIR/backups"
-install -m 755 "$SRC_DIR"/deploy/scripts/*.sh "$BASE_DIR/scripts/"
-API_IMAGE="sgm-cem-api:$SHA"
-WEB_IMAGE="sgm-cem-web:$SHA"
+if [ -n "$ARCHIVE" ]; then
+  # ── Source : archive hors ligne ─────────────────────────────────────────────
+  log "1/7 Lecture de l'archive $(basename "$ARCHIVE")…"
+  if [ -f "$ARCHIVE" ]; then
+    BUNDLE=$(mktemp -d "$BASE_DIR/.archive.XXXXXX")
+    trap 'rm -rf "$BUNDLE"' EXIT
+    tar -xf "$ARCHIVE" -C "$BUNDLE"
+    BUNDLE=$(dirname "$(find "$BUNDLE" -maxdepth 2 -name manifest.env | awk 'NR==1')")
+  else
+    BUNDLE="$ARCHIVE"
+  fi
+  [ -f "$BUNDLE/manifest.env" ] || die "Archive invalide : manifest.env introuvable"
+  ( cd "$BUNDLE" && sha256sum -c --quiet SHA256SUMS ) || die "Archive corrompue (sommes de contrôle SHA256SUMS)"
+  m_get() { grep -E "^$1=" "$BUNDLE/manifest.env" | cut -d= -f2-; }
+  SHA=$(m_get GIT_SHA); VERSION=$(m_get VERSION)
+  ok "Archive intègre : version $VERSION"
+  log "2/7 Fichiers d'exploitation…"
+  install_ops_files "$BUNDLE/deploy"
+  log "3/7 Chargement des images…"
+  for f in "$BUNDLE"/images/*.tar.gz; do
+    gunzip -c "$f" | docker load >> "$LOG_FILE" 2>&1 || die "Chargement impossible : $(basename "$f")"
+  done
+  API_IMAGE=$(m_get IMAGE_API); WEB_IMAGE=$(m_get IMAGE_WEB)
+  # Images tierces sous des noms locaux (indépendant de la version de Docker)
+  for k in IMAGE_CADDY IMAGE_POSTGRES IMAGE_REDIS IMAGE_GOTENBERG; do env_set "$k" "$(m_get "$k")"; done
+  ok "Images chargées"
+else
+  # ── Source : code (et registre si réglé) ────────────────────────────────────
+  REF="${REF:-$(env_get DEPLOY_REF)}"; REF="${REF:-main}"
+  log "1/7 Récupération du code ($REF)…"
+  git -C "$SRC_DIR" fetch --prune --tags origin 2>&1 | tee -a "$LOG_FILE" > /dev/null
+  if git -C "$SRC_DIR" rev-parse -q --verify "origin/$REF^{commit}" > /dev/null; then
+    TARGET="origin/$REF"
+  else
+    TARGET="$REF"
+  fi
+  git -C "$SRC_DIR" -c advice.detachedHead=false checkout -q --force --detach "$TARGET" || die "Référence introuvable : $REF"
+  SHA=$(git -C "$SRC_DIR" rev-parse --short=12 HEAD)
+  VERSION="$(date +%Y%m%d)-$SHA"
+  ok "Code au commit $SHA ($(git -C "$SRC_DIR" log -1 --format=%s | cut -c1-70))"
+  log "2/7 Fichiers d'exploitation…"
+  install_ops_files "$SRC_DIR/deploy"
+  # Archive installée auparavant : on revient aux images tierces officielles
+  for k in IMAGE_CADDY IMAGE_POSTGRES IMAGE_REDIS IMAGE_GOTENBERG; do grep -q "^$k=" "$ENV_FILE" && env_set "$k" ""; done
+
+  build() {
+    local name="$1" dockerfile="$2"; shift 2
+    local df=(-f "$SRC_DIR/sgm-cem/apps/$name/Dockerfile")
+    [ -n "$dockerfile" ] && df=(-f "$dockerfile")
+    docker build "${df[@]}" "${BUILD_EXTRA[@]}" \
+      --build-arg GIT_SHA="$SHA" --build-arg VERSION="$VERSION" "$@" \
+      -t "sgm-cem-$name:$SHA" "$SRC_DIR/sgm-cem" >> "$LOG_FILE" 2>&1
+  }
+  build_here() {
+    API_IMAGE="sgm-cem-api:$SHA"; WEB_IMAGE="sgm-cem-web:$SHA"
+    if docker image inspect "$API_IMAGE" "$WEB_IMAGE" > /dev/null 2>&1; then
+      log "3/7 Images $SHA déjà construites : réutilisées"; return
+    fi
+    log "3/7 Construction des images (le site reste en ligne ; 3 à 10 min)…"
+    build api "$DOCKERFILE_API" || die "Construction de l'API en échec (détail : $LOG_FILE). Rien n'a été modifié."
+    ok "Image API construite"
+    # Image web indépendante du domaine (l'API est appelée sur la même origine, « /api »)
+    build web "$DOCKERFILE_WEB" || die "Construction du site en échec (détail : $LOG_FILE). Rien n'a été modifié."
+    ok "Image web construite"
+  }
+
+  if [ -n "$REGISTRY" ]; then
+    # ── Images publiées par la CI pour ce commit ──────────────────────────────
+    API_IMAGE="$REGISTRY/sgm-cem-api:sha-$SHA"; WEB_IMAGE="$REGISTRY/sgm-cem-web:sha-$SHA"
+    if [ -n "$(env_get REGISTRY_TOKEN)" ]; then
+      env_get REGISTRY_TOKEN | docker login "${REGISTRY%%/*}" -u "$(env_get REGISTRY_USER)" --password-stdin >> "$LOG_FILE" 2>&1 \
+        || die "Connexion au registre refusée (REGISTRY_USER / REGISTRY_TOKEN)"
+    fi
+    WAIT_MIN=$(env_get REGISTRY_WAIT_MIN); WAIT_MIN="${WAIT_MIN:-15}"
+    log "3/7 Téléchargement des images publiées (jusqu'à $WAIT_MIN min si la CI construit encore)…"
+    deadline=$(( $(date +%s) + WAIT_MIN * 60 )); pulled=0
+    while :; do
+      if docker pull -q "$API_IMAGE" >> "$LOG_FILE" 2>&1 && docker pull -q "$WEB_IMAGE" >> "$LOG_FILE" 2>&1; then pulled=1; break; fi
+      [ "$(date +%s)" -lt "$deadline" ] || break
+      sleep 30
+    done
+    if [ "$pulled" = 1 ]; then
+      ok "Images téléchargées : sha-$SHA"
+    else
+      warn "Images sha-$SHA absentes du registre : construction sur le serveur à la place"
+      build_here
+    fi
+  else
+    build_here
+  fi
+fi
 IMAGE_API="$API_IMAGE" IMAGE_WEB="$WEB_IMAGE" compose config -q || die "docker-compose.prod.yml invalide avec ce .env"
 ok "Configuration validée"
-
-# 3. Images (le site actuel reste en service pendant la construction)
-APP_URL=$(env_get APP_URL)
-[ -n "$APP_URL" ] || die "APP_URL absent du .env"
-build() {
-  local name="$1" dockerfile="$2"; shift 2
-  local df=(-f "$SRC_DIR/sgm-cem/apps/$name/Dockerfile")
-  [ -n "$dockerfile" ] && df=(-f "$dockerfile")
-  docker build "${df[@]}" "${BUILD_EXTRA[@]}" \
-    --build-arg GIT_SHA="$SHA" --build-arg VERSION="$VERSION" "$@" \
-    -t "sgm-cem-$name:$SHA" "$SRC_DIR/sgm-cem" >> "$LOG_FILE" 2>&1
-}
-if docker image inspect "$API_IMAGE" "$WEB_IMAGE" > /dev/null 2>&1; then
-  log "3/7 Images $SHA déjà construites : réutilisées"
-else
-  log "3/7 Construction des images (le site reste en ligne ; 3 à 10 min)…"
-  build api "$DOCKERFILE_API" || die "Construction de l'API en échec (détail : $LOG_FILE). Rien n'a été modifié."
-  ok "Image API construite"
-  # NEXT_PUBLIC_* figées au build : le site appelle l'API sur le même domaine (Caddy)
-  build web "$DOCKERFILE_WEB" \
-    --build-arg NEXT_PUBLIC_API_URL="$APP_URL" \
-    --build-arg NEXT_PUBLIC_APP_URL="$APP_URL" \
-    --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID="$(env_get GOOGLE_CLIENT_ID)" \
-    || die "Construction du site en échec (détail : $LOG_FILE). Rien n'a été modifié."
-  ok "Image web construite"
-fi
 
 # 4. Sauvegarde de la base avant bascule (en plus de celle de l'API au démarrage)
 log "4/7 Sauvegarde de la base…"
@@ -265,7 +327,9 @@ fi
 
 # 7. Nettoyage : on garde les $KEEP_IMAGES dernières versions pour un retour arrière
 log "7/7 Nettoyage…"
-for repo in sgm-cem-api sgm-cem-web; do
+REPOS="sgm-cem-api sgm-cem-web"
+[ -n "$REGISTRY" ] && REPOS="$REPOS $REGISTRY/sgm-cem-api $REGISTRY/sgm-cem-web"
+for repo in $REPOS; do
   docker images "$repo" --format '{{.CreatedAt}}\t{{.Repository}}:{{.Tag}}' | sort -r | tail -n +$((KEEP_IMAGES + 1)) | cut -f2 \
     | while read -r img; do
         [ "$img" = "$(env_get IMAGE_API)" ] || [ "$img" = "$(env_get IMAGE_WEB)" ] || [ "$img" = "$PREV_API" ] || [ "$img" = "$PREV_WEB" ] || docker rmi "$img" > /dev/null 2>&1 || true

@@ -1,0 +1,47 @@
+# Passerelle SGM-CEM pour les plateformes (Render, Railway, Fly.io, Coolify…)
+# La plateforme fournit le HTTPS et une seule adresse publique : cette passerelle
+# reçoit tout le trafic et le répartit, comme Caddy sur un VPS.
+#   WEB_UPSTREAM  adresse interne du service web  (ex. sgm-cem-web:3000)
+#   API_UPSTREAM  adresse interne du service api  (ex. sgm-cem-api:3001)
+#   PORT          port d'écoute imposé par la plateforme (défaut 8080)
+{
+	auto_https off
+	admin off
+	servers {
+		# Répartiteur de la plateforme devant nous : adresses privées de confiance
+		trusted_proxies static private_ranges
+	}
+}
+
+:{$PORT:8080} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		-Server
+	}
+
+	request_body {
+		max_size 25MB
+	}
+
+	# Sonde de santé de la plateforme
+	handle /healthz {
+		respond "ok" 200
+	}
+
+	@backend path /api/* /webhooks/* /socket.io/* /uploads/receipts/* /uploads/avatars/*
+	handle @backend {
+		reverse_proxy {$API_UPSTREAM} {
+			header_up X-Request-Id {http.request.uuid}
+		}
+	}
+
+	handle {
+		reverse_proxy {$WEB_UPSTREAM}
+	}
+}

@@ -17,7 +17,7 @@ import { Prisma } from '@prisma/client'
 import { AppError } from '../middleware/errorHandler'
 import { getPrisma } from '../lib/prisma'
 import { audit } from '../services/audit.service'
-import { getConfigBool, getConfigNumber } from '../services/config.service'
+import { getConfig, getConfigBool, getConfigNumber } from '../services/config.service'
 import { initiateYeliiPayment } from '../services/yelii.service'
 import { initiateCinetpayPayment, isCinetpayConfigured } from '../services/cinetpay.service'
 import { initiateTrackedYeliiPayment, isUncertainYeliiResult } from '../services/payment-attempt.service'
@@ -534,6 +534,17 @@ router.get('/payments/:contributionId/status', statusLimiter, async (req, res) =
  * (numéro, montant, date, statut, initiales) — jamais de nom complet ni de téléphone.
  */
 const initials = (name?: string | null) => (name ?? '').split(/\s+/).filter(Boolean).map(w => `${w[0].toUpperCase()}.`).join(' ') || '—'
+
+/**
+ * GET /api/public/client-config
+ * Réglages publics lus par le site AU MOMENT DE L'EXÉCUTION (et non figés dans
+ * l'image) : la même image web sert ainsi n'importe quelle installation.
+ * L'identifiant client Google OAuth n'est pas un secret (il figure dans la page).
+ */
+router.get('/client-config', (_req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=300')
+  res.json({ success: true, data: { googleClientId: getConfig('GOOGLE_CLIENT_ID') || null } })
+})
 
 router.get('/verifier/:type/:id', publicLimiter, async (req, res) => {
   const type = String(req.params.type) as VerifiableKind

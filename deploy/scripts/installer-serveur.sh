@@ -3,22 +3,27 @@
 # SGM-CEM — installation d'un serveur neuf (Ubuntu 24.04 LTS), en root, UNE fois.
 #
 #   bash installer-serveur.sh --domaine app.exemple.cm --email admin@exemple.cm
-#   options : --depot <url git>   (défaut : git@github.com:DevNet8057/sgm-cem.git)
-#             --ref <branche>     (défaut : main)
-#             --sans-systeme      (ne touche pas au système : seulement dossiers, code, .env, déploiement)
+#   Source des images (une au choix) :
+#     (défaut)               construites sur le serveur depuis le dépôt GitHub
+#     --registre <adresse>   images publiées par la CI, ex. ghcr.io/devnet8057 (le plus rapide)
+#     --archive <fichier>    archive hors ligne sgm-cem-<version>.tar (serveur sans accès GitHub)
+#   Autres options : --depot <url git>  (défaut : https://github.com/DevNet8057/sgm-cem.git)
+#                    --ref <branche>    (défaut : main)
+#                    --sans-systeme     (ne touche pas au système : dossiers, .env, déploiement)
 #
 # Ce que fait le script (chaque étape est sautée si elle est déjà faite) :
 #   1. mises à jour, Docker, pare-feu (22, 80, 443), fail2ban, mises à jour de sécurité automatiques
 #   2. mémoire d'échange de 2 Go (construction des images)
 #   3. utilisateur « sgm » (membre de docker) qui reçoit les clés SSH de root ;
 #      connexion par mot de passe et connexion root désactivées SEULEMENT si une clé est en place
-#   4. clé de déploiement en lecture seule pour le dépôt GitHub (à ajouter dans GitHub)
-#   5. code dans /opt/sgm-cem/src, .env de production avec des secrets aléatoires (jamais écrasé)
-#   6. premier déploiement (deployer.sh)
+#   4. accès au code : dépôt public en HTTPS, ou clé de déploiement en lecture seule (dépôt privé)
+#   5. code dans /opt/sgm-cem/src (ou archive), .env de production aux secrets aléatoires (jamais écrasé)
+#   6. premier déploiement (deployer.sh), puis affichage du mot de passe administrateur initial
 # ─────────────────────────────────────────────────────────────────────────────
 set -Eeuo pipefail
 
-DOMAIN=""; EMAIL=""; REPO="git@github.com:DevNet8057/sgm-cem.git"; REF="main"; SYSTEM=1
+DOMAIN=""; EMAIL=""; REPO="https://github.com/DevNet8057/sgm-cem.git"; REF="main"; SYSTEM=1
+ARCHIVE=""; REGISTRY=""
 APP_USER="${SGM_USER:-sgm}"
 BASE_DIR="${SGM_BASE_DIR:-/opt/sgm-cem}"
 
@@ -33,12 +38,16 @@ while [ $# -gt 0 ]; do
     --depot) REPO="${2:?}"; shift 2 ;;
     --ref) REF="${2:?}"; shift 2 ;;
     --sans-systeme) SYSTEM=0; shift ;;
-    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+    --archive) ARCHIVE="$(realpath "${2:?}")"; shift 2 ;;
+    --registre) REGISTRY="${2:?}"; shift 2 ;;
+    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
     *) die "Option inconnue : $1" ;;
   esac
 done
 [ -n "$DOMAIN" ] && [ -n "$EMAIL" ] || die "Usage : bash installer-serveur.sh --domaine app.exemple.cm --email admin@exemple.cm"
 [ "$(id -u)" = 0 ] || die "À lancer en root (ou avec sudo)."
+[ -z "$ARCHIVE" ] || [ -f "$ARCHIVE" ] || die "Archive introuvable : $ARCHIVE"
+[ -z "$ARCHIVE" ] || [ -z "$REGISTRY" ] || die "Choisir --archive OU --registre, pas les deux."
 
 # Commandes de l'utilisateur applicatif, depuis un dossier qu'il peut lire
 as_user() { (cd / && sudo -u "$APP_USER" -H "$@"); }
@@ -111,6 +120,9 @@ fi
 
 # ── 4. Accès au dépôt ───────────────────────────────────────────────────────
 install -d -m 750 -o "$APP_USER" -g "$APP_USER" "$BASE_DIR"
+if [ -n "$ARCHIVE" ]; then
+  say "4/6 Archive $(basename "$ARCHIVE") (aucun accès GitHub nécessaire)"
+else
 case "$REPO" in
   git@*|ssh://*)
     say "4/6 Clé de déploiement GitHub (lecture seule)"
@@ -130,15 +142,28 @@ case "$REPO" in
     ;;
   *) say "4/6 Dépôt : $REPO" ;;
 esac
+fi
 
 # ── 5. Code et configuration ────────────────────────────────────────────────
 say "5/6 Code et fichier .env"
-if [ ! -d "$BASE_DIR/src/.git" ]; then
-  as_user env GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh}" git clone -q "$REPO" "$BASE_DIR/src"
+if [ -n "$ARCHIVE" ]; then
+  # Archive extraite pour l'utilisateur applicatif (supprimée après le déploiement)
+  RELEASE_DIR="$BASE_DIR/releases"
+  install -d -m 750 -o "$APP_USER" -g "$APP_USER" "$RELEASE_DIR"
+  TOP=$(tar -tf "$ARCHIVE" | awk -F/ 'NR==1{print $1}')     # awk lit tout : pas de SIGPIPE
+  tar -xf "$ARCHIVE" -C "$RELEASE_DIR"            # en root : l'archive peut être dans /root
+  BUNDLE="$RELEASE_DIR/$TOP"
+  chown -R "$APP_USER:$APP_USER" "$BUNDLE"
+  [ -f "$BUNDLE/manifest.env" ] || die "Archive invalide : manifest.env introuvable"
+  note "Archive extraite : $BUNDLE"
+else
+  if [ ! -d "$BASE_DIR/src/.git" ]; then
+    as_user env GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh}" git clone -q "$REPO" "$BASE_DIR/src"
+  fi
+  [ -n "${GIT_SSH_COMMAND:-}" ] && as_user git -C "$BASE_DIR/src" config core.sshCommand "$GIT_SSH_COMMAND"
+  as_user git -C "$BASE_DIR/src" fetch -q origin
+  as_user git -C "$BASE_DIR/src" rev-parse -q --verify "origin/$REF" > /dev/null || die "Branche « $REF » introuvable dans le dépôt."
 fi
-[ -n "${GIT_SSH_COMMAND:-}" ] && as_user git -C "$BASE_DIR/src" config core.sshCommand "$GIT_SSH_COMMAND"
-as_user git -C "$BASE_DIR/src" fetch -q origin
-as_user git -C "$BASE_DIR/src" rev-parse -q --verify "origin/$REF" > /dev/null || die "Branche « $REF » introuvable dans le dépôt."
 
 ENV_FILE="$BASE_DIR/.env"
 if [ -f "$ENV_FILE" ]; then
@@ -162,6 +187,11 @@ TZ=Africa/Douala
 IMAGE_API=
 IMAGE_WEB=
 APP_VERSION=
+# Registre des images publiées par la CI (vide = construction sur le serveur).
+# Registre privé : REGISTRY_USER et REGISTRY_TOKEN (jeton en lecture seule).
+IMAGE_REGISTRY=$REGISTRY
+REGISTRY_USER=
+REGISTRY_TOKEN=
 
 POSTGRES_USER=sgm_app
 POSTGRES_PASSWORD=$PGPASS
@@ -193,9 +223,18 @@ EOF
 fi
 
 # ── 6. Premier déploiement ──────────────────────────────────────────────────
-say "6/6 Premier déploiement (construction des images : 5 à 15 min)"
-as_user env SGM_BASE_DIR="$BASE_DIR" DOCKERFILE_API="${DOCKERFILE_API:-}" DOCKERFILE_WEB="${DOCKERFILE_WEB:-}" BUILD_EXTRA_ARGS="${BUILD_EXTRA_ARGS:-}" \
-  bash "$BASE_DIR/src/deploy/scripts/deployer.sh" --ref "$REF"
+DEPLOY_ENV=(env SGM_BASE_DIR="$BASE_DIR" DOCKERFILE_API="${DOCKERFILE_API:-}" DOCKERFILE_WEB="${DOCKERFILE_WEB:-}" BUILD_EXTRA_ARGS="${BUILD_EXTRA_ARGS:-}")
+if [ -n "$ARCHIVE" ]; then
+  say "6/6 Premier déploiement (chargement des images de l'archive : 2 à 5 min)"
+  as_user "${DEPLOY_ENV[@]}" bash "$BUNDLE/deploy/scripts/deployer.sh" --archive "$BUNDLE"
+  rm -rf "$BUNDLE"
+elif [ -n "$REGISTRY" ]; then
+  say "6/6 Premier déploiement (téléchargement des images depuis $REGISTRY)"
+  as_user "${DEPLOY_ENV[@]}" bash "$BASE_DIR/src/deploy/scripts/deployer.sh" --ref "$REF"
+else
+  say "6/6 Premier déploiement (construction des images : 5 à 15 min)"
+  as_user "${DEPLOY_ENV[@]}" bash "$BASE_DIR/src/deploy/scripts/deployer.sh" --ref "$REF"
+fi
 
 say "Installation terminée"
 note "Site : https://$DOMAIN"
@@ -208,5 +247,9 @@ if [ -n "$ADMIN_LINE" ]; then
 else
   note "Compte administrateur : $EMAIL (mot de passe défini précédemment, inchangé)"
 fi
-note "Mises à jour suivantes : ssh $APP_USER@<serveur> \"$BASE_DIR/scripts/deployer.sh\""
+if [ -n "$ARCHIVE" ]; then
+  note "Mises à jour suivantes : copier la nouvelle archive puis  $BASE_DIR/scripts/deployer.sh --archive <fichier.tar>"
+else
+  note "Mises à jour suivantes : ssh $APP_USER@<serveur> \"$BASE_DIR/scripts/deployer.sh\""
+fi
 note "Sauvegardes hors serveur : voir docs/exploitation/03_GUIDE_DEPLOIEMENT_PRODUCTION.md, § 8, puis activer scripts/backup.sh dans cron."

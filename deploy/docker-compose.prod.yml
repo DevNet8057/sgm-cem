@@ -4,6 +4,7 @@
 #   docker compose -f docker-compose.prod.yml up -d
 # Images applicatives : IMAGE_API / IMAGE_WEB épinglées par empreinte (sortie CI).
 # Images tierces épinglées le 17/10/2026 : mettre à jour volontairement, jamais « latest ».
+# IMAGE_CADDY, IMAGE_POSTGRES, IMAGE_REDIS, IMAGE_GOTENBERG : surcharge facultative (archive hors ligne).
 name: sgm-cem-prod                 # distinct du projet de développement (volumes séparés)
 
 x-app-defaults: &app
@@ -17,7 +18,7 @@ x-app-defaults: &app
 
 services:
   caddy:
-    image: caddy:2.11-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f
+    image: ${IMAGE_CADDY:-caddy:2.11-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f}
     restart: unless-stopped
     ports: ["80:80", "443:443", "443:443/udp"]
     environment: { APP_DOMAIN: "${APP_DOMAIN}", ACME_EMAIL: "${ACME_EMAIL}" }
@@ -98,7 +99,7 @@ services:
     depends_on: { postgres: { condition: service_healthy } }
 
   postgres:
-    image: postgres:17-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
+    image: ${IMAGE_POSTGRES:-postgres:17-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826}
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -117,7 +118,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:7.4-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    image: ${IMAGE_REDIS:-redis:7.4-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499}
     restart: unless-stopped
     environment: { REDIS_PASSWORD: "${REDIS_PASSWORD}" }   # requis par le healthcheck
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
@@ -134,7 +135,7 @@ services:
   # accès Internet ; l'API et le worker l'appellent via GOTENBERG_URL (sans lui,
   # repli sur le Chromium de l'image API). Version 8.38.1 épinglée le 17/10/2026.
   gotenberg:
-    image: gotenberg/gotenberg:8.38.1@sha256:aa552cc115db488e0f0bcb07446aac13071ad51505b642c84bb894500907b42b
+    image: ${IMAGE_GOTENBERG:-gotenberg/gotenberg:8.38.1@sha256:aa552cc115db488e0f0bcb07446aac13071ad51505b642c84bb894500907b42b}
     restart: unless-stopped
     # Chromium lancé au démarrage (et non à la 1re conversion) avec 60 s de marge : sans cela, le
     # premier PDF après un déploiement échouait sur un serveur chargé (délai de 20 s dépassé).

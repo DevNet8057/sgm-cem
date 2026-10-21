@@ -4,8 +4,11 @@ import { io, Socket } from 'socket.io-client'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/authStore'
 
-// Strip the /api path suffix — Socket.IO attaches to the root HTTP server
-const SOCKET_URL = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api').replace(/\/api\/?$/, '')
+// Socket.IO est servi à la racine du serveur API : on retire le suffixe /api.
+// API sur la même origine (NEXT_PUBLIC_API_URL relatif, ex. « /api ») : connexion
+// à l'origine de la page — une même image web sert ainsi n'importe quel domaine.
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'
+const SOCKET_URL: string | undefined = API_BASE.startsWith('/') ? undefined : API_BASE.replace(/\/api\/?$/, '')
 
 export function useSocket(): void {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
@@ -21,7 +24,7 @@ export function useSocket(): void {
 
     if (socketRef.current?.connected) return
 
-    const socket = io(SOCKET_URL, {
+    const socket = io(SOCKET_URL ?? window.location.origin, {
       withCredentials: true,
       transports: ['websocket', 'polling'],
       reconnectionDelay: 2000,

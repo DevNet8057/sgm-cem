@@ -33,7 +33,7 @@ import { developerRouter } from './routes/developer'
 import { usersRouter } from './routes/users'
 import { auditRouter } from './routes/audit'
 import { publicRouter } from './routes/public'
-import { errorHandler } from './middleware/errorHandler'
+import { AppError, errorHandler } from './middleware/errorHandler'
 import { paymentsRouter } from './routes/payments'
 import { activityRouter } from './routes/activity'
 import { startScheduledJobs } from './jobs/scheduler'
@@ -100,7 +100,8 @@ app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
     if (process.env.NODE_ENV !== 'production' && lanOriginPattern.test(origin)) return callback(null, true)
-    callback(new Error('Not allowed by CORS'))
+    // Origine absente de APP_URL : refus explicite (403), pas une erreur serveur
+    callback(new AppError('ORIGIN_NOT_ALLOWED', `Origine non autorisée (${origin}) : l'ajouter à APP_URL`, 403))
   },
   credentials: true,
   // Nom des fichiers téléchargés (exports, données personnelles)

@@ -1,0 +1,144 @@
+name: Images Docker
+
+# Construit et publie les images de production sur GHCR (gratuit : dépôt public),
+# puis produit l'archive hors ligne (les 7 images + scripts) pour un serveur sans registre.
+#
+#   ghcr.io/devnet8057/sgm-cem-api     API Express + worker (Chromium inclus)
+#   ghcr.io/devnet8057/sgm-cem-web     site Next.js (standalone, indépendant du domaine)
+#   ghcr.io/devnet8057/sgm-cem-proxy   passerelle HTTP pour les plateformes (Render…)
+#
+# Tags : sha-<12 caractères> (celui que deployer.sh télécharge), nom de branche,
+# version (tag vX.Y.Z) et latest (branche main).
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write     # pièces jointes des releases (tags v*)
+  packages: write     # publication sur ghcr.io
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Construction et publication ─────────────────────────────────────
+  build:
+    name: Image ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: api
+            context: sgm-cem
+            file: sgm-cem/apps/api/Dockerfile
+          - name: web
+            context: sgm-cem
+            file: sgm-cem/apps/web/Dockerfile
+          - name: proxy
+            context: deploy/proxy
+            file: deploy/proxy/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Identifiants de version
+        id: v
+        run: |
+          echo "ns=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+          echo "sha=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          echo "version=$(date -u +%Y%m%d)-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tags et labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.v.outputs.ns }}/sgm-cem-${{ matrix.name }}
+          tags: |
+            type=raw,value=sha-${{ steps.v.outputs.sha }}
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GIT_SHA=${{ steps.v.outputs.sha }}
+            VERSION=${{ steps.v.outputs.version }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Résumé
+        run: |
+          echo "### sgm-cem-${{ matrix.name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Archive hors ligne (images + exploitation) ──────────────────────
+  archive:
+    name: Archive hors ligne
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Archive
+        id: a
+        run: |
+          NS="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"; SHA="${GITHUB_SHA::12}"
+          VERSION="$(date -u +%Y%m%d)-$SHA"
+          [ "$GITHUB_REF_TYPE" = tag ] && VERSION="${GITHUB_REF_NAME#v}"
+          for n in api web proxy; do docker pull -q "$NS/sgm-cem-$n:sha-$SHA"; done
+          bash deploy/scripts/creer-archive.sh \
+            --api "$NS/sgm-cem-api:sha-$SHA" --web "$NS/sgm-cem-web:sha-$SHA" \
+            --proxy "$NS/sgm-cem-proxy:sha-$SHA" --sha "$SHA" --version "$VERSION" --sortie dist
+          echo "name=sgm-cem-$VERSION" >> "$GITHUB_OUTPUT"
+          ls -lh dist >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.a.outputs.name }}
+          path: dist/
+          retention-days: 14
+          compression-level: 0     # images déjà compressées
+
+      # Release (tags v*) : une pièce jointe GitHub est limitée à 2 Gio → découpage au-delà.
+      # Reconstitution : cat sgm-cem-X.tar.part-* > sgm-cem-X.tar && sha256sum -c sgm-cem-X.tar.sha256
+      - name: Pièces jointes de la release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd dist
+          T="${{ steps.a.outputs.name }}.tar"
+          if [ "$(stat -c %s "$T")" -gt 2000000000 ]; then
+            split -b 1900M -d "$T" "$T.part-" && rm "$T"
+          fi
+          gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" ./* --clobber
