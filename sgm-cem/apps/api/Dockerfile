@@ -6,20 +6,25 @@
 #   • slim = image légère mais apt-get disponible pour Puppeteer/Chromium
 # ──────────────────────────────────────────────────────────────────────
 
+# ── Client PostgreSQL 17 (pg_dump, pg_restore, psql, pg_isready) ──────
+# Le serveur de production est PostgreSQL 17 : pg_dump refuse de sauvegarder un
+# serveur plus récent que lui, et la sauvegarde avant démarrage est obligatoire.
+# Le paquet Debian bookworm n'existe qu'en version 15 : on reprend les outils de
+# l'image officielle postgres:17-bookworm (même empreinte que la production).
+FROM postgres:17-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826 AS pgclient
+RUN mkdir -p /out/bin /out/lib \
+  && for b in pg_dump pg_restore pg_isready psql; do \
+       cp /usr/lib/postgresql/17/bin/$b /out/bin/; \
+       ldd /usr/lib/postgresql/17/bin/$b | awk '/=>/{print $3}' | grep -vE 'libc\.so|libm\.so|libresolv' | xargs -r -I{} cp -Ln {} /out/lib/; \
+     done
+
 # Empreinte épinglée le 17/10/2026 — mise à jour volontaire uniquement
 FROM node:24-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5
 
-# Traçabilité de l'image (renseignées par la CI : --build-arg GIT_SHA=… --build-arg VERSION=…)
-ARG GIT_SHA=dev
-ARG VERSION=dev
-LABEL org.opencontainers.image.source="https://github.com/DevNet8057/sgm-cem" \
-      org.opencontainers.image.revision="$GIT_SHA" \
-      org.opencontainers.image.version="$VERSION"
 
 # ── Étape 1 : apt-get pour Puppeteer / Chromium + Prisma ───────────────
 # Puppeteer a besoin de bibliothèques système pour lancer Chromium.
 # openssl : TLS vers PostgreSQL (Prisma 7 n'embarque plus de moteur natif).
-# postgresql-client : pg_isready dans l'entrypoint.
 RUN apt-get -o Acquire::Check-Valid-Until=false update && apt-get install -y --no-install-recommends \
     ca-certificates \
     chromium \
@@ -42,10 +47,16 @@ RUN apt-get -o Acquire::Check-Valid-Until=false update && apt-get install -y --n
     libxss1 \
     lsb-release \
     openssl \
-    postgresql-client \
     wget \
     xdg-utils \
   && rm -rf /var/lib/apt/lists/*
+
+# Client PostgreSQL 17 et ses bibliothèques (libpq…) ; celles déjà fournies par
+# Debian ne sont pas remplacées (cp -n)
+COPY --from=pgclient /out/bin/ /usr/local/bin/
+COPY --from=pgclient /out/lib/ /tmp/pglibs/
+RUN cp -n /tmp/pglibs/* /usr/lib/x86_64-linux-gnu/ && rm -rf /tmp/pglibs && ldconfig \
+  && pg_dump --version | grep -q ' 17\.'
 
 # ── Étape 2 : Définir le chemin de Chromium pour Puppeteer ─────────────
 ENV PUPPETEER_SKIP_DOWNLOAD=true
@@ -100,3 +111,12 @@ EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3001/api/health',(r)=>{process.exit(r.statusCode===200?0:1)})" || exit 1
 CMD ["/app/docker-entrypoint.sh"]
+
+# Traçabilité de l'image (--build-arg GIT_SHA=… --build-arg VERSION=…), déclarée EN DERNIER :
+# un ARG qui change à chaque commit invaliderait le cache de toutes les étapes suivantes
+# (installation des dépendances comprise) et rallongerait chaque déploiement.
+ARG GIT_SHA=dev
+ARG VERSION=dev
+LABEL org.opencontainers.image.source="https://github.com/DevNet8057/sgm-cem" \
+      org.opencontainers.image.revision="$GIT_SHA" \
+      org.opencontainers.image.version="$VERSION"

@@ -4,7 +4,7 @@
 #   docker compose -f docker-compose.prod.yml up -d
 # Images applicatives : IMAGE_API / IMAGE_WEB épinglées par empreinte (sortie CI).
 # Images tierces épinglées le 17/10/2026 : mettre à jour volontairement, jamais « latest ».
-name: sgm-cem
+name: sgm-cem-prod                 # distinct du projet de développement (volumes séparés)
 
 x-app-defaults: &app
   restart: unless-stopped
@@ -74,6 +74,9 @@ services:
     user: "1000:1000"
     working_dir: /app/apps/api
     command: ["node", "dist/worker.js"]
+    # Pas de serveur HTTP : le contrôle de santé de l'image API (port 3001) ne s'applique pas.
+    # Bon fonctionnement visible dans « Santé du système » (tâches planifiées à jour ou en retard).
+    healthcheck: { disable: true }
     environment: { NODE_ENV: production, TZ: Africa/Douala, GOTENBERG_URL: "http://gotenberg:3000" }
     tmpfs: ["/tmp:size=256m", "/home/node:size=64m,uid=1000"]
     volumes:
@@ -133,7 +136,9 @@ services:
   gotenberg:
     image: gotenberg/gotenberg:8.38.1@sha256:aa552cc115db488e0f0bcb07446aac13071ad51505b642c84bb894500907b42b
     restart: unless-stopped
-    command: ["gotenberg", "--chromium-disable-javascript=true", "--api-timeout=60s", "--log-level=warn"]
+    # Chromium lancé au démarrage (et non à la 1re conversion) avec 60 s de marge : sans cela, le
+    # premier PDF après un déploiement échouait sur un serveur chargé (délai de 20 s dépassé).
+    command: ["gotenberg", "--chromium-disable-javascript=true", "--chromium-auto-start=true", "--chromium-start-timeout=60s", "--api-timeout=60s", "--log-level=warn"]
     networks: [internal]
     tmpfs: ["/tmp:size=512m"]
     security_opt: ["no-new-privileges:true"]

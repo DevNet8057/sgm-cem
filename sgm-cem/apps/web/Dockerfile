@@ -9,12 +9,6 @@
 # Empreinte épinglée le 17/10/2026 — mise à jour volontaire uniquement
 FROM node:24-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5
 
-# Traçabilité de l'image (renseignées par la CI : --build-arg GIT_SHA=… --build-arg VERSION=…)
-ARG GIT_SHA=dev
-ARG VERSION=dev
-LABEL org.opencontainers.image.source="https://github.com/DevNet8057/sgm-cem" \
-      org.opencontainers.image.revision="$GIT_SHA" \
-      org.opencontainers.image.version="$VERSION"
 
 WORKDIR /app
 
@@ -73,3 +67,12 @@ RUN chown -R node:node /app/apps/web/.next
 USER node
 WORKDIR /app/apps/web
 CMD ["node_modules/.bin/next", "start"]
+
+# Traçabilité de l'image (--build-arg GIT_SHA=… --build-arg VERSION=…), déclarée EN DERNIER :
+# un ARG qui change à chaque commit invaliderait le cache de toutes les étapes suivantes
+# (installation des dépendances comprise) et rallongerait chaque déploiement.
+ARG GIT_SHA=dev
+ARG VERSION=dev
+LABEL org.opencontainers.image.source="https://github.com/DevNet8057/sgm-cem" \
+      org.opencontainers.image.revision="$GIT_SHA" \
+      org.opencontainers.image.version="$VERSION"
