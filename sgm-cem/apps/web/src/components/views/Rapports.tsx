@@ -32,17 +32,20 @@ export function Rapports() {
   const [year, setYear] = useState(thisYear)
   const [month, setMonth] = useState(0)
 
-  function openFinancialReport(mode: 'view' | 'download') {
+  async function openFinancialReport(mode: 'view' | 'download') {
     setLoading(mode === 'view' ? 'pdf-view' : 'pdf-download')
     setError('')
     try {
-      const qs = new URLSearchParams({ year: String(year) })
-      if (month) qs.set('month', String(month))
-      if (mode === 'download') qs.set('download', '1')
-      const url = `${getBaseURL()}/stats/financial-report.pdf?${qs}`
-      window.open(url, '_blank')
+      const path = '/stats/financial-report.pdf'
+      const period = { year: String(year), ...(month ? { month: String(month) } : {}) }
+      if (mode === 'download') {
+        const suffix = month ? `-${String(month).padStart(2, '0')}` : ''
+        await downloadFromApi(path, period, `Rapport-financier-${year}${suffix}.pdf`)
+      } else if (!window.open(`${getBaseURL()}${path}?${new URLSearchParams(period)}`, '_blank')) {
+        setError('Le navigateur a bloqué l’ouverture du rapport. Utilisez le bouton PDF pour le télécharger.')
+      }
     } catch {
-      setError("Impossible d'ouvrir le rapport PDF.")
+      setError('Impossible de récupérer le rapport PDF. Réessayez dans quelques instants.')
     } finally {
       setLoading(null)
     }

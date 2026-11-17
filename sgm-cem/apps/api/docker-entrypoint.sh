@@ -119,6 +119,7 @@ echo ">>> [API] Lancement du serveur..."
 if [ "$(id -u)" = "0" ]; then
   mkdir -p uploads backups
   chown -R node:node uploads backups
-  exec setpriv --reuid=node --regid=node --init-groups -- node dist/index.js
+  # Chromium doit pouvoir écrire dans le dossier personnel de l'utilisateur node.
+  exec setpriv --reuid=node --regid=node --init-groups -- env HOME=/home/node node dist/index.js
 fi
 exec node dist/index.js
