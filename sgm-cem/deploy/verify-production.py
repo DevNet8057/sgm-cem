@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import base64
+import argparse
 import http.cookiejar
 import json
 import os
@@ -110,6 +111,14 @@ class Verification:
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Vérifie l'API de production sans mutation métier.")
+    parser.add_argument(
+        "--expect-empty",
+        action="store_true",
+        help="Vérifie l'état initial avec un seul compte DEVELOPER et aucune donnée membre ou rubrique.",
+    )
+    arguments = parser.parse_args()
+
     os.umask(0o077)
     OUTPUT_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
     credentials = read_credentials()
@@ -152,21 +161,64 @@ def main():
             result, document, _, _ = verify.request(name, path)
             result["passed"] = result["passed"] and document.get("success") is True
             if name == "users":
-                records = document.get("data", [])
-                verify.assertion("single_initial_administrator", len(records) == 1 and records[0].get("role") == "DEVELOPER", user_count=len(records))
+                records = document.get("data")
+                result["passed"] = result["passed"] and isinstance(records, list)
+                if isinstance(records, list):
+                    developers = [row for row in records if row.get("role") == "DEVELOPER" and row.get("isActive") is True]
+                    if arguments.expect_empty:
+                        verify.assertion("single_initial_developer", len(records) == 1 and len(developers) == 1, user_count=len(records))
+                    else:
+                        verify.assertion("active_developer_exists", len(developers) >= 1, active_developer_count=len(developers))
             if name == "members":
-                verify.assertion("no_demonstration_members", document.get("pagination", {}).get("total") == 0)
+                records = document.get("data")
+                pagination = document.get("pagination")
+                total = pagination.get("total") if isinstance(pagination, dict) else None
+                valid_page = isinstance(records, list) and isinstance(total, int) and not isinstance(total, bool) and total >= 0 and total >= len(records)
+                verify.assertion("members_response_valid", valid_page, record_count=len(records) if isinstance(records, list) else None)
+                if arguments.expect_empty:
+                    verify.assertion("no_initial_members", valid_page and total == 0 and len(records) == 0)
             if name == "rubriques":
-                verify.assertion("no_demonstration_rubriques", document.get("data") == [])
+                records = document.get("data")
+                valid_rubriques = isinstance(records, list)
+                verify.assertion("rubriques_response_valid", valid_rubriques)
+                if arguments.expect_empty:
+                    verify.assertion("no_initial_rubriques", valid_rubriques and len(records) == 0)
             if name == "developer_config":
-                records = document.get("data", [])
+                records = document.get("data")
+                result["passed"] = result["passed"] and isinstance(records, list)
+                if not isinstance(records, list):
+                    raise RuntimeError("Réponse de configuration invalide")
                 verify.assertion("configuration_secrets_masked", all(
                     not row.get("isSecret") or row.get("value") == "••••••••" for row in records
                 ))
                 flags = {row.get("key"): row.get("value") for row in records}
-                disabled = ("CARD_ENABLED", "EMAIL_ENABLED", "SMS_ENABLED", "WHATSAPP_ENABLED")
-                enabled = ("MOBILE_MONEY_ENABLED", "PUSH_ENABLED")
-                verify.assertion("integration_flags_configured", all(flags.get(key) == "false" for key in disabled) and all(flags.get(key) == "true" for key in enabled))
+                configs = {row.get("key"): row for row in records}
+                flag_keys = ("CARD_ENABLED", "EMAIL_ENABLED", "SMS_ENABLED", "WHATSAPP_ENABLED", "MOBILE_MONEY_ENABLED", "PUSH_ENABLED")
+                verify.assertion("integration_flags_boolean", all(flags.get(key) in ("true", "false") for key in flag_keys))
+
+                def provider_configured(keys):
+                    return all(configs.get(key, {}).get("isSet") is True for key in keys)
+
+                email_enabled = flags.get("EMAIL_ENABLED") == "true"
+                verify.assertion(
+                    "smtp_configured_when_email_enabled",
+                    not email_enabled or provider_configured(("SMTP_HOST", "SMTP_USER", "SMTP_PASS")),
+                )
+                provider_requirements = (
+                    ("CARD_ENABLED", ("CINETPAY_API_KEY", "CINETPAY_SITE_ID", "CINETPAY_SECRET_KEY")),
+                    ("SMS_ENABLED", ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM")),
+                    ("WHATSAPP_ENABLED", ("DIALOG360_API_KEY",)),
+                )
+                for flag, keys in provider_requirements:
+                    verify.assertion(
+                        f"{flag.lower()}_provider_configured_when_enabled",
+                        flags.get(flag) != "true" or provider_configured(keys),
+                    )
+                verify.assertion(
+                    "mobile_money_enabled",
+                    flags.get("MOBILE_MONEY_ENABLED") == "true",
+                )
+                verify.assertion("push_enabled", flags.get("PUSH_ENABLED") == "true")
 
         result, document, _, _ = verify.request("web_push_public_key", "/api/notifications/push/public-key")
         public_key = document.get("data", {}).get("publicKey", "")
