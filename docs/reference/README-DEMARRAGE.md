@@ -100,7 +100,7 @@ DATABASE_URL="postgresql://postgres:password@localhost:5432/sgm_cem"
 REDIS_URL="redis://localhost:6379"
 
 # ─── JWT ──────────────────────────────────────
-JWT_SECRET="dev-secret-change-in-production-min-256-bits-sgm-cem"
+JWT_SECRET="<JWT_SECRET_PRIVE_A_GENERER>"
 REFRESH_TOKEN_SECRET="dev-refresh-secret-change-in-production"
 
 # ─── APP ──────────────────────────────────────

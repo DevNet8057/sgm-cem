@@ -2,9 +2,12 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcrypt'
+import { randomBytes } from 'crypto'
 import { authenticate } from '../middleware/auth'
 import { requireLevel } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
+import { audit } from '../services/audit.service'
+import { reserveMemberIds } from '../services/member-id.service'
 
 const router = Router()
 const prisma = new PrismaClient()
@@ -47,19 +50,6 @@ const updateSchema = z.object({
 const importSchema = z.object({
   membres: z.array(createSchema.omit({ password: true, coupleMembreId: true })).min(1).max(500),
 })
-
-async function nextMemberId(): Promise<string> {
-  const count = await prisma.user.count()
-  return `CEM-${new Date().getFullYear()}-${String(count + 1).padStart(6, '0')}`
-}
-
-async function nextMemberIds(count: number): Promise<string[]> {
-  const start = await prisma.user.count()
-  const year  = new Date().getFullYear()
-  return Array.from({ length: count }, (_, i) =>
-    `CEM-${year}-${String(start + i + 1).padStart(6, '0')}`
-  )
-}
 
 // ─── Include helper ───────────────────────────────────────────────────
 const MEMBRE_INCLUDE = {
@@ -147,9 +137,8 @@ router.post('/', authenticate, requireLevel(3), async (req, res) => {
   const existing = await prisma.user.findUnique({ where: { email: data.email } })
   if (existing) throw new AppError('DUPLICATE', 'Cette adresse email existe déjà')
 
-  const memberId   = await nextMemberId()
   const fullName   = `${data.firstName} ${data.lastName}`
-  const passwordHash = await bcrypt.hash(data.password ?? 'ChristEst!2026', 12)
+  const passwordHash = await bcrypt.hash(data.password ?? randomBytes(24).toString('base64url'), 12)
 
   // Vérifier le couple si fourni
   if (data.coupleMembreId) {
@@ -158,11 +147,12 @@ router.post('/', authenticate, requireLevel(3), async (req, res) => {
   }
 
   const membre = await prisma.$transaction(async tx => {
+    const [memberId] = await reserveMemberIds(tx, 1)
     const user = await tx.user.create({
       data: {
         memberId, firstName: data.firstName, lastName: data.lastName,
         fullName, email: data.email, phone: data.phone,
-        passwordHash, role: 'MEMBRE', isActive: true,
+        passwordHash, role: 'MEMBRE', isActive: true, mustChangePassword: true,
       },
     })
 
@@ -323,10 +313,17 @@ router.post('/import', authenticate, requireLevel(3), async (req, res) => {
   const existing = await prisma.user.findMany({ where: { email: { in: emails } }, select: { email: true } })
   if (existing.length) throw new AppError('DUPLICATE', `Email déjà existant: ${existing[0].email}`)
 
-  const memberIds  = await nextMemberIds(membres.length)
-  const passwordHash = await bcrypt.hash('ChristEst!2026', 12)
+  // Ces secrets aléatoires ne sont jamais transmis et ne servent pas à la
+  // connexion. Un administrateur doit définir le premier mot de passe.
+  // Le coût réduit reste sûr pour ces secrets inaccessibles et borne le temps
+  // du lot d'import derrière le proxy.
+  const passwordHashes: string[] = []
+  for (let index = 0; index < membres.length; index++) {
+    passwordHashes.push(await bcrypt.hash(randomBytes(24).toString('base64url'), 8))
+  }
 
   const created = await prisma.$transaction(async tx => {
+    const memberIds = await reserveMemberIds(tx, membres.length)
     const rows = []
     for (const [index, item] of membres.entries()) {
       const memberId = memberIds[index]
@@ -335,7 +332,8 @@ router.post('/import', authenticate, requireLevel(3), async (req, res) => {
         data: {
           memberId, firstName: item.firstName, lastName: item.lastName,
           fullName, email: item.email, phone: item.phone,
-          passwordHash, role: 'MEMBRE', isActive: true,
+          passwordHash: passwordHashes[index], role: 'MEMBRE', isActive: true,
+          mustChangePassword: true,
         },
       })
 
@@ -350,8 +348,16 @@ router.post('/import', authenticate, requireLevel(3), async (req, res) => {
         include: { user: { select: { fullName: true, email: true, role: true } } },
       }))
     }
+    await audit({
+      req,
+      userId: req.user!.userId,
+      userName: req.user!.email,
+      action: 'CREATE',
+      entityType: 'MembreImport',
+      details: { imported: rows.length },
+    }, { client: tx, strict: true })
     return rows
-  })
+  }, { timeout: 120_000 })
 
   res.status(201).json({ success: true, data: created, meta: { imported: created.length } })
 })

@@ -10,8 +10,8 @@
 // JAMAIS ici : JWT_SECRET, REFRESH_TOKEN_SECRET, CSRF_SECRET, DATABASE_URL
 // (secrets d'authentification — restent exclusivement dans .env).
 //
-// Fait aussi : élévation du compte ADMIN_EMAIL au rôle DEVELOPER
-// (option « élever ton compte personnel » du doc §1).
+// L'élévation du compte administrateur ne se fait qu'au bootstrap initial,
+// avec l'option explicite --bootstrap-developer.
 // ──────────────────────────────────────────────────────────────────────
 import 'dotenv/config'
 import { PrismaClient, ConfigCategory } from '@prisma/client'
@@ -24,10 +24,7 @@ interface SeedConf {
   label: string
   description?: string
   isSecret?: boolean
-  // Valeur par défaut pour les clés NOUVELLES sans équivalent .env
-  // (feature flags, maintenance…) — sans ligne en base, la section du
-  // panneau serait vide et ingérable. Les clés .env classiques n'en ont
-  // pas : « pas de valeur .env → ne pas créer d'entrée vide » (§6).
+  // Valeur initiale pour les clés sans équivalent .env.
   defaultValue?: string
 }
 
@@ -145,59 +142,53 @@ const initialConfigs: SeedConf[] = [
   { key: 'FEATURE_PERCENT_DISTRIBUTION', category: 'FEATURE_FLAGS', label: 'Répartition par pourcentage (Partie E)', defaultValue: 'false' },
 ]
 
-async function seedConfig() {
-  let created = 0
-  let skippedNoValue = 0
-  let alreadyPresent = 0
+const excludedKeys = new Set([
+  'JWT_SECRET',
+  'REFRESH_TOKEN_SECRET',
+  'CSRF_SECRET',
+  'DATABASE_URL',
+])
 
-  for (const conf of initialConfigs) {
-    const envValue = process.env[conf.key]
-    const value = envValue ?? conf.defaultValue
-    if (value === undefined) { skippedNoValue++; continue } // pas de valeur .env ni défaut → pas d'entrée vide
+export async function seedConfig() {
+  const configs = initialConfigs
+    .filter(conf => !excludedKeys.has(conf.key))
+    .map(conf => ({
+      key: conf.key,
+      value: process.env[conf.key] ?? conf.defaultValue ?? '',
+      category: conf.category,
+      label: conf.label,
+      description: conf.description,
+      isSecret: conf.isSecret ?? false,
+    }))
 
-    const existing = await prisma.systemConfig.findUnique({ where: { key: conf.key } })
-    if (existing) { alreadyPresent++; continue } // idempotent : ne jamais écraser la base
-
-    await prisma.systemConfig.create({
-      data: {
-        key: conf.key,
-        value,
-        category: conf.category,
-        label: conf.label,
-        description: conf.description,
-        isSecret: conf.isSecret ?? false,
-      },
-    })
-    created++
-  }
-
-  console.log(`[Seed Config] ${created} créés · ${alreadyPresent} déjà en base (non écrasés) · ${skippedNoValue} sans valeur (ignorés)`)
+  const result = await prisma.systemConfig.createMany({ data: configs, skipDuplicates: true })
+  console.log(`[Seed Config] ${result.count} paramètres créés · les valeurs déjà en base sont conservées`)
 }
 
-async function promoteDeveloper() {
+export async function promoteDeveloper() {
+  if (!process.argv.includes('--bootstrap-developer')) return
+
   const email = (process.env.DEVELOPER_EMAIL ?? process.env.ADMIN_EMAIL ?? '').toLowerCase().trim()
   if (!email) {
     console.log('[Seed Config] Pas de DEVELOPER_EMAIL/ADMIN_EMAIL — aucune élévation')
     return
   }
-  const user = await prisma.user.findUnique({ where: { email } })
-  if (!user) {
-    console.log(`[Seed Config] ${email} introuvable — aucune élévation`)
-    return
-  }
-  if (user.role === 'DEVELOPER') {
-    console.log(`[Seed Config] ${email} est déjà DEVELOPER`)
-    return
-  }
-  await prisma.user.update({ where: { id: user.id }, data: { role: 'DEVELOPER' } })
-  console.log(`[Seed Config] ✅ ${email} élevé au rôle DEVELOPER (était ${user.role})`)
+  const result = await prisma.user.updateMany({
+    where: { email, role: 'ADMIN' },
+    data: { role: 'DEVELOPER' },
+  })
+  console.log(result.count
+    ? `[Seed Config] ${email} élevé au rôle DEVELOPER`
+    : '[Seed Config] Compte cible absent ou non ADMIN — aucune élévation')
 }
 
-async function main() {
+export async function main() {
   await seedConfig()
   await promoteDeveloper()
 }
 
-main()
-  .catch((e) => { console.error(e); process.exit(1) })
-  .finally(() => prisma.$disconnect())
+if (require.main === module) {
+  main()
+    .catch(() => { console.error('[Seed Config] Échec du provisionnement de la configuration'); process.exitCode = 1 })
+    .finally(() => prisma.$disconnect())
+}

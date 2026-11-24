@@ -13,8 +13,10 @@ import { requireDeveloper } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
 import { getPrisma } from '../lib/prisma'
 import { getJwtSecret } from '../lib/security'
-import { updateConfig, getConfigHistory, EXCLUDED_KEYS } from '../services/config.service'
+import { updateConfig, getConfigHistory, getConfig, EXCLUDED_KEYS } from '../services/config.service'
 import { getYeliiWalletBalance } from '../services/yelii.service'
+import { verifySmtpConnection } from '../services/email'
+import { audit } from '../services/audit.service'
 import { setAuthCookies } from './auth'
 
 const router = Router()
@@ -40,6 +42,7 @@ router.get('/config', async (_req, res) => {
   const data = configs.map(c => ({
     key: c.key,
     value: c.isSecret ? MASK : c.value,
+    isSet: Boolean(getConfig(c.key)),
     category: c.category,
     label: c.label,
     description: c.description,
@@ -147,6 +150,37 @@ router.post('/config/webhook/recalculate', async (req, res) => {
 router.post('/config/test/yelii', async (_req, res) => {
   const result = await getYeliiWalletBalance()
   res.json({ success: result.ok, data: result })
+})
+
+// ── POST /api/developer/config/test/smtp — vérifier la connexion SMTP ──
+router.post('/config/test/smtp', async (req, res) => {
+  z.object({}).strict().parse(req.body)
+  const requester = await getRequester(req.user!.userId)
+
+  try {
+    await verifySmtpConnection()
+  } catch (error) {
+    await audit({
+      req,
+      userId: requester.id,
+      userName: requester.fullName,
+      action: 'DEVELOPER_PANEL_CONFIG_CHANGED',
+      entityType: 'SMTP',
+      details: { action: 'connection_test', success: false },
+    })
+    throw error
+  }
+
+  await audit({
+    req,
+    userId: requester.id,
+    userName: requester.fullName,
+    action: 'DEVELOPER_PANEL_CONFIG_CHANGED',
+    entityType: 'SMTP',
+    details: { action: 'connection_test', success: true },
+  })
+
+  res.json({ success: true, data: { message: 'Connexion SMTP vérifiée avec succès.' } })
 })
 
 // ── POST /api/developer/impersonate/:userId — se connecter en tant que ─

@@ -37,6 +37,7 @@ export function GestionUtilisateurs() {
   const [form, setForm] = useState(emptyForm)
   const [error, setError] = useState('')
   const [copiedPassword, setCopiedPassword] = useState('')
+  const [passwordCopied, setPasswordCopied] = useState(false)
   const [resetTarget, setResetTarget] = useState<User | null>(null)
   const [resetPassword, setResetPassword] = useState('')
 
@@ -52,7 +53,7 @@ export function GestionUtilisateurs() {
     }),
     onSuccess: async (res) => {
       const tmp: string = res.data.data?.temporaryPassword
-      if (tmp) { setCopiedPassword(tmp); navigator.clipboard?.writeText(tmp).catch(() => {}) }
+      if (tmp) await showTemporaryPassword(tmp)
       setShowCreate(false)
       setForm(emptyForm)
       setError('')
@@ -108,7 +109,7 @@ export function GestionUtilisateurs() {
     }),
     onSuccess: async (res) => {
       const tmp: string = res.data.data?.temporaryPassword
-      if (tmp) { setCopiedPassword(tmp); navigator.clipboard?.writeText(tmp).catch(() => {}) }
+      if (tmp) await showTemporaryPassword(tmp)
       setResetTarget(null)
       setResetPassword('')
       await queryClient.invalidateQueries({ queryKey: ['users'] })
@@ -119,6 +120,17 @@ export function GestionUtilisateurs() {
   function showApiError(err: unknown) {
     const e = err as { response?: { data?: { error?: { message?: string } } } }
     setError(e.response?.data?.error?.message ?? 'Opération impossible')
+  }
+
+  async function showTemporaryPassword(password: string) {
+    setCopiedPassword(password)
+    setPasswordCopied(false)
+    try {
+      await navigator.clipboard.writeText(password)
+      setPasswordCopied(true)
+    } catch {
+      // Le mot de passe reste visible pour permettre une copie manuelle.
+    }
   }
 
   function startEdit(u: User) {
@@ -165,10 +177,15 @@ export function GestionUtilisateurs() {
       {/* Notification mot de passe copié */}
       {copiedPassword && (
         <div className="mb-4 flex items-center justify-between gap-3 rounded-[12px] bg-[#E8F5E8] border border-[#1A6B1A]/30 px-4 py-3">
-          <div className="flex items-center gap-2 text-sm text-[#0F4A0F]">
-            <Check size={16} className="text-[#1A6B1A]" />
-            <span>Mot de passe temporaire copié dans le presse-papiers :</span>
-            <code className="font-mono font-bold bg-white px-2 py-0.5 rounded border border-[#1A6B1A]/20">{copiedPassword}</code>
+          <div className="flex flex-wrap items-center gap-2 text-sm text-[#0F4A0F]">
+            {passwordCopied && <Check size={16} className="text-[#1A6B1A]" />}
+            <span>{passwordCopied ? 'Mot de passe temporaire copié :' : 'Copiez ce mot de passe temporaire et transmettez-le à l’utilisateur :'}</span>
+            <code className="break-all font-mono font-bold bg-white px-2 py-0.5 rounded border border-[#1A6B1A]/20">{copiedPassword}</code>
+            {!passwordCopied && (
+              <button type="button" onClick={() => void showTemporaryPassword(copiedPassword)} className="inline-flex items-center gap-1 text-xs font-semibold underline">
+                <Copy size={13} /> Réessayer la copie
+              </button>
+            )}
           </div>
           <button onClick={() => setCopiedPassword('')} className="text-gray-400 hover:text-gray-700">
             <X size={16} />
@@ -293,10 +310,10 @@ export function GestionUtilisateurs() {
             </select>
           </div>
           <PasswordInput
-            label="Mot de passe temporaire (laissez vide = 'CEM@2026!')"
+            label="Mot de passe initial (facultatif)"
             value={form.password}
             onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))}
-            placeholder="Optionnel - Laissez vide pour mot de passe par défaut"
+            placeholder="Laisser vide pour générer un mot de passe individuel"
           />
           {error && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-[10px] px-3 py-2">{error}</p>}
           <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
@@ -337,10 +354,10 @@ export function GestionUtilisateurs() {
         description={`Le compte de ${resetTarget?.fullName} sera déconnecté de toutes les sessions.`}>
         <div className="space-y-4">
           <PasswordInput
-            label="Nouveau mot de passe temporaire (laissez vide = 'CEM@2026!')"
+            label="Nouveau mot de passe (facultatif)"
             value={resetPassword}
             onChange={(e) => setResetPassword(e.target.value)}
-            placeholder="Optionnel - Laissez vide pour mot de passe par défaut"
+            placeholder="Laisser vide pour générer un mot de passe individuel"
           />
           <div className="flex items-start gap-2 rounded-[10px] bg-amber-50 border border-amber-200 px-3 py-2.5 text-xs text-amber-800">
             <RefreshCw size={13} className="mt-0.5 shrink-0" />

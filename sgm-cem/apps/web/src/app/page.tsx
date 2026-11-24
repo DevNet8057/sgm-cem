@@ -90,6 +90,24 @@ export default function LoginPage() {
   const googleBtnRef   = useRef<HTMLDivElement>(null)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [googleBtnReady, setGoogleBtnReady] = useState(false)
+  const [googleScriptTimedOut, setGoogleScriptTimedOut] = useState(false)
+  const [googleClientId, setGoogleClientId] = useState<string | null>(null)
+
+  useEffect(() => {
+    let disposed = false
+    api.get('/public/client-config')
+      .then(res => {
+        if (disposed) return
+        const config = res.data?.data
+        if (config?.googleEnabled && typeof config.googleClientId === 'string' && config.googleClientId.trim()) {
+          setGoogleClientId(config.googleClientId)
+        }
+      })
+      .catch(() => {
+        // La connexion par email et téléphone reste disponible si l'API échoue.
+      })
+    return () => { disposed = true }
+  }, [])
 
   /* Mot de passe oublié */
   const [forgotOpen, setForgotOpen] = useState(false)
@@ -142,18 +160,19 @@ export default function LoginPage() {
 
   /* ── Initialiser Google (sans prompt automatique) ── */
   useEffect(() => {
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
-    if (!clientId) return
+    if (!googleClientId) return
 
     let disposed = false
     let attempts = 0
+    let retryTimer: ReturnType<typeof setTimeout> | undefined
+    setGoogleScriptTimedOut(false)
     const tryInit = () => {
       attempts++
       if (disposed) return
       try {
-        if (window.google?.accounts?.id) {
+        if (window.google?.accounts?.id && googleBtnRef.current) {
           window.google.accounts.id.initialize({
-            client_id: clientId,
+            client_id: googleClientId,
             callback: handleGoogleCredential,
             auto_select: false,
             cancel_on_tap_outside: true,
@@ -162,32 +181,33 @@ export default function LoginPage() {
             use_fedcm_for_prompt: true,
             itp_support: true,
           })
-          if (googleBtnRef.current) {
-            window.google.accounts.id.renderButton(googleBtnRef.current, {
-              type: 'standard',
-              theme: 'outline',
-              size: 'large',
-              shape: 'pill',
-              text: 'continue_with',
-              locale: 'fr',
-              width: googleBtnRef.current.offsetWidth || 300,
-            })
-          }
+          window.google.accounts.id.renderButton(googleBtnRef.current, {
+            type: 'standard',
+            theme: 'outline',
+            size: 'large',
+            shape: 'pill',
+            text: 'continue_with',
+            locale: 'fr',
+            width: googleBtnRef.current.offsetWidth || 300,
+          })
           setGoogleBtnReady(true)
-        } else if (attempts < 20) {
-          setTimeout(tryInit, 250)
+        } else if (attempts < 120) {
+          retryTimer = setTimeout(tryInit, 250)
+        } else {
+          setGoogleScriptTimedOut(true)
         }
       } catch {}
     }
     tryInit()
     return () => {
       disposed = true
+      if (retryTimer) clearTimeout(retryTimer)
       setGoogleBtnReady(false)
       if (googleBtnRef.current) {
         try { googleBtnRef.current.innerHTML = '' } catch {}
       }
     }
-  }, [handleGoogleCredential])
+  }, [googleClientId, handleGoogleCredential])
 
   /* ── Mot de passe oublié ── */
   function openForgotModal() {
@@ -409,27 +429,30 @@ export default function LoginPage() {
           )}
 
           {/* ── Séparateur Google ── */}
-          <div className="flex items-center gap-3 mt-6 mb-4">
-            <div className="flex-1 h-px bg-gray-200" />
-            <span className="text-xs text-gray-400 font-medium">ou continuer avec</span>
-            <div className="flex-1 h-px bg-gray-200" />
-          </div>
-
           {/* ── Bouton Google ── */}
-          {process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ? (
+          {googleClientId && (
+            <>
+            <div className="flex items-center gap-3 mt-6 mb-4">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span className="text-xs text-gray-400 font-medium">ou continuer avec</span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
             <div>
               <div className="relative">
                 <div
                   ref={googleBtnRef}
-                  className={cn('w-full flex justify-center', (!googleBtnReady || googleLoading) && 'invisible')}
+                  className={cn('w-full flex justify-center', (!googleBtnReady || googleLoading || googleScriptTimedOut) && 'invisible')}
                 />
-                {(!googleBtnReady || googleLoading) && (
+                {!googleScriptTimedOut && (!googleBtnReady || googleLoading) && (
                   <div className="absolute inset-0 w-full flex items-center justify-center gap-2 py-2.5 border border-gray-200 rounded-[10px] text-sm text-gray-500 bg-white">
                     <Loader2 size={14} className="animate-spin" />
                     {googleLoading ? 'Connexion Google…' : 'Chargement Google…'}
                   </div>
                 )}
               </div>
+              {googleScriptTimedOut && (
+                <p className="mt-2 text-center text-xs text-gray-500">Connexion Google momentanément indisponible. Vous pouvez vous connecter avec votre adresse email.</p>
+              )}
               {apiError && apiError.includes('Google') && (
                 <div className="mt-2 rounded-[10px] bg-amber-50 border border-amber-200 px-3 py-2.5 text-xs text-amber-800">
                   <p className="font-semibold mb-1 flex items-center gap-1.5">
@@ -439,17 +462,7 @@ export default function LoginPage() {
                 </div>
               )}
             </div>
-          ) : (
-            <button type="button"
-              className="w-full flex items-center justify-center gap-3 py-2.5 border-2 border-gray-200 rounded-[10px] text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-              <svg width="18" height="18" viewBox="0 0 48 48">
-                <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.2l6.8-6.8C35.9 2.4 30.3 0 24 0 14.8 0 6.8 5.3 2.9 13l8 6.2C12.9 13 18 9.5 24 9.5z"/>
-                <path fill="#4285F4" d="M46.5 24.5c0-1.5-.1-3-.4-4.5H24v8.5h12.7c-.6 2.9-2.3 5.4-4.9 7l7.6 5.9C43.4 37.1 46.5 31.3 46.5 24.5z"/>
-                <path fill="#FBBC05" d="M10.9 28.8c-.6-1.7-.9-3.5-.9-5.3s.3-3.6.9-5.3l-8-6.2C1.1 15.4 0 19.3 0 23.5s1.1 8.1 2.9 11.5l8-6.2z"/>
-                <path fill="#34A853" d="M24 47c6.3 0 11.6-2.1 15.4-5.6l-7.6-5.9c-2.1 1.4-4.8 2.2-7.8 2.2-6 0-11.1-3.6-13.1-8.7l-8 6.2C6.8 42.7 14.8 47 24 47z"/>
-              </svg>
-              Continuer avec Google (non configuré)
-            </button>
+            </>
           )}
 
           <p className="text-center text-xs text-gray-400 mt-6">SGM-CEM · Culte d&apos;Enfants de Melen · EEC Yaoundé</p>

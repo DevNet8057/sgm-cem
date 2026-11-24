@@ -17,7 +17,7 @@ import { Prisma } from '@prisma/client'
 import { AppError } from '../middleware/errorHandler'
 import { getPrisma } from '../lib/prisma'
 import { audit } from '../services/audit.service'
-import { getConfigBool, getConfigNumber } from '../services/config.service'
+import { getConfig, getConfigBool, getConfigNumber } from '../services/config.service'
 import { initiateYeliiPayment } from '../services/yelii.service'
 import { initiateCinetpayPayment, isCinetpayConfigured } from '../services/cinetpay.service'
 import { syncYeliiContributionStatus, CONTRIBUTION_SYNC_SELECT } from '../services/payment-status.service'
@@ -39,6 +39,16 @@ const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const publicLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30 })
 // Le polling de statut est plus fréquent côté client — fenêtre élargie.
 const statusLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 120 })
+
+// Seul l'identifiant client OAuth, déjà public par nature, est transmis au navigateur.
+router.get('/client-config', (_req, res) => {
+  const googleClientId = getConfig('GOOGLE_CLIENT_ID')?.trim() || null
+  res.setHeader('Cache-Control', 'no-store')
+  res.json({
+    success: true,
+    data: { googleClientId, googleEnabled: googleClientId !== null },
+  })
+})
 
 /** 404 générique, identique quel que soit le motif réel (anti-énumération). */
 function draftNotFoundError(): AppError {

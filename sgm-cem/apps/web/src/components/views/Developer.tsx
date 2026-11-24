@@ -25,6 +25,7 @@ interface ConfigItem {
   label: string
   description: string | null
   isSecret: boolean
+  isSet: boolean
   isEditable: boolean
   updatedAt: string
 }
@@ -90,6 +91,23 @@ function ConfigRow({ config, onHistory }: { config: ConfigItem; onHistory: (key:
     onError: () => addToast({ title: 'Test impossible', message: 'Erreur lors du test Yelii.', variant: 'error' }),
   })
 
+  const testSmtp = useMutation({
+    mutationFn: () => api.post('/developer/config/test/smtp', {}),
+    onSuccess: (res) => addToast({
+      title: 'Connexion SMTP vérifiée',
+      message: (res.data.data as { message: string }).message,
+      variant: 'success',
+    }),
+    onError: (err: unknown) => {
+      const response = err as { response?: { data?: { error?: { message?: string } } } }
+      addToast({
+        title: 'Test SMTP échoué',
+        message: response.response?.data?.error?.message ?? 'Impossible de vérifier la connexion SMTP.',
+        variant: 'error',
+      })
+    },
+  })
+
   const displayValue = revealed ?? config.value
   const editing = draft !== null
 
@@ -141,6 +159,18 @@ function ConfigRow({ config, onHistory }: { config: ConfigItem; onHistory: (key:
               <PlugZap size={12} /> Tester
             </Button>
           )}
+          {config.key === 'SMTP_HOST' && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => testSmtp.mutate()}
+              loading={testSmtp.isPending}
+              aria-label="Tester la connexion SMTP"
+              title="Vérifie les paramètres SMTP enregistrés"
+            >
+              <PlugZap size={12} /> Tester SMTP
+            </Button>
+          )}
           {config.isSecret && (
             revealed !== null ? (
               <button onClick={() => setRevealed(null)} className="text-gray-400 hover:text-gray-600 transition-colors" title="Masquer">
@@ -149,7 +179,8 @@ function ConfigRow({ config, onHistory }: { config: ConfigItem; onHistory: (key:
             ) : (
               <button
                 onClick={() => { if (window.confirm(`Afficher la valeur de ${config.label} en clair ?\n(Cet accès est enregistré dans l'audit.)`)) reveal.mutate() }}
-                className="text-gray-400 hover:text-gray-600 transition-colors" title="Afficher (audité)"
+                disabled={!config.isSet}
+                className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed" title={config.isSet ? 'Afficher (audité)' : 'Aucune valeur renseignée'}
               >
                 <Eye size={15} />
               </button>
@@ -192,7 +223,11 @@ function ConfigRow({ config, onHistory }: { config: ConfigItem; onHistory: (key:
             )}
             title={config.isEditable ? 'Cliquer pour modifier' : 'Valeur non éditable'}
           >
-            {config.isSecret && revealed === null ? MASK : displayValue || <span className="text-gray-300 italic">vide</span>}
+            {!config.isSet
+              ? <span className="text-gray-400 italic">Non renseigné</span>
+              : config.isSecret && revealed === null
+                ? MASK
+                : displayValue || <span className="text-gray-300 italic">vide</span>}
           </button>
         )}
       </div>

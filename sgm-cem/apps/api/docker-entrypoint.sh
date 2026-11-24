@@ -61,12 +61,18 @@ pnpm exec prisma db push --skip-generate
 # Seed uniquement si la base est vide (aucun utilisateur) : sans lui, aucun
 # compte admin n'existe et la connexion est impossible au premier démarrage.
 USERS=$(node -e "const{PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.user.count().then(c=>console.log(c)).catch(()=>console.log('ERR')).finally(()=>p.\$disconnect())")
+if [ "$USERS" = "ERR" ]; then
+  echo ">>> [API] ❌ Impossible de vérifier le nombre d'utilisateurs"
+  exit 1
+fi
+
 if [ "$USERS" = "0" ]; then
   echo ">>> [API] Base vide — seed initial (comptes + rubriques + config)..."
   pnpm exec ts-node prisma/seed.ts
-  pnpm exec ts-node prisma/seed-config.ts
+  pnpm exec ts-node prisma/seed-config.ts --bootstrap-developer
 else
-  echo ">>> [API] Base déjà peuplée ($USERS utilisateurs) — seed ignoré."
+  echo ">>> [API] Base déjà peuplée ($USERS utilisateurs) — seed initial ignoré."
+  pnpm exec ts-node prisma/seed-config.ts
 fi
 
 echo ">>> [API] Lancement du serveur..."

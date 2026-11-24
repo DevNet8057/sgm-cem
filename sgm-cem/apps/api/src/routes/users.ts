@@ -1,16 +1,15 @@
 import { Router } from 'express'
 import bcrypt from 'bcrypt'
+import { randomBytes } from 'node:crypto'
 import { z } from 'zod'
 import { PrismaClient } from '@prisma/client'
 import { authenticate } from '../middleware/auth'
 import { requireLevel, requireRole } from '../middleware/rbac'
 import { AppError } from '../middleware/errorHandler'
+import { reserveMemberIds } from '../services/member-id.service'
 
 const router = Router()
 const prisma = new PrismaClient()
-
-const DEFAULT_PASSWORD = 'CEM@2026!'
-
 // Hiérarchie DEVELOPER (niveau 6) > ADMIN (niveau 5) : un ADMIN ne peut pas
 // modifier/désactiver/réinitialiser un compte DEVELOPER — sinon il pourrait
 // contourner la restriction du panneau développeur.
@@ -50,30 +49,30 @@ router.post('/', authenticate, requireRole('ADMIN', 'DEVELOPER'), async (req, re
   const existing = await prisma.user.findUnique({ where: { email: data.email } })
   if (existing) throw new AppError('DUPLICATE', 'Un compte avec cet email existe déjà', 409)
 
-  const rawPassword = data.password ?? DEFAULT_PASSWORD
+  const rawPassword = data.password ?? randomBytes(24).toString('base64url')
   const passwordHash = await bcrypt.hash(rawPassword, 12)
 
-  const count = await prisma.user.count()
-  const memberId = `CEM-${new Date().getFullYear()}-${String(count + 1).padStart(6, '0')}`
-
-  const user = await prisma.user.create({
-    data: {
-      firstName: data.firstName,
-      lastName: data.lastName,
-      fullName,
-      email: data.email,
-      phone: data.phone ?? null,
-      passwordHash,
-      role: data.role,
-      memberId,
-      isActive: true,
-      mustChangePassword: true,
-    },
-    select: {
-      id: true, memberId: true, firstName: true, lastName: true,
-      fullName: true, email: true, role: true, isActive: true,
-      mustChangePassword: true, createdAt: true,
-    },
+  const user = await prisma.$transaction(async tx => {
+    const [memberId] = await reserveMemberIds(tx, 1)
+    return tx.user.create({
+      data: {
+        firstName: data.firstName,
+        lastName: data.lastName,
+        fullName,
+        email: data.email,
+        phone: data.phone ?? null,
+        passwordHash,
+        role: data.role,
+        memberId,
+        isActive: true,
+        mustChangePassword: true,
+      },
+      select: {
+        id: true, memberId: true, firstName: true, lastName: true,
+        fullName: true, email: true, role: true, isActive: true,
+        mustChangePassword: true, createdAt: true,
+      },
+    })
   })
 
   await prisma.auditLog.create({
@@ -87,10 +86,11 @@ router.post('/', authenticate, requireRole('ADMIN', 'DEVELOPER'), async (req, re
     },
   })
 
+  res.setHeader('Cache-Control', 'no-store')
   res.status(201).json({
     success: true,
     data: { ...user, temporaryPassword: rawPassword },
-    message: `Compte créé. Mot de passe temporaire : ${rawPassword}`,
+    message: 'Compte créé. Transmettez le mot de passe temporaire à son destinataire.',
   })
 })
 
@@ -169,7 +169,7 @@ router.post('/:id/reset-password', authenticate, requireRole('ADMIN', 'DEVELOPER
   if (!user) throw new AppError('NOT_FOUND', 'Utilisateur introuvable', 404)
   assertCanManageTarget(req.user!.role, user.role)
 
-  const rawPassword = password ?? DEFAULT_PASSWORD
+  const rawPassword = password ?? randomBytes(24).toString('base64url')
   const passwordHash = await bcrypt.hash(rawPassword, 12)
 
   await prisma.user.update({
@@ -191,10 +191,11 @@ router.post('/:id/reset-password', authenticate, requireRole('ADMIN', 'DEVELOPER
     },
   })
 
+  res.setHeader('Cache-Control', 'no-store')
   res.json({
     success: true,
     data: { temporaryPassword: rawPassword },
-    message: `Mot de passe réinitialisé. Nouveau mot de passe temporaire : ${rawPassword}`,
+    message: 'Mot de passe réinitialisé. Transmettez le mot de passe temporaire à son destinataire.',
   })
 })
 

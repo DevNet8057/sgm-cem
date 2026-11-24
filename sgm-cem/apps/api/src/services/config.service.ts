@@ -61,12 +61,10 @@ export function isConfigCacheLoaded(): boolean {
  * Synchrone (lecture cache) pour pouvoir être appelée partout.
  */
 export function getConfig(key: string, fallbackToEnv = true): string | undefined {
-  if (configCache.has(key)) {
-    return configCache.get(key)
-  }
-  if (fallbackToEnv && process.env[key]) {
-    return process.env[key]
-  }
+  const cachedValue = configCache.get(key)
+  if (cachedValue !== undefined && cachedValue !== '') return cachedValue
+  const envValue = fallbackToEnv ? process.env[key] : undefined
+  if (envValue) return envValue
   return undefined
 }
 

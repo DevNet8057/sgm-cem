@@ -53,6 +53,7 @@ export function Membres() {
   const [form,       setForm]       = useState<MemberForm>(emptyForm)
   const [csv,        setCsv]        = useState('')
   const [error,      setError]      = useState('')
+  const [accessNotice, setAccessNotice] = useState('')
 
   // Recherche conjoint dans le système
   const [coupleSearch,    setCoupleSearch]    = useState('')
@@ -79,7 +80,11 @@ export function Membres() {
 
   const createMembre = useMutation({
     mutationFn: async () => api.post('/membres', serializeForm(form)),
-    onSuccess: resetAndRefresh, onError: showApiError,
+    onSuccess: async () => {
+      setAccessNotice('Un administrateur doit attribuer un mot de passe temporaire dans Gestion des utilisateurs et le transmettre au membre en privé.')
+      await resetAndRefresh()
+    },
+    onError: showApiError,
   })
   const updateMembre = useMutation({
     mutationFn: async () => api.patch(`/membres/${editingId}`, serializeForm(form)),
@@ -87,7 +92,14 @@ export function Membres() {
   })
   const importMembres = useMutation({
     mutationFn: async () => api.post('/membres/import', { membres: parsedImport.rows }),
-    onSuccess: resetAndRefresh, onError: showApiError,
+    onSuccess: async (response) => {
+      const count = response.data.meta?.imported ?? parsedImport.rows.length
+      const noun = count === 1 ? 'compte créé' : 'comptes créés'
+      const verb = count === 1 ? 'le transmettre au membre' : 'les transmettre à chaque membre'
+      setAccessNotice(`${count} ${noun}. Un administrateur doit attribuer un mot de passe temporaire dans Gestion des utilisateurs et ${verb} en privé.`)
+      await resetAndRefresh()
+    },
+    onError: showApiError,
   })
 
   async function resetAndRefresh() {
@@ -102,7 +114,7 @@ export function Membres() {
   }
 
   function startCreate() {
-    setForm(emptyForm); setEditingId(null); setError('')
+    setForm(emptyForm); setEditingId(null); setError(''); setAccessNotice('')
     setCoupleSearch(''); setCoupleResults([]); setCoupleMode('search')
     setMode(mode === 'create' ? 'none' : 'create')
   }
@@ -340,6 +352,16 @@ export function Membres() {
       )}
 
       {/* D2 : Recherche + filter chips */}
+      {accessNotice && (
+        <div role="status" className="mb-4 rounded-[12px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <div className="flex items-start justify-between gap-3">
+            <p>{accessNotice}</p>
+            <button type="button" onClick={() => setAccessNotice('')} aria-label="Fermer" className="shrink-0 text-amber-700 hover:text-amber-900">
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
       <div className="mb-5 space-y-3">
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />

@@ -1,4 +1,5 @@
 import nodemailer, { type Transporter } from 'nodemailer'
+import { AppError } from '../middleware/errorHandler'
 import { getConfig, getConfigBool } from './config.service'
 
 export interface EmailOptions {
@@ -43,6 +44,48 @@ function getTransporter(): Transporter | null {
   transporterSignature = signature
 
   return transporter
+}
+
+/** Vérifie la configuration SMTP sans envoyer de message. */
+export async function verifySmtpConnection(): Promise<void> {
+  const host = getConfig('SMTP_HOST')
+  const port = parseInt(getConfig('SMTP_PORT') ?? '587', 10)
+  const secure = getConfig('SMTP_SECURE') === 'true'
+  const user = getConfig('SMTP_USER')
+  const pass = getConfig('SMTP_PASS')
+
+  if (!host || !user || !pass) {
+    throw new AppError('SMTP_NOT_CONFIGURED', 'La configuration SMTP est incomplète.', 400)
+  }
+
+  const client = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: { user, pass },
+    connectionTimeout: 8_000,
+    greetingTimeout: 8_000,
+    socketTimeout: 8_000,
+  })
+
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      client.verify(),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error('SMTP verification timeout')), 10_000)
+      }),
+    ])
+  } catch {
+    throw new AppError(
+      'SMTP_VERIFICATION_FAILED',
+      'La connexion SMTP a échoué. Vérifiez les paramètres du serveur.',
+      502,
+    )
+  } finally {
+    if (timeout) clearTimeout(timeout)
+    client.close()
+  }
 }
 
 export async function sendEmail(options: EmailOptions): Promise<boolean> {
