@@ -108,7 +108,7 @@ Les changements préparés pour ce déploiement comprennent :
 
 Le dernier audit des dépendances de production rapporte **0 critique, 4 élevées, 5 modérées et 1 faible**. Les quatre alertes élevées restantes se répartissent ainsi : trois concernent la chaîne de téléchargement de Puppeteer, dont le téléchargement de navigateur est désactivé (`PUPPETEER_SKIP_DOWNLOAD=true`) au profit du Chromium système ; une concerne Zod 3, dont l'exposition aux requêtes excessivement complexes est réduite par la garde JSON ci-dessus. Ces mesures ne font pas disparaître les alertes de l'audit : suivre les mises à jour amont et planifier leur résolution complète. Le build final et les tests fonctionnels doivent encore confirmer la compatibilité des correctifs.
 
-**Point applicatif préexistant avant tout import réel de membres :** les chemins existants de création/import peuvent utiliser un mot de passe par défaut. Le compte initial de ce déploiement n'utilise pas ce mot de passe. Faire revoir la gestion des accès et imposer un changement ou une réinitialisation des mots de passe des comptes créés/importés avant une utilisation réelle ; ne pas importer des membres en supposant que ces accès sont déjà personnalisés. Cette logique métier n'a pas été modifiée dans le déploiement.
+**Accès des membres (correctif du 24 novembre 2026) :** la création et l'import génèrent désormais des secrets aléatoires individuels avec changement obligatoire. L'import ne restitue aucun mot de passe. Pour remettre un accès, un administrateur effectue une réinitialisation individuelle puis transmet le secret temporaire par un canal privé. Aucun mot de passe collectif ne doit être communiqué. Les identifiants membres sont réservés en transaction pour éviter les collisions entre créations et imports simultanés. Voir `UTILISATION-PC.md` pour le modèle CSV et le fonctionnement local.
 
 ## Premier déploiement — ordre impératif
 
@@ -120,7 +120,7 @@ python3 deploy/configure-env.py
 sudo docker compose -p sgm-cem -f docker-compose.prod.yml config --quiet
 sudo docker compose -p sgm-cem -f docker-compose.prod.yml build api web
 sudo docker compose -p sgm-cem -f docker-compose.prod.yml up -d --wait postgres redis
-sudo docker compose -p sgm-cem -f docker-compose.prod.yml run --rm --no-deps --workdir /app/apps/api api sh -c 'pnpm exec prisma db push --skip-generate && node /app/deploy/bootstrap-admin.cjs && pnpm exec ts-node prisma/seed-config.ts'
+sudo docker compose -p sgm-cem -f docker-compose.prod.yml run --rm --no-deps --workdir /app/apps/api api sh -c 'pnpm exec prisma db push --skip-generate && node /app/deploy/bootstrap-admin.cjs && pnpm exec ts-node prisma/seed-config.ts --bootstrap-developer'
 sudo docker compose -p sgm-cem -f docker-compose.prod.yml up -d --wait
 ```
 
