@@ -28,6 +28,7 @@ import { usersRouter } from './routes/users'
 import { auditRouter } from './routes/audit'
 import { publicRouter } from './routes/public'
 import { errorHandler } from './middleware/errorHandler'
+import { payloadComplexityGuard } from './middleware/payload-complexity'
 import { paymentsRouter } from './routes/payments'
 import { activityRouter } from './routes/activity'
 import { startActivityRetentionJob } from './services/activity-write.service'
@@ -37,9 +38,18 @@ import { initSocketIO } from './lib/socket'
 import { loadConfigCache } from './services/config.service'
 
 const app = express()
+// Nginx est l'unique proxy et les ports applicatifs restent locaux.
+app.set('trust proxy', 1)
+app.disable('etag')
 const PORT = process.env.PORT ?? 3001
 
 app.use(helmet())
+
+// Les données API authentifiées doivent être relues, sans cache navigateur ni réponse 304.
+app.use('/api', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store')
+  next()
+})
 
 // Les URL de reçu sont envoyées aux contributeurs et à WhatsApp. Seuls les
 // reçus sont publiés localement ; les documents GED restent derrière leurs
@@ -69,8 +79,15 @@ app.use('/webhooks', cinetpayWebhookRouter)
 
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
+app.use('/api', payloadComplexityGuard)
 
-const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true })
+// Le polling du tableau de bord et les heartbeats exigent un budget adapté ; les probes santé sont exclues.
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
+  standardHeaders: true,
+  skip: req => req.method === 'GET' && req.path === '/health',
+})
 app.use('/api/', limiter)
 
 // CSRF — double-submit cookie pattern

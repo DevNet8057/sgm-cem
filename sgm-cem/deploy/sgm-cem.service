@@ -1,0 +1,18 @@
+[Unit]
+Description=SGM-CEM - services de production
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/srv/sgm-cem/sgm-cem
+ExecStart=/usr/bin/docker compose -p sgm-cem -f docker-compose.prod.yml up -d --no-build --wait --wait-timeout 300
+ExecReload=/usr/bin/docker compose -p sgm-cem -f docker-compose.prod.yml up -d --no-build --wait --wait-timeout 300
+ExecStop=/usr/bin/docker compose -p sgm-cem -f docker-compose.prod.yml stop --timeout 30
+TimeoutStartSec=600
+TimeoutStopSec=150
+
+[Install]
+WantedBy=multi-user.target

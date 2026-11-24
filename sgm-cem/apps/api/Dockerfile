@@ -1,11 +1,11 @@
 # ──────────────────────────────────────────────────────────────────────
 # DOCKERFILE API — Backend Express + TypeScript + Prisma
-# Pourquoi node:20-slim ?
+# Pourquoi node:22-bookworm-slim ?
 #   • Node >= 20 requis par le projet (engines dans package.json)
 #   • slim = image légère (~300 Mo) mais apt-get disponible pour Puppeteer/Chromium
 # ──────────────────────────────────────────────────────────────────────
 
-FROM node:20-slim
+FROM node:22-bookworm-slim
 
 # ── Étape 1 : apt-get pour Puppeteer / Chromium + Prisma ───────────────
 # Puppeteer a besoin de bibliothèques système pour lancer Chromium.
@@ -61,6 +61,7 @@ RUN corepack enable pnpm && pnpm install --filter api... --frozen-lockfile
 
 # ── Étape 6 : Copier le code source de l'API ───────────────────────────
 COPY apps/api/src ./apps/api/src
+COPY apps/api/assets ./apps/api/assets
 COPY apps/api/prisma ./apps/api/prisma
 COPY apps/api/tsconfig.json ./apps/api/tsconfig.json
 
@@ -68,8 +69,8 @@ COPY apps/api/tsconfig.json ./apps/api/tsconfig.json
 RUN cd /app/apps/api && pnpm exec prisma generate
 
 # ── Étape 8 : Builder le TypeScript ─────────────────────────────────────
-# `|| true` : tsc émet dist/ même avec des erreurs de type connues.
-RUN pnpm --filter api build || true \
+# Le build TypeScript doit réussir avant de produire une image.
+RUN pnpm --filter api build \
   && test -f /app/apps/api/dist/index.js
 
 # ── Étape 9 : Copier le point d'entrée (schéma DB + seed avant démarrage)

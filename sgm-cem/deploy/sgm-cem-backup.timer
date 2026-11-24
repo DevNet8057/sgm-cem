@@ -1,0 +1,12 @@
+[Unit]
+Description=SGM-CEM - sauvegarde quotidienne a 03h20 (Douala)
+
+[Timer]
+OnCalendar=*-*-* 03:20:00 Africa/Douala
+RandomizedDelaySec=10m
+Persistent=yes
+AccuracySec=1m
+Unit=sgm-cem-backup.service
+
+[Install]
+WantedBy=timers.target

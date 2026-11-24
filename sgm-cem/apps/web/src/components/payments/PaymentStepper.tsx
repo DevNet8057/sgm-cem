@@ -235,8 +235,8 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
 
   // ── Mutation : initier le paiement ───────────────────────────────────────
   const pay = useMutation({
-    mutationFn: () => selfService
-      ? api.post('/payments/batches/initiate', {
+    mutationFn: async () => selfService
+      ? await api.post('/payments/batches/initiate', {
           idempotencyKey: typeof crypto !== 'undefined' && crypto.randomUUID
             ? crypto.randomUUID()
             : `payment-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -248,7 +248,7 @@ export function PaymentStepper({ membres, rubriques, onClose, selfService, initi
           paymentChannel: isMobileMoney ? operator : undefined,
           customerPhone: isCard ? `+237${mobilePhone}` : undefined,
         })
-      : api.post('/payments/initiate', {
+      : await api.post('/payments/initiate', {
           membreId,
           rubriqueId,
           montant: Number(montant),

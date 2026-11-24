@@ -1,11 +1,11 @@
 # ──────────────────────────────────────────────────────────────────────
 # DOCKERFILE WEB — Frontend Next.js 15
-# Pourquoi node:20-slim ?
+# Pourquoi node:22-bookworm-slim ?
 #   • Node >= 20 requis
 #   • Pour next build + next start en production
 # ──────────────────────────────────────────────────────────────────────
 
-FROM node:20-slim
+FROM node:22-bookworm-slim
 
 WORKDIR /app
 

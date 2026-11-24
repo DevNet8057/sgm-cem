@@ -28,3 +28,9 @@ apps/api/tests
 Thumbs.db
 *.swp
 *.swo
+
+.deployment-credentials.env.local
+
+**/.pnpm-store
+
+**/*.env.local

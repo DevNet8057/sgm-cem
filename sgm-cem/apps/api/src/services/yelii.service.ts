@@ -231,8 +231,22 @@ export async function getYeliiWalletBalance(): Promise<{ ok: boolean; balance?: 
       redirect: 'error',
     })
     if (!response.ok) return { ok: false, message: `Yelii a répondu HTTP ${response.status}` }
-    const payload = (await response.json().catch(() => ({}))) as { data?: { balance?: number }; balance?: number }
-    return { ok: true, balance: payload?.data?.balance ?? payload?.balance }
+    const payload = (await response.json().catch(() => null)) as {
+      success?: boolean
+      data?: { collectWallet?: unknown; balance?: unknown }
+      balance?: unknown
+    } | null
+    // collectWallet est le format fournisseur ; balance conserve la compatibilité historique.
+    const rawBalance = payload?.data?.collectWallet ?? payload?.data?.balance ?? payload?.balance
+    const balance = typeof rawBalance === 'number'
+      ? rawBalance
+      : typeof rawBalance === 'string' && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(rawBalance.trim())
+        ? Number(rawBalance.trim())
+        : Number.NaN
+    if (payload?.success === false || !Number.isFinite(balance)) {
+      return { ok: false, message: 'Réponse Yelii invalide : solde absent ou incorrect.' }
+    }
+    return { ok: true, balance }
   } catch {
     return { ok: false, message: 'Connexion à Yelii impossible' }
   }

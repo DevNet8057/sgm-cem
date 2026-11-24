@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer'
+import nodemailer, { type Transporter } from 'nodemailer'
 import { getConfig, getConfigBool } from './config.service'
 
 export interface EmailOptions {
@@ -16,10 +16,10 @@ export interface EmailOptions {
 // Transporter mis en cache par signature de config : si le DEVELOPER change
 // les paramètres SMTP depuis le panneau, le prochain envoi reconstruit le
 // client avec les nouvelles valeurs — sans redémarrage.
-let transporter: nodemailer.Transporter | null = null
+let transporter: Transporter | null = null
 let transporterSignature = ''
 
-function getTransporter(): nodemailer.Transporter | null {
+function getTransporter(): Transporter | null {
   const host = getConfig('SMTP_HOST')
   const port = parseInt(getConfig('SMTP_PORT') ?? '587', 10)
   const secure = getConfig('SMTP_SECURE') === 'true'
