@@ -25,8 +25,10 @@ api_id=$(dc ps -q api); web_id=$(dc ps -q web)
 [[ -n $api_id && -n $web_id ]] || { echo 'Cette commande met à jour une installation déjà démarrée.' >&2; exit 1; }
 old_api=$(docker inspect --format '{{.Image}}' "$api_id")
 old_web=$(docker inspect --format '{{.Image}}' "$web_id")
-running_schema=$(docker exec "$api_id" sha256sum /app/apps/api/prisma/schema.prisma | cut -d' ' -f1)
-source_schema=$(sha256sum apps/api/prisma/schema.prisma | cut -d' ' -f1)
+# Windows et Linux peuvent conserver des fins de ligne différentes dans l'image.
+# Seules les fins CRLF sont normalisées ; tout autre changement reste bloquant.
+running_schema=$(docker exec "$api_id" cat /app/apps/api/prisma/schema.prisma | sed 's/\r$//' | sha256sum | cut -d' ' -f1)
+source_schema=$(sed 's/\r$//' apps/api/prisma/schema.prisma | sha256sum | cut -d' ' -f1)
 [[ $running_schema == "$source_schema" ]] || { echo 'Changement de schéma détecté : préparer une opération de migration distincte avant cette mise à jour.' >&2; exit 1; }
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 docker tag "$old_api" "sgm-cem-api:rollback-$stamp"
